@@ -1,0 +1,1977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HQ</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  window.__HQ_TWEAKS = {
+    "name": "Alex",
+    "accent": "#f5f0e8",
+    "density": "compact",
+    "numberWeight": 400,
+    "showQuickPills": true,
+    "currencyPrefix": "Rp ",
+    "homeLayout": "stacked"
+  };
+</script>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --card: #1a1a1a;
+    --card-2: #161616;
+    --border: #2a2a2a;
+    --border-strong: #353535;
+    --text: #f4f4f4;
+    --text-dim: #9a9a9a;
+    --text-faint: #6a6a6a;
+    --accent: #f5f0e8;
+    --danger: #d97a6c;
+    --good: #8aa888;
+    --r-card: 16px;
+    --r-sm: 10px;
+    --r-pill: 50px;
+    --pad-card: 24px;
+    --gap: 16px;
+    --t-fast: 150ms;
+    --t-mid: 200ms;
+    --t-slow: 400ms;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body {
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  input, textarea, select { font: inherit; color: inherit; background: transparent; border: 0; outline: 0; }
+  ::selection { background: var(--accent); color: #111; }
+
+  /* ============ LOGIN SCREEN ============ */
+  #login-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  #login-screen.hidden { display: none; }
+  .login-card {
+    text-align: center;
+    padding: 48px 40px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    width: 320px;
+    animation: card-in var(--t-slow) ease-out forwards;
+  }
+  .login-logo {
+    width: 52px; height: 52px;
+    background: var(--accent);
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.2em;
+    color: #111;
+  }
+  .login-title {
+    font-size: 28px; font-weight: 300;
+    letter-spacing: 0.14em;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .login-tagline {
+    font-size: 12px; color: var(--text-faint);
+    letter-spacing: 0.08em;
+    margin-bottom: 32px;
+  }
+  .google-btn {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    width: 100%; padding: 13px 20px;
+    background: #fff; color: #333;
+    border-radius: var(--r-pill);
+    font-size: 14px; font-weight: 500;
+    transition: opacity 150ms ease;
+    cursor: pointer;
+    border: none;
+  }
+  .google-btn:hover { opacity: 0.9; }
+  .google-btn:active { opacity: 0.8; }
+  .google-btn svg { flex-shrink: 0; }
+
+  .login-divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: 20px 0;
+    color: var(--text-faint);
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .login-divider::before, .login-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .login-input {
+    width: 100%; padding: 11px 14px;
+    background: #121212;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text); font-size: 13px; font-family: inherit;
+    transition: border-color var(--t-fast) ease;
+    box-sizing: border-box;
+  }
+  .login-input:focus { outline: none; border-color: var(--accent); }
+  .login-input::placeholder { color: var(--text-faint); }
+  .login-email-form { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+  .login-btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .login-btn {
+    padding: 11px 0; border-radius: var(--r-pill);
+    font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
+    transition: opacity 150ms ease;
+    border: 1px solid var(--border-strong); color: var(--text-dim);
+    background: none;
+  }
+  .login-btn:hover { color: var(--text); }
+  .login-btn.primary { background: var(--accent); color: #111; border-color: var(--accent); }
+  .login-btn.primary:hover { opacity: 0.9; }
+  .login-forgot {
+    margin-top: 4px; font-size: 11px; color: var(--text-faint);
+    letter-spacing: 0.06em; text-align: center; cursor: pointer;
+    background: none; border: none; font-family: inherit; width: 100%;
+    transition: color var(--t-fast) ease;
+  }
+  .login-forgot:hover { color: var(--text-dim); }
+  .login-msg {
+    font-size: 12px; text-align: center; margin-top: 2px;
+    display: none; line-height: 1.5;
+  }
+  .login-msg.error { color: #ff8a80; display: block; }
+  .login-msg.success { color: var(--good); display: block; }
+
+  /* ============ APP SHELL ============ */
+  .app {
+    display: grid;
+    grid-template-columns: 1fr;
+    min-height: 100vh;
+  }
+  .sidebar {
+    display: none;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    border-right: 1px solid var(--border);
+    padding: 28px 18px;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .sidebar .brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px 22px;
+    letter-spacing: 0.18em;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .sidebar .brand .dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; }
+  .nav-group-label {
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-faint); padding: 14px 10px 6px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; padding: 10px 10px;
+    border-radius: var(--r-sm); font-size: 13px;
+    color: var(--text-dim);
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+    text-align: left;
+  }
+  .nav-item .glyph { width: 18px; text-align: center; font-size: 13px; color: var(--text-faint); }
+  .nav-item:hover { background: #181818; color: var(--text); }
+  .nav-item.active { background: #1f1f1f; color: var(--text); }
+  .nav-item.active .glyph { color: var(--accent); }
+  .sidebar-logout {
+    margin-top: auto;
+    padding: 8px 10px;
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-faint);
+    transition: color var(--t-fast) ease;
+    text-align: left;
+    cursor: pointer;
+    border: none; background: none; font-family: inherit;
+  }
+  .sidebar-logout:hover { color: var(--danger); }
+
+  main {
+    min-width: 0; padding: 16px 16px 96px;
+    max-width: 980px; width: 100%; margin: 0 auto;
+  }
+
+  /* Header */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 4px 18px;
+  }
+  .topbar .greet { display: flex; flex-direction: column; }
+  .topbar .greet .hello { font-size: 13px; color: var(--text-dim); }
+  .topbar .greet .date { font-size: 11px; color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+  .topbar .right { display: flex; gap: 10px; align-items: center; }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid var(--border);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-dim);
+    transition: border-color var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--border-strong); }
+  .logout-btn {
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-faint);
+    transition: color var(--t-fast) ease;
+    padding: 6px 10px;
+    border-radius: var(--r-pill);
+    border: 1px solid transparent;
+  }
+  .logout-btn:hover { color: var(--danger); border-color: color-mix(in oklab, var(--danger) 40%, var(--border)); }
+
+  /* ============ TABS / PAGES ============ */
+  .page-title {
+    font-size: 24px; font-weight: 300; letter-spacing: -0.01em; margin: 6px 4px 18px;
+  }
+  .section-title {
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    font-weight: 500; color: var(--text-dim); margin: 22px 4px 10px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .section-title .meta { color: var(--text-faint); letter-spacing: 0.06em; text-transform: none; font-weight: 400; }
+
+  /* ============ CARDS ============ */
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--r-card); padding: var(--pad-card);
+    opacity: 0; transform: translateY(12px);
+    animation: card-in var(--t-slow) ease-out forwards;
+  }
+  @keyframes card-in { to { opacity: 1; transform: translateY(0); } }
+  .card + .card { margin-top: var(--gap); }
+  .card-row { display: grid; gap: var(--gap); }
+
+  .metric-grid {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap);
+  }
+  @media (max-width: 520px) { .metric-grid { grid-template-columns: 1fr; } }
+  .metric .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 500; color: var(--text-dim); }
+  .metric .num { font-size: 32px; font-weight: var(--num-weight, 300); letter-spacing: -0.02em; margin-top: 10px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .metric .sub { margin-top: 6px; font-size: 12px; color: var(--text-faint); }
+
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    border: 1px solid var(--border); border-radius: var(--r-pill);
+    padding: 8px 14px; font-size: 12px; color: var(--text-dim);
+    background: transparent;
+    transition: border-color var(--t-fast) ease, color var(--t-fast) ease, background var(--t-fast) ease;
+    white-space: nowrap;
+  }
+  .pill:hover { color: var(--text); border-color: var(--border-strong); }
+  .pill.active { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 500; }
+  .pill.warn { border-color: color-mix(in oklab, var(--danger) 60%, var(--border)); color: var(--danger); }
+  .pill.cat { background: #202020; border-color: #2c2c2c; color: var(--text); }
+  .pill.cat .amt { color: var(--text-dim); margin-left: 8px; font-variant-numeric: tabular-nums; }
+
+  .alert {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; border: 1px solid color-mix(in oklab, var(--danger) 50%, var(--border));
+    border-radius: var(--r-pill); color: var(--danger); font-size: 12px;
+    background: color-mix(in oklab, var(--danger) 10%, transparent);
+    width: max-content; max-width: 100%;
+  }
+  .alert .glyph { font-size: 12px; }
+
+  /* ============ LISTS ============ */
+  .list { list-style: none; padding: 0; margin: 0; }
+  .list-item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 0; border-bottom: 1px solid var(--border);
+    position: relative; overflow: hidden;
+  }
+  .list-item:last-child { border-bottom: 0; }
+  .time-col { flex: 0 0 64px; color: var(--text-faint); font-size: 12px; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+  .item-main { flex: 1; min-width: 0; }
+  .item-title { font-size: 13px; color: var(--text); }
+  .item-sub { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+  .item-amt { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--text); white-space: nowrap; }
+  .item-tag { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); border: 1px solid var(--border); border-radius: var(--r-pill); padding: 3px 8px; }
+
+  /* ============ CHECKBOXES ============ */
+  .check {
+    flex: 0 0 18px; width: 18px; height: 18px;
+    border: 1px solid var(--border-strong); border-radius: 5px;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: border-color var(--t-fast) ease, background var(--t-fast) ease;
+    position: relative;
+  }
+  .check::after {
+    content: ""; width: 8px; height: 4px;
+    border-left: 1.5px solid #111; border-bottom: 1.5px solid #111;
+    transform: rotate(-45deg) scale(0); transform-origin: center;
+    transition: transform var(--t-fast) ease; margin-top: -2px;
+  }
+  .check.checked { background: var(--accent); border-color: var(--accent); }
+  .check.checked::after { transform: rotate(-45deg) scale(1); }
+  .check.pulse { animation: pulse 150ms ease; }
+  @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
+  .check-label { flex: 1; min-width: 0; }
+  .check-label.done { color: var(--text-faint); text-decoration: line-through; text-decoration-color: var(--text-faint); }
+
+  /* ============ PROGRESS ============ */
+  .progress { height: 4px; background: #232323; border-radius: 4px; overflow: hidden; margin-top: 14px; }
+  .progress > .bar { height: 100%; background: var(--accent); width: 0; transition: width 600ms ease; }
+  .progress-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); margin-top: 8px; letter-spacing: 0.06em; }
+
+  /* ============ ADD BUTTON / FORMS ============ */
+  .add-btn {
+    display: flex; align-items: center; gap: 10px; padding: 14px 16px;
+    border: 1px dashed var(--border-strong); border-radius: var(--r-sm);
+    color: var(--text-dim); width: 100%;
+    transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+    font-size: 12px;
+  }
+  .add-btn:hover { color: var(--text); border-color: #444; }
+  .add-btn .plus { font-size: 14px; line-height: 1; }
+  .inline-form { overflow: hidden; max-height: 0; transition: max-height 300ms ease; }
+  .inline-form.open { max-height: 360px; }
+  .inline-form .inner {
+    padding: 16px; margin-top: 12px; border: 1px solid var(--border);
+    border-radius: var(--r-sm); background: var(--card-2); display: grid; gap: 10px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint); font-weight: 500; }
+  .field input, .field select, .field textarea {
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    background: #121212; color: var(--text); font-size: 13px;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  .btn { padding: 9px 14px; border-radius: var(--r-pill); font-size: 12px; border: 1px solid var(--border-strong); color: var(--text-dim); }
+  .btn:hover { color: var(--text); }
+  .btn.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 500; }
+  .btn.primary:hover { color: #111; }
+
+  /* ============ SCHEDULE CALENDAR ============ */
+  .cal-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 14px; }
+  .cal-head .month-label { font-size: 16px; font-weight: 500; letter-spacing: -0.005em; color: var(--text); }
+  .cal-head .month-sub { font-size: 11px; color: var(--text-faint); letter-spacing: 0.06em; margin-top: 2px; }
+  .cal-nav { display: flex; gap: 6px; }
+  .cal-nav button {
+    width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border);
+    color: var(--text-dim); display: inline-flex; align-items: center; justify-content: center;
+    font-size: 14px; transition: border-color var(--t-fast) ease, color var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .cal-nav button:hover { color: var(--text); border-color: var(--border-strong); }
+  .cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 0 2px 6px; }
+  .cal-dow .d { text-align: center; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-faint); font-weight: 500; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-cell {
+    aspect-ratio: 1 / 1; border-radius: 10px; border: 1px solid transparent;
+    background: transparent; color: var(--text-dim);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    position: relative; transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease;
+    font-variant-numeric: tabular-nums;
+  }
+  .cal-cell:hover { background: #181818; color: var(--text); }
+  .cal-cell .n { font-size: 13px; font-weight: 400; line-height: 1; }
+  .cal-cell .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--text-dim); margin-top: 2px; }
+  .cal-cell.other { color: var(--text-faint); opacity: 0.4; }
+  .cal-cell.other:hover { background: transparent; }
+  .cal-cell.today { border-color: var(--border-strong); color: var(--text); }
+  .cal-cell.selected { background: var(--accent); color: #111; border-color: var(--accent); }
+  .cal-cell.selected .dot { background: #111; }
+  .cal-cell.today.selected { color: #111; }
+  @media (max-width: 420px) { .cal-cell { border-radius: 8px; } .cal-cell .n { font-size: 12px; } }
+  @media (min-width: 900px) { .cal-cell .n { font-size: 14px; } }
+
+  /* ============ HABITS ============ */
+  .habit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); }
+  @media (max-width: 380px) { .habit-grid { grid-template-columns: 1fr; } }
+  @media (min-width: 720px) { .habit-grid { grid-template-columns: repeat(3, 1fr); } }
+  .habit {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--r-card);
+    padding: 18px; display: flex; flex-direction: column; gap: 10px;
+    transition: border-color var(--t-mid) ease, box-shadow var(--t-mid) ease;
+  }
+  .habit.checked { border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); }
+  .habit-top { display: flex; align-items: center; justify-content: space-between; }
+  .habit-name { font-size: 14px; }
+  .habit-streak { font-size: 11px; color: var(--text-dim); letter-spacing: 0.06em; }
+  .habit-streak .num { color: var(--text); font-variant-numeric: tabular-nums; }
+  .habit-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+  .habit .check { width: 22px; height: 22px; border-radius: 6px; }
+  .habit .status { font-size: 11px; color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; }
+  .habit.checked .status { color: var(--accent); }
+  .habit-grid-7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 4px; }
+  .habit-grid-7 .cell { aspect-ratio: 1 / 1; border-radius: 4px; background: #232323; }
+  .habit-grid-7 .cell.on { background: var(--accent); }
+
+  /* ============ FOCUS BOARD ============ */
+  .focus-card { padding: 28px 24px; }
+  .focus-input { width: 100%; font-size: 22px; font-weight: 300; line-height: 1.3; color: var(--text); background: transparent; border: 0; resize: none; min-height: 80px; letter-spacing: -0.01em; }
+  .focus-input::placeholder { color: var(--text-faint); }
+  .focus-meta { font-size: 11px; color: var(--text-faint); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px; }
+
+  /* ============ SPENDING BAR CHART ============ */
+  .bar-chart { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; align-items: end; height: 80px; margin-top: 4px; }
+  .bar-chart .col { display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; }
+  .bar-chart .bar { width: 100%; max-width: 22px; background: var(--accent); opacity: 0.85; border-radius: 4px 4px 0 0; transition: height 600ms ease; }
+  .bar-chart .col.dim .bar { background: #2f2f2f; opacity: 1; }
+  .bar-chart .lbl { font-size: 10px; color: var(--text-faint); letter-spacing: 0.08em; }
+  .bar-track { height: 100%; display: flex; align-items: end; width: 100%; max-width: 22px; }
+
+  /* ============ DELETE ============ */
+  .row-wrap { position: relative; }
+  .row-wrap .delete {
+    position: absolute; right: 0; top: 0; bottom: 0;
+    display: flex; align-items: center; padding: 0 14px;
+    color: var(--danger); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    opacity: 0; transition: opacity var(--t-fast) ease;
+  }
+  .list-item:hover .delete { opacity: 1; }
+
+  /* ============ DEBTS ============ */
+  .debt-due { font-size: 11px; color: var(--text-faint); }
+  .debt-due.soon { color: var(--accent); }
+  .debt-status { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; padding: 3px 8px; border-radius: var(--r-pill); border: 1px solid var(--border); color: var(--text-dim); }
+  .debt-status.paid { color: var(--good); border-color: color-mix(in oklab, var(--good) 40%, var(--border)); }
+
+  /* ============ BOTTOM NAV ============ */
+  .bottom-nav {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    background: rgba(15,15,15,0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-around; align-items: stretch;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); z-index: 50;
+  }
+  .bottom-nav .tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 6px; color: var(--text-faint); transition: color var(--t-fast) ease; }
+  .bottom-nav .tab-btn .glyph { font-size: 16px; }
+  .bottom-nav .tab-btn .lbl { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .bottom-nav .tab-btn.active { color: var(--text); }
+  .bottom-nav .tab-btn.active .glyph { color: var(--accent); }
+
+  .sub-nav { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 14px; margin: 0 -4px 4px; scrollbar-width: none; }
+  .sub-nav::-webkit-scrollbar { display: none; }
+  .sub-nav .pill { flex: 0 0 auto; }
+
+  /* ============ DESKTOP ============ */
+  @media (min-width: 900px) {
+    .app { grid-template-columns: 220px 1fr; }
+    .sidebar { display: flex; }
+    .bottom-nav { display: none; }
+    main { padding: 32px 48px 64px; max-width: 1100px; }
+    .topbar { padding-bottom: 28px; }
+    .page-title { font-size: 28px; }
+    .metric .num { font-size: 38px; }
+    .focus-input { font-size: 28px; }
+    .sub-nav { margin-bottom: 8px; }
+  }
+
+  /* ============ TWEAKS PANEL ============ */
+  #tweaks-panel {
+    display: none; position: fixed; right: 16px; bottom: 16px;
+    width: 280px; max-height: 80vh; overflow-y: auto;
+    background: #141414; border: 1px solid var(--border-strong); border-radius: 14px;
+    padding: 16px; z-index: 100; font-size: 12px; box-shadow: 0 0 0 1px #000;
+  }
+  #tweaks-panel.open { display: block; }
+  #tweaks-panel h4 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-dim); font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
+  #tweaks-panel .row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  #tweaks-panel .row > label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-faint); }
+  #tweaks-panel input[type="text"], #tweaks-panel select { border: 1px solid var(--border); background: #0f0f0f; border-radius: 8px; padding: 8px 10px; }
+  #tweaks-panel .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  #tweaks-panel .sw { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border-strong); cursor: pointer; }
+  #tweaks-panel .sw.active { box-shadow: 0 0 0 2px var(--accent); }
+  #tweaks-panel .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  #tweaks-panel .seg button { padding: 8px 4px; font-size: 11px; color: var(--text-dim); border-right: 1px solid var(--border); }
+  #tweaks-panel .seg button:last-child { border-right: 0; }
+  #tweaks-panel .seg button.active { background: var(--accent); color: #111; }
+  #tweaks-panel .x { background: none; color: var(--text-faint); font-size: 14px; }
+
+  /* density */
+  body[data-density="compact"] { --pad-card: 18px; --gap: 12px; }
+  body[data-density="compact"] .list-item { padding: 10px 0; }
+  body[data-density="compact"] .metric .num { font-size: 28px; }
+  .num[data-target] { display: inline-block; }
+
+  /* ============ TOAST ============ */
+  #toast {
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #2a1215; color: #ff8a80;
+    border: 1px solid #5c2b2e; border-radius: 8px;
+    padding: 10px 18px; font-size: 12px; z-index: 9999;
+    opacity: 0; transition: opacity 200ms ease, transform 200ms ease;
+    pointer-events: none; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media (min-width: 900px) { #toast { bottom: 24px; } }
+
+  /* ============ LOADING OVERLAY ============ */
+  #app-loading {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 500;
+  }
+  #app-loading.hidden { display: none; }
+  .loading-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); opacity: 0.4;
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100% { opacity: 0.2; } 50% { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">HQ</div>
+    <div class="login-title">HQ</div>
+    <div class="login-tagline">Your life, organized.</div>
+    <button class="google-btn" id="google-login-btn">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.64 9.20455C17.64 8.56637 17.5827 7.95273 17.4764 7.36364H9V10.845H13.8436C13.635 11.97 13.0009 12.9232 12.0477 13.5614V15.8195H14.9564C16.6582 14.2527 17.64 11.9455 17.64 9.20455Z" fill="#4285F4"/>
+        <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5614C11.2418 14.1014 10.2109 14.4205 9 14.4205C6.65591 14.4205 4.67182 12.8373 3.96409 10.71H0.957275V13.0418C2.43818 15.9832 5.48182 18 9 18Z" fill="#34A853"/>
+        <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="#FBBC05"/>
+        <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.48182 0 2.43818 2.01682 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="#EA4335"/>
+      </svg>
+      Continue with Google
+    </button>
+
+    <div class="login-divider">or</div>
+
+    <div class="login-email-form">
+      <input class="login-input" type="email" id="login-email" placeholder="Email address" autocomplete="email">
+      <input class="login-input" type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+      <div class="login-btn-row">
+        <button class="login-btn" id="email-login-btn">Login</button>
+        <button class="login-btn primary" id="email-signup-btn">Sign Up</button>
+      </div>
+      <button class="login-forgot" id="forgot-password-btn">Forgot password?</button>
+      <div class="login-msg" id="login-msg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading overlay (shown while fetching data after login) -->
+<div id="app-loading" class="hidden">
+  <div class="loading-dot"></div>
+</div>
+
+<!-- App Shell (hidden until authenticated) -->
+<div class="app" id="app" style="display:none">
+  <aside class="sidebar">
+    <div class="brand"><span class="dot"></span><span>HQ</span></div>
+
+    <div class="nav-group-label">Life</div>
+    <button class="nav-item" data-go="life:home"><span class="glyph">◉</span><span>Today</span></button>
+    <button class="nav-item" data-go="life:schedule"><span class="glyph">◆</span><span>Schedule</span></button>
+    <button class="nav-item" data-go="life:goals"><span class="glyph">◇</span><span>Goals &amp; Rules</span></button>
+    <button class="nav-item" data-go="life:habits"><span class="glyph">◎</span><span>Habits</span></button>
+    <button class="nav-item" data-go="life:focus"><span class="glyph">◉</span><span>Focus</span></button>
+
+    <div class="nav-group-label">Finance</div>
+    <button class="nav-item" data-go="finance:overview"><span class="glyph">∿</span><span>Overview</span></button>
+    <button class="nav-item" data-go="finance:income"><span class="glyph">↑</span><span>Income</span></button>
+    <button class="nav-item" data-go="finance:spending"><span class="glyph">↓</span><span>Spending</span></button>
+    <button class="nav-item" data-go="finance:debts"><span class="glyph">⌀</span><span>Debts</span></button>
+
+    <button class="sidebar-logout" id="sidebar-logout-btn">Sign out</button>
+  </aside>
+
+  <main id="main"></main>
+</div>
+
+<!-- Mobile bottom nav -->
+<nav class="bottom-nav" id="bottom-nav" style="display:none">
+  <button class="tab-btn" data-tab="life:home"><span class="glyph">◉</span><span class="lbl">Today</span></button>
+  <button class="tab-btn" data-tab="life:schedule"><span class="glyph">◆</span><span class="lbl">Sched</span></button>
+  <button class="tab-btn" data-tab="life:habits"><span class="glyph">◎</span><span class="lbl">Habits</span></button>
+  <button class="tab-btn" data-tab="finance:overview"><span class="glyph">∿</span><span class="lbl">Money</span></button>
+  <button class="tab-btn" data-tab="life:focus"><span class="glyph">◉</span><span class="lbl">Focus</span></button>
+</nav>
+
+<!-- Tweaks Panel -->
+<div id="tweaks-panel">
+  <h4><span>Tweaks</span><button class="x" id="tweaks-close" aria-label="Close">✕</button></h4>
+  <div class="row"><label>Your name</label><input type="text" id="tw-name"></div>
+  <div class="row">
+    <label>Accent</label>
+    <div class="swatches" id="tw-swatches">
+      <div class="sw" data-c="#f5f0e8" style="background:#f5f0e8"></div>
+      <div class="sw" data-c="#e8b4a0" style="background:#e8b4a0"></div>
+      <div class="sw" data-c="#a8c5b0" style="background:#a8c5b0"></div>
+      <div class="sw" data-c="#b5b8d8" style="background:#b5b8d8"></div>
+      <div class="sw" data-c="#d8c980" style="background:#d8c980"></div>
+      <div class="sw" data-c="#c89cd0" style="background:#c89cd0"></div>
+    </div>
+  </div>
+  <div class="row"><label>Density</label><div class="seg" id="tw-density"><button data-v="comfortable">Comfortable</button><button data-v="compact">Compact</button></div></div>
+  <div class="row"><label>Big number weight</label><div class="seg" id="tw-weight"><button data-v="200">200</button><button data-v="300">300</button><button data-v="400">400</button></div></div>
+  <div class="row"><label>Today layout</label><div class="seg" id="tw-home"><button data-v="stacked">Stacked</button><button data-v="hero">Hero focus</button></div></div>
+  <div class="row"><label>Quick pills on Today</label><div class="seg" id="tw-pills"><button data-v="true">On</button><button data-v="false">Off</button></div></div>
+  <div class="row"><label>Currency prefix</label><input type="text" id="tw-currency" maxlength="3"></div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   SUPABASE INIT
+========================================================= */
+const { createClient } = supabase;
+const sb = createClient(
+  'https://ffleqouktwanayuidyaf.supabase.co',
+  'sb_publishable_KK8iJpsgP43BHseBg6SNsA_cCBL2C4R'
+);
+
+/* =========================================================
+   TOAST
+========================================================= */
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+/* =========================================================
+   DB HELPER — retry once on failure
+========================================================= */
+async function dbCall(fn) {
+  try {
+    const result = await fn();
+    if (result.error) throw result.error;
+    return result;
+  } catch (e) {
+    showToast('Sync failed, retrying...');
+    await new Promise(r => setTimeout(r, 1500));
+    try {
+      const result = await fn();
+      if (result.error) throw result.error;
+      return result;
+    } catch (e2) {
+      showToast('Sync failed. Check connection.');
+      throw e2;
+    }
+  }
+}
+
+/* =========================================================
+   UTILS
+========================================================= */
+const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const ymLocal  = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+const todayISO = () => isoLocal(new Date());
+const fmtDate  = (d) => {
+  const date = (typeof d === 'string') ? new Date(d + 'T00:00:00') : new Date(d);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+const fmtMoney = (n) => {
+  const prefix = window.__HQ_TWEAKS.currencyPrefix ?? '';
+  return prefix + Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+};
+const uid = () => Math.random().toString(36).slice(2, 9);
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+/* =========================================================
+   IN-MEMORY STATE  (populated from Supabase on login)
+========================================================= */
+let currentUser = null;
+let focusBoardId = null;  // UUID of focus_board row for current user
+
+let state = {
+  profile: { name: 'Friend' },
+  schedule: {},   // { [iso-date]: [{id, time, title, sub}] }
+  goals: { dos: [], donts: [] },
+  habits: [],     // [{id, name, streak, doneToday, log:[7]}]
+  focus: { main: '', tasks: [] },
+  income: [],
+  spending: [],
+  debts: [],
+  selectedDay: todayISO(),
+  activeTab: 'life:home',
+  viewMonth: todayISO().slice(0, 7)
+};
+
+/* =========================================================
+   SAMPLE DATA (inserted on first login)
+========================================================= */
+function defaultState() {
+  const today = todayISO();
+  const dayKey = (offset) => {
+    const d = new Date(); d.setDate(d.getDate() + offset); return isoLocal(d);
+  };
+  return {
+    schedule: {
+      [today]: [
+        { time: '07:30', title: 'Morning run', sub: 'Park loop, easy pace' },
+        { time: '09:00', title: 'Deep work — HQ planning', sub: 'No meetings block' },
+        { time: '12:30', title: 'Lunch w/ Maya', sub: 'Cafe Vora' },
+        { time: '15:00', title: 'Design review', sub: 'Quarterly portfolio' },
+        { time: '19:00', title: 'Reading — 30 pages', sub: 'Continue Annie Dillard' }
+      ],
+      [dayKey(1)]: [
+        { time: '08:00', title: 'Strength session', sub: 'Push day' },
+        { time: '10:00', title: '1:1 with Sam', sub: '' },
+        { time: '14:00', title: 'Tax docs review', sub: 'Q1 prep' }
+      ],
+      [dayKey(-1)]: [
+        { time: '09:30', title: 'Yoga', sub: '' },
+        { time: '13:00', title: 'Client call', sub: 'Westwind' }
+      ]
+    },
+    goals: {
+      dos: [
+        { text: 'Read 20 pages every day', done: true },
+        { text: 'Walk 8,000+ steps', done: true },
+        { text: 'Write a journal entry', done: false },
+        { text: 'Call mom twice a week', done: false },
+        { text: 'Sleep before 11:30pm', done: true }
+      ],
+      donts: [
+        { text: 'No phone in the first hour', done: true },
+        { text: 'No takeout on weekdays', done: true },
+        { text: 'No alcohol Mon–Thu', done: false },
+        { text: 'No infinite scroll after 9pm', done: false }
+      ]
+    },
+    habits: [
+      { name: 'Cold shower',  streak: 12, doneToday: true,  log: [1,1,1,1,1,1,1] },
+      { name: 'Read 20 pages', streak: 5,  doneToday: true,  log: [1,0,1,1,1,1,1] },
+      { name: 'No sugar',      streak: 3,  doneToday: false, log: [1,1,1,0,1,1,0] },
+      { name: 'Meditate 10m',  streak: 22, doneToday: true,  log: [1,1,1,1,1,1,1] },
+      { name: 'Stretch',       streak: 1,  doneToday: false, log: [0,1,0,0,1,0,0] }
+    ],
+    focus: {
+      main: 'Ship the HQ dashboard MVP and get 10 friends using it.',
+      tasks: [
+        { text: 'Lock LIFE tab data model', done: true },
+        { text: 'Wire Finance overview metrics', done: true },
+        { text: 'Inline-form pattern for all add buttons', done: false },
+        { text: 'Send to first 3 testers', done: false }
+      ]
+    },
+    income: [
+      { date: today,        source: 'Studio retainer — Westwind',  amount: 18500000 },
+      { date: dayKey(-6),   source: 'Consulting — Marlow & Co',    amount: 7200000 },
+      { date: dayKey(-12),  source: 'Print sale — gallery',        amount: 1450000 }
+    ],
+    spending: [
+      { date: today,       time: '08:14', cat: 'Food',      note: 'Kopi + roti',             amount: 35000 },
+      { date: today,       time: '12:42', cat: 'Food',      note: 'Makan siang — Cafe Vora',  amount: 95000 },
+      { date: today,       time: '15:30', cat: 'Transport', note: 'Gojek',                   amount: 42000 },
+      { date: dayKey(-1),  time: '19:10', cat: 'Shopping',  note: 'Buku + pulpen',           amount: 145000 },
+      { date: dayKey(-2),  time: '13:00', cat: 'Food',      note: 'Belanja groceries',       amount: 380000 },
+      { date: dayKey(-4),  time: '20:30', cat: 'Other',     note: 'Bioskop',                 amount: 75000 },
+      { date: dayKey(-6),  time: '11:00', cat: 'Transport', note: 'Taksi bandara',           amount: 185000 }
+    ],
+    debts: [
+      { creditor: 'Kartu Kredit BCA',  amount: 5400000, due: dayKey(5),   paid: false },
+      { creditor: 'Pinjaman Ayah',     amount: 2500000, due: dayKey(20),  paid: false },
+      { creditor: 'Tagihan Telkomsel', amount: 425000,  due: dayKey(-3),  paid: true }
+    ]
+  };
+}
+
+/* =========================================================
+   LOAD DATA FROM SUPABASE → state
+========================================================= */
+async function loadFromSupabase(userId) {
+  const [
+    profileRes, eventsRes, goalsRes, habitsRes,
+    habitLogsRes, focusBoardRes, focusTasksRes,
+    incomeRes, spendingRes, debtsRes
+  ] = await Promise.all([
+    sb.from('profiles').select('*').eq('id', userId).maybeSingle(),
+    sb.from('schedule_events').select('*').eq('user_id', userId),
+    sb.from('goals').select('*').eq('user_id', userId).order('created_at'),
+    sb.from('habits').select('*').eq('user_id', userId).order('created_at'),
+    sb.from('habit_logs').select('*').eq('user_id', userId),
+    sb.from('focus_board').select('*').eq('user_id', userId).maybeSingle(),
+    sb.from('focus_tasks').select('*').eq('user_id', userId).order('created_at'),
+    sb.from('income_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
+    sb.from('spending_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
+    sb.from('debts').select('*').eq('user_id', userId).order('due_date')
+  ]);
+
+  const isNewUser = !profileRes.data;
+
+  if (isNewUser) {
+    await seedSampleData(userId);
+    return;
+  }
+
+  // Profile — auth metadata takes priority over DB value
+  state.profile.name = displayNameFromUser(currentUser) || profileRes.data?.name || 'Friend';
+  window.__HQ_TWEAKS.name = state.profile.name;
+
+  // Schedule: group events by date
+  state.schedule = {};
+  (eventsRes.data || []).forEach(e => {
+    const d = e.date;
+    if (!state.schedule[d]) state.schedule[d] = [];
+    state.schedule[d].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '' });
+  });
+
+  // Goals
+  state.goals.dos   = (goalsRes.data || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, done: g.checked }));
+  state.goals.donts = (goalsRes.data || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, done: g.checked }));
+
+  // Habits + logs
+  const allLogs = habitLogsRes.data || [];
+  const today = todayISO();
+  state.habits = (habitsRes.data || []).map(h => {
+    const hLogs = allLogs.filter(l => l.habit_id === h.id);
+    const doneToday = hLogs.some(l => l.date === today && l.checked);
+    const log = compute7DayLog(hLogs);
+    return { id: h.id, name: h.name, streak: h.streak || 0, doneToday, log };
+  });
+
+  // Focus board
+  if (focusBoardRes.data) {
+    focusBoardId = focusBoardRes.data.id;
+    state.focus.main = focusBoardRes.data.main_focus || '';
+    state.focus.tasks = (focusTasksRes.data || []).map(t => ({ id: t.id, text: t.text, done: t.checked }));
+  } else {
+    // Create empty focus board for user
+    const { data: fb } = await sb.from('focus_board').insert({ user_id: userId, main_focus: '' }).select().single();
+    if (fb) focusBoardId = fb.id;
+    state.focus = { main: '', tasks: [] };
+  }
+
+  // Finance
+  state.income   = (incomeRes.data   || []).map(i => ({ id: i.id, date: i.date, source: i.source, amount: Number(i.amount) }));
+  state.spending = (spendingRes.data  || []).map(s => ({ id: s.id, date: s.date, time: s.time, cat: s.category, note: s.note, amount: Number(s.amount) }));
+  state.debts    = (debtsRes.data     || []).map(d => ({ id: d.id, creditor: d.creditor, amount: Number(d.amount), due: d.due_date, paid: d.paid }));
+}
+
+function compute7DayLog(logs) {
+  const result = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const iso = isoLocal(d);
+    result.push(logs.some(l => l.date === iso && l.checked) ? 1 : 0);
+  }
+  return result;
+}
+
+function computeStreak(logs) {
+  let streak = 0;
+  const d = new Date();
+  for (let i = 0; i < 60; i++) {
+    const iso = isoLocal(d);
+    if (logs.some(l => l.date === iso && l.checked)) streak++;
+    else break;
+    d.setDate(d.getDate() - 1);
+  }
+  return streak;
+}
+
+/* =========================================================
+   SEED SAMPLE DATA (first login)
+========================================================= */
+async function seedSampleData(userId) {
+  const def = defaultState();
+
+  // Profile
+  const realName = displayNameFromUser(currentUser);
+  await sb.from('profiles').upsert({ id: userId, name: realName });
+  state.profile.name = realName;
+  window.__HQ_TWEAKS.name = realName;
+
+  // Schedule events
+  const schedRows = [];
+  Object.entries(def.schedule).forEach(([date, events]) => {
+    events.forEach(e => schedRows.push({ user_id: userId, date, time: e.time, title: e.title, note: e.sub || '' }));
+  });
+  const { data: schedData } = await sb.from('schedule_events').insert(schedRows).select();
+  state.schedule = {};
+  (schedData || []).forEach(e => {
+    if (!state.schedule[e.date]) state.schedule[e.date] = [];
+    state.schedule[e.date].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '' });
+  });
+
+  // Goals
+  const goalRows = [
+    ...def.goals.dos.map(g => ({ user_id: userId, type: 'do', text: g.text, checked: g.done })),
+    ...def.goals.donts.map(g => ({ user_id: userId, type: 'dont', text: g.text, checked: g.done }))
+  ];
+  const { data: goalData } = await sb.from('goals').insert(goalRows).select();
+  state.goals.dos   = (goalData || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, done: g.checked }));
+  state.goals.donts = (goalData || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, done: g.checked }));
+
+  // Habits + logs
+  const habitRows = def.habits.map(h => ({ user_id: userId, name: h.name, streak: h.streak }));
+  const { data: habitData } = await sb.from('habits').insert(habitRows).select();
+  const today = todayISO();
+  const logRows = [];
+  (habitData || []).forEach((h, i) => {
+    const defH = def.habits[i];
+    for (let j = 6; j >= 0; j--) {
+      const d = new Date(); d.setDate(d.getDate() - j);
+      const iso = isoLocal(d);
+      logRows.push({ habit_id: h.id, user_id: userId, date: iso, checked: defH.log[6 - j] === 1 });
+    }
+  });
+  await sb.from('habit_logs').insert(logRows);
+  state.habits = (habitData || []).map((h, i) => ({ ...def.habits[i], id: h.id }));
+
+  // Focus board
+  const { data: fb } = await sb.from('focus_board').insert({ user_id: userId, main_focus: def.focus.main }).select().single();
+  if (fb) {
+    focusBoardId = fb.id;
+    const taskRows = def.focus.tasks.map(t => ({ focus_id: fb.id, user_id: userId, text: t.text, checked: t.done }));
+    const { data: taskData } = await sb.from('focus_tasks').insert(taskRows).select();
+    state.focus = { main: def.focus.main, tasks: (taskData || []).map(t => ({ id: t.id, text: t.text, done: t.checked })) };
+  }
+
+  // Income
+  const incomeRows = def.income.map(i => ({ user_id: userId, date: i.date, source: i.source, amount: i.amount }));
+  const { data: incomeData } = await sb.from('income_entries').insert(incomeRows).select();
+  state.income = (incomeData || []).map(i => ({ id: i.id, date: i.date, source: i.source, amount: Number(i.amount) }));
+
+  // Spending
+  const spendRows = def.spending.map(s => ({ user_id: userId, date: s.date, time: s.time, category: s.cat, note: s.note, amount: s.amount }));
+  const { data: spendData } = await sb.from('spending_entries').insert(spendRows).select();
+  state.spending = (spendData || []).map(s => ({ id: s.id, date: s.date, time: s.time, cat: s.category, note: s.note, amount: Number(s.amount) }));
+
+  // Debts
+  const debtRows = def.debts.map(d => ({ user_id: userId, creditor: d.creditor, amount: d.amount, due_date: d.due, paid: d.paid }));
+  const { data: debtData } = await sb.from('debts').insert(debtRows).select();
+  state.debts = (debtData || []).map(d => ({ id: d.id, creditor: d.creditor, amount: Number(d.amount), due: d.due_date, paid: d.paid }));
+}
+
+/* =========================================================
+   AUTH
+========================================================= */
+function displayNameFromUser(user) {
+  const meta = user?.user_metadata || {};
+  const raw = meta.full_name || meta.name || (user?.email || '').split('@')[0] || 'Friend';
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function showLogin() {
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('bottom-nav').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app-loading').classList.add('hidden');
+  document.getElementById('app').style.display = '';
+  document.getElementById('bottom-nav').style.display = '';
+}
+
+async function handleSession(session) {
+  if (!session) { showLogin(); return; }
+  currentUser = session.user;
+  state.profile.name = displayNameFromUser(currentUser);
+  window.__HQ_TWEAKS.name = state.profile.name;
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app-loading').classList.remove('hidden');
+
+  try {
+    await loadFromSupabase(currentUser.id);
+  } catch (e) {
+    console.error('Failed to load data', e);
+    showToast('Failed to load data. Please refresh.');
+  }
+
+  applyTweaks();
+  restoreUIPrefs();
+  showApp();
+  syncTweaksUI();
+  render();
+  initGlobalBindings();
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+  currentUser = null;
+  showLogin();
+}
+
+document.getElementById('google-login-btn').addEventListener('click', async () => {
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.href }
+  });
+  if (error) showToast('Login failed: ' + error.message);
+});
+
+// Email / password auth
+function loginMsg(text, type) {
+  const el = document.getElementById('login-msg');
+  el.textContent = text;
+  el.className = 'login-msg ' + type;
+}
+function loginFields() {
+  return {
+    email: document.getElementById('login-email').value.trim(),
+    password: document.getElementById('login-password').value
+  };
+}
+
+document.getElementById('email-login-btn').addEventListener('click', async () => {
+  const { email, password } = loginFields();
+  if (!email || !password) { loginMsg('Enter your email and password.', 'error'); return; }
+  loginMsg('', '');
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) loginMsg(error.message, 'error');
+});
+
+document.getElementById('email-signup-btn').addEventListener('click', async () => {
+  const { email, password } = loginFields();
+  if (!email || !password) { loginMsg('Enter your email and password.', 'error'); return; }
+  if (password.length < 6) { loginMsg('Password must be at least 6 characters.', 'error'); return; }
+  loginMsg('', '');
+  const { error } = await sb.auth.signUp({ email, password });
+  if (error) loginMsg(error.message, 'error');
+  else loginMsg('Check your email to confirm your account.', 'success');
+});
+
+document.getElementById('forgot-password-btn').addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value.trim();
+  if (!email) { loginMsg('Enter your email address first.', 'error'); return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+  if (error) loginMsg(error.message, 'error');
+  else loginMsg('Password reset email sent — check your inbox.', 'success');
+});
+
+sb.auth.onAuthStateChange((_event, session) => {
+  handleSession(session);
+});
+
+// Check on load
+sb.auth.getSession().then(({ data: { session } }) => {
+  if (!session) showLogin();
+});
+
+/* =========================================================
+   UI PREFS (localStorage — navigation state only)
+========================================================= */
+const PREFS_KEY = 'hq.prefs';
+function saveUIPrefs() {
+  localStorage.setItem(PREFS_KEY, JSON.stringify({
+    activeTab: state.activeTab,
+    selectedDay: state.selectedDay,
+    viewMonth: state.viewMonth
+  }));
+}
+function restoreUIPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return;
+    const p = JSON.parse(raw);
+    if (p.activeTab) state.activeTab = p.activeTab;
+    if (p.selectedDay) state.selectedDay = p.selectedDay;
+    if (p.viewMonth) state.viewMonth = p.viewMonth;
+  } catch (e) {}
+}
+
+/* =========================================================
+   APPLY TWEAKS
+========================================================= */
+function applyTweaks() {
+  const tw = window.__HQ_TWEAKS;
+  document.documentElement.style.setProperty('--accent', tw.accent);
+  document.body.dataset.density = tw.density;
+  document.documentElement.style.setProperty('--num-weight', tw.numberWeight);
+  if (tw.name && state.profile) state.profile.name = tw.name;
+}
+applyTweaks();
+
+/* =========================================================
+   ROUTER / RENDER
+========================================================= */
+const main = document.getElementById('main');
+
+function setActiveTab(tab) {
+  state.activeTab = tab;
+  saveUIPrefs();
+  render();
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 5) return 'Late night';
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+function todayLabel() {
+  return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+function topbar() {
+  const name = state.profile.name || 'Friend';
+  return `
+    <header class="topbar">
+      <div class="greet">
+        <div class="hello">${greeting()}, <span style="color:var(--text)">${escapeHtml(name)}</span></div>
+        <div class="date">${todayLabel()}</div>
+      </div>
+      <div class="right">
+        <button class="logout-btn" id="topbar-logout-btn">Sign out</button>
+        <button class="icon-btn" id="open-tweaks" title="Tweaks" aria-label="Tweaks">⚙︎</button>
+      </div>
+    </header>`;
+}
+
+/* ---- LIFE: HOME ---- */
+function renderLifeHome() {
+  const today = todayISO();
+  const sched = (state.schedule[today] || []).slice(0, 5);
+  const focus = state.focus;
+  const layout = window.__HQ_TWEAKS.homeLayout;
+  const showPills = String(window.__HQ_TWEAKS.showQuickPills) === 'true' || window.__HQ_TWEAKS.showQuickPills === true;
+
+  const focusBlock = `
+    <div class="card" style="animation-delay:60ms">
+      <div class="section-title" style="margin-top:0">Current focus</div>
+      <div style="font-size:${layout==='hero'?'22px':'18px'}; font-weight:300; line-height:1.35; letter-spacing:-0.01em;">${escapeHtml(focus.main)}</div>
+      <ul class="list" style="margin-top:14px">
+        ${focus.tasks.slice(0, 3).map(t => `
+          <li class="list-item" style="padding:10px 0">
+            <span class="check ${t.done?'checked':''}" data-toggle-focus="${t.id}"></span>
+            <span class="check-label ${t.done?'done':''}">${escapeHtml(t.text)}</span>
+          </li>
+        `).join('')}
+      </ul>
+    </div>`;
+
+  const scheduleBlock = `
+    <div class="card" style="animation-delay:120ms">
+      <div class="section-title" style="margin-top:0">Today's schedule <span class="meta">${sched.length} blocks</span></div>
+      <ul class="list">
+        ${sched.map(s => `
+          <li class="list-item">
+            <div class="time-col">${s.time}</div>
+            <div class="item-main">
+              <div class="item-title">${escapeHtml(s.title)}</div>
+              ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
+            </div>
+          </li>`).join('') || `<li class="list-item"><div class="item-sub">Nothing scheduled. Take it easy.</div></li>`}
+      </ul>
+    </div>`;
+
+  const pillsBlock = showPills ? `
+    <div class="pills" style="margin: 18px 4px 4px;">
+      <button class="pill" data-go="life:schedule">Schedule</button>
+      <button class="pill" data-go="life:goals">Goals</button>
+      <button class="pill" data-go="life:habits">Habits</button>
+      <button class="pill" data-go="life:focus">Focus</button>
+    </div>` : '';
+
+  return `
+    ${topbar()}
+    ${layout === 'hero' ? focusBlock + scheduleBlock : scheduleBlock + focusBlock}
+    ${pillsBlock}
+  `;
+}
+
+/* ---- LIFE: SCHEDULE ---- */
+function buildMonthGrid(viewYear, viewMonth) {
+  const first = new Date(viewYear, viewMonth, 1);
+  const startWeekday = first.getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells = [];
+  const prevDays = new Date(viewYear, viewMonth, 0).getDate();
+  for (let i = startWeekday - 1; i >= 0; i--) cells.push({ d: new Date(viewYear, viewMonth - 1, prevDays - i), other: true });
+  for (let i = 1; i <= daysInMonth; i++) cells.push({ d: new Date(viewYear, viewMonth, i), other: false });
+  let next = 1;
+  while (cells.length < 42) cells.push({ d: new Date(viewYear, viewMonth + 1, next++), other: true });
+  return cells;
+}
+
+function renderSchedule() {
+  if (!state.selectedDay) state.selectedDay = todayISO();
+  const sel = state.selectedDay;
+  const selDate = new Date(sel + 'T00:00:00');
+  if (!state.viewMonth) state.viewMonth = sel.slice(0, 7);
+  const [vy, vm] = state.viewMonth.split('-').map(Number);
+  const viewYear = vy, viewMonth = vm - 1;
+  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const cells = buildMonthGrid(viewYear, viewMonth);
+  const todayIso = todayISO();
+  const eventCount = {};
+  Object.keys(state.schedule || {}).forEach(k => { eventCount[k] = (state.schedule[k] || []).length; });
+  const list = state.schedule[sel] || [];
+  const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  return `
+    ${topbar()}
+    <h1 class="page-title">Schedule</h1>
+    <div class="card" style="animation-delay:0ms; padding: 18px;">
+      <div class="cal-head">
+        <div>
+          <div class="month-label">${monthLabel}</div>
+          <div class="month-sub">${selDate.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })} selected</div>
+        </div>
+        <div class="cal-nav">
+          <button data-cal-nav="-1" aria-label="Previous month">‹</button>
+          <button data-cal-today aria-label="Today" style="width:auto; padding:0 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase;">Today</button>
+          <button data-cal-nav="1" aria-label="Next month">›</button>
+        </div>
+      </div>
+      <div class="cal-dow">${dows.map(d => `<div class="d">${d.charAt(0)}</div>`).join('')}</div>
+      <div class="cal-grid">
+        ${cells.map(c => {
+          const iso = isoLocal(c.d);
+          const has = (eventCount[iso] || 0) > 0;
+          const isToday = iso === todayIso;
+          const isSel = iso === sel;
+          return `<button class="cal-cell ${c.other?'other':''} ${isToday?'today':''} ${isSel?'selected':''}" data-pick-day="${iso}">
+            <span class="n">${c.d.getDate()}</span>
+            <span class="dot" style="${has?'':'visibility:hidden'}"></span>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="card" style="animation-delay:100ms">
+      <div class="section-title" style="margin-top:0">${selDate.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'})}<span class="meta">${list.length} ${list.length===1?'block':'blocks'}</span></div>
+      <ul class="list" id="sched-list">
+        ${list.map(s => `
+          <li class="list-item row-wrap" data-id="${s.id}">
+            <div class="time-col">${s.time}</div>
+            <div class="item-main">
+              <div class="item-title">${escapeHtml(s.title)}</div>
+              ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
+            </div>
+            <button class="delete" data-del-sched="${s.id}">Delete</button>
+          </li>`).join('') || `<li class="list-item"><div class="item-sub">No events. Add one below.</div></li>`}
+      </ul>
+      <button class="add-btn" id="add-sched-btn" style="margin-top:14px"><span class="plus">+</span> Add event</button>
+      <div class="inline-form" id="add-sched-form">
+        <div class="inner">
+          <div class="form-row">
+            <div class="field"><label>Time</label><input type="time" id="f-sched-time" value="09:00"/></div>
+            <div class="field"><label>Title</label><input type="text" id="f-sched-title" placeholder="e.g. Deep work"/></div>
+          </div>
+          <div class="field"><label>Note</label><input type="text" id="f-sched-sub" placeholder="optional"/></div>
+          <div class="form-actions">
+            <button class="btn" data-cancel="add-sched-form">Cancel</button>
+            <button class="btn primary" id="f-sched-save">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---- LIFE: GOALS ---- */
+function renderGoals() {
+  const dos = state.goals.dos;
+  const dosDone = dos.filter(d => d.done).length;
+  const pct = dos.length ? Math.round(dosDone / dos.length * 100) : 0;
+
+  const col = (title, items, key) => `
+    <div class="card">
+      <div class="section-title" style="margin-top:0">${title} <span class="meta">${items.filter(i=>i.done).length} / ${items.length}</span></div>
+      <ul class="list">
+        ${items.map(i => `
+          <li class="list-item row-wrap" style="padding:10px 0; border-bottom:1px solid var(--border)">
+            <span class="check ${i.done?'checked':''}" data-toggle-goal="${key}|${i.id}"></span>
+            <span class="check-label ${i.done?'done':''}">${escapeHtml(i.text)}</span>
+            <button class="delete" data-del-goal="${key}|${i.id}">Delete</button>
+          </li>`).join('')}
+      </ul>
+      <button class="add-btn" data-open-form="add-goal-${key}" style="margin-top:14px"><span class="plus">+</span> Add</button>
+      <div class="inline-form" id="add-goal-${key}">
+        <div class="inner">
+          <div class="field"><label>${title.slice(0,-1)}</label><input type="text" data-goal-input="${key}" placeholder="${key==='dos'?'e.g. Drink 2L water':'e.g. No phone in bed'}"/></div>
+          <div class="form-actions">
+            <button class="btn" data-cancel="add-goal-${key}">Cancel</button>
+            <button class="btn primary" data-goal-save="${key}">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  return `
+    ${topbar()}
+    <h1 class="page-title">Goals &amp; Rules</h1>
+    <div class="card" style="animation-delay:40ms">
+      <div class="section-title" style="margin-top:0">Today's progress</div>
+      <div style="display:flex; align-items:baseline; gap:10px;">
+        <div style="font-size:32px; font-weight:300; font-variant-numeric: tabular-nums;">${pct}<span style="font-size:18px; color:var(--text-faint)">%</span></div>
+        <div style="font-size:12px; color:var(--text-faint)">of Do's checked</div>
+      </div>
+      <div class="progress"><div class="bar" style="width:${pct}%"></div></div>
+      <div class="progress-meta"><span>${dosDone} done</span><span>${dos.length - dosDone} to go</span></div>
+    </div>
+    <div class="card-row" style="grid-template-columns: 1fr; margin-top:16px;">
+      ${col("Do's", state.goals.dos, 'dos')}
+      ${col("Don'ts", state.goals.donts, 'donts')}
+    </div>
+  `;
+}
+
+/* ---- LIFE: HABITS ---- */
+function renderHabits() {
+  return `
+    ${topbar()}
+    <h1 class="page-title">Habits</h1>
+    <div class="habit-grid">
+      ${state.habits.map(h => `
+        <div class="habit ${h.doneToday?'checked':''}" data-habit="${h.id}">
+          <div class="habit-top">
+            <div class="habit-name">${escapeHtml(h.name)}</div>
+            <div class="habit-streak"><span class="num">${h.streak}</span> day${h.streak===1?'':'s'}</div>
+          </div>
+          <div class="habit-grid-7">
+            ${h.log.map(v => `<div class="cell ${v?'on':''}"></div>`).join('')}
+          </div>
+          <div class="habit-row">
+            <span class="check ${h.doneToday?'checked':''}" data-toggle-habit="${h.id}"></span>
+            <span class="status">${h.doneToday?'Done today':'Tap to mark'}</span>
+          </div>
+        </div>`).join('')}
+    </div>
+    <button class="add-btn" data-open-form="add-habit" style="margin-top:18px"><span class="plus">+</span> Add habit</button>
+    <div class="inline-form" id="add-habit">
+      <div class="inner">
+        <div class="field"><label>Name</label><input type="text" id="f-habit-name" placeholder="e.g. 10k steps"/></div>
+        <div class="form-actions">
+          <button class="btn" data-cancel="add-habit">Cancel</button>
+          <button class="btn primary" id="f-habit-save">Add</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---- LIFE: FOCUS ---- */
+function renderFocus() {
+  const f = state.focus;
+  const done = f.tasks.filter(t => t.done).length;
+  return `
+    ${topbar()}
+    <h1 class="page-title">Focus</h1>
+    <div class="card focus-card">
+      <div class="focus-meta">Main focus</div>
+      <textarea class="focus-input" id="focus-main" placeholder="What are you working toward?">${escapeHtml(f.main)}</textarea>
+    </div>
+    <div class="card" style="animation-delay:80ms">
+      <div class="section-title" style="margin-top:0">Sub-tasks <span class="meta">${done} of ${f.tasks.length} done</span></div>
+      <ul class="list">
+        ${f.tasks.map(t => `
+          <li class="list-item row-wrap" style="padding:12px 0">
+            <span class="check ${t.done?'checked':''}" data-toggle-focus="${t.id}"></span>
+            <span class="check-label ${t.done?'done':''}">${escapeHtml(t.text)}</span>
+            <button class="delete" data-del-focus="${t.id}">Delete</button>
+          </li>`).join('')}
+      </ul>
+      <button class="add-btn" data-open-form="add-focus" style="margin-top:14px"><span class="plus">+</span> Add sub-task</button>
+      <div class="inline-form" id="add-focus">
+        <div class="inner">
+          <div class="field"><label>Sub-task</label><input type="text" id="f-focus-text" placeholder="What's the next concrete step?"/></div>
+          <div class="form-actions">
+            <button class="btn" data-cancel="add-focus">Cancel</button>
+            <button class="btn primary" id="f-focus-save">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---- FINANCE: OVERVIEW ---- */
+function thisMonthIncome() {
+  const ym = ymLocal(new Date());
+  return state.income.filter(i => (i.date||'').startsWith(ym)).reduce((s,i) => s + Number(i.amount||0), 0);
+}
+function todaySpend() {
+  return state.spending.filter(s => s.date === todayISO()).reduce((s,i) => s + Number(i.amount||0), 0);
+}
+function totalDebt() {
+  return state.debts.filter(d => !d.paid).reduce((s,d) => s + Number(d.amount||0), 0);
+}
+function daysUntil(iso) {
+  const d = new Date(iso); d.setHours(0,0,0,0);
+  const t = new Date(); t.setHours(0,0,0,0);
+  return Math.round((d-t)/86400000);
+}
+function last7DaysSpend() {
+  const out = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const iso = isoLocal(d);
+    const total = state.spending.filter(s => s.date === iso).reduce((s,x) => s + Number(x.amount||0), 0);
+    out.push({ iso, total, label: d.toLocaleDateString(undefined,{weekday:'short'}).slice(0,1) });
+  }
+  return out;
+}
+
+function renderFinanceOverview() {
+  const inc = thisMonthIncome(), spent = todaySpend(), debt = totalDebt();
+  const soonest = state.debts.filter(d=>!d.paid).map(d=>daysUntil(d.due)).sort((a,b)=>a-b)[0];
+  const showAlert = soonest !== undefined && soonest <= 7 && soonest >= 0;
+  const days = last7DaysSpend();
+  const max = Math.max(1, ...days.map(d=>d.total));
+  const pfx = window.__HQ_TWEAKS.currencyPrefix||'$';
+
+  return `
+    ${topbar()}
+    <h1 class="page-title">Finance</h1>
+    <div class="metric-grid">
+      <div class="card metric" style="animation-delay:0ms"><div class="label">Income · this month</div><div class="num" data-target="${inc}" data-prefix="${pfx}">${fmtMoney(0)}</div><div class="sub">${state.income.length} entries</div></div>
+      <div class="card metric" style="animation-delay:80ms"><div class="label">Spent · today</div><div class="num" data-target="${spent}" data-prefix="${pfx}">${fmtMoney(0)}</div><div class="sub">${state.spending.filter(s=>s.date===todayISO()).length} transactions</div></div>
+      <div class="card metric" style="animation-delay:160ms"><div class="label">Total debt</div><div class="num" data-target="${debt}" data-prefix="${pfx}">${fmtMoney(0)}</div><div class="sub">${state.debts.filter(d=>!d.paid).length} open</div></div>
+    </div>
+    ${showAlert ? `<div class="alert" style="margin-top:18px"><span class="glyph">⚠</span> Debt due in ${soonest} day${soonest===1?'':'s'}</div>` : ''}
+    <div class="card" style="margin-top:18px; animation-delay:220ms">
+      <div class="section-title" style="margin-top:0">Last 7 days spending <span class="meta">${fmtMoney(days.reduce((a,b)=>a+b.total,0))}</span></div>
+      <div class="bar-chart">
+        ${days.map((d,i) => `
+          <div class="col ${d.total===0?'dim':''}">
+            <div class="bar-track">
+              <div class="bar" style="height:${d.total===0?6:Math.max(8,(d.total/max)*100)}%; transition-delay:${i*40}ms"></div>
+            </div>
+            <div class="lbl">${d.label}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/* ---- FINANCE: INCOME ---- */
+function renderIncome() {
+  const total = thisMonthIncome();
+  const items = state.income.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const pfx = window.__HQ_TWEAKS.currencyPrefix||'$';
+  return `
+    ${topbar()}
+    <h1 class="page-title">Income</h1>
+    <div class="card" style="animation-delay:0ms">
+      <div class="section-title" style="margin-top:0">This month</div>
+      <div class="num" style="font-size:42px; font-weight:300; letter-spacing:-0.02em;" data-target="${total}" data-prefix="${pfx}">${fmtMoney(0)}</div>
+      <div class="sub" style="color:var(--text-faint); margin-top:6px;">${state.income.length} entries · avg ${fmtMoney(state.income.length?Math.round(total/state.income.length):0)}</div>
+    </div>
+    <div class="card" style="margin-top:16px; animation-delay:60ms">
+      <div class="section-title" style="margin-top:0">Log</div>
+      <ul class="list">
+        ${items.map(i => `
+          <li class="list-item row-wrap" data-id="${i.id}">
+            <div class="time-col">${fmtDate(i.date)}</div>
+            <div class="item-main"><div class="item-title">${escapeHtml(i.source)}</div></div>
+            <div class="item-amt">+${fmtMoney(i.amount)}</div>
+            <button class="delete" data-del-income="${i.id}">Delete</button>
+          </li>`).join('') || `<li class="list-item"><div class="item-sub">No income yet.</div></li>`}
+      </ul>
+      <button class="add-btn" data-open-form="add-income" style="margin-top:14px"><span class="plus">+</span> Log income</button>
+      <div class="inline-form" id="add-income">
+        <div class="inner">
+          <div class="field"><label>Source</label><input type="text" id="f-inc-source" placeholder="e.g. Client A"/></div>
+          <div class="form-row">
+            <div class="field"><label>Amount</label><input type="number" id="f-inc-amount" placeholder="0"/></div>
+            <div class="field"><label>Date</label><input type="date" id="f-inc-date" value="${todayISO()}"/></div>
+          </div>
+          <div class="form-actions">
+            <button class="btn" data-cancel="add-income">Cancel</button>
+            <button class="btn primary" id="f-inc-save">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---- FINANCE: SPENDING ---- */
+function renderSpending() {
+  const today = todayISO();
+  const todays = state.spending.filter(s => s.date === today);
+  const total = todays.reduce((s,x) => s+Number(x.amount||0), 0);
+  const cats = ['Food','Transport','Shopping','Other'];
+  const byCat = Object.fromEntries(cats.map(c => [c, todays.filter(s=>s.cat===c).reduce((s,x)=>s+Number(x.amount||0),0)]));
+  const recent = state.spending.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
+  const pfx = window.__HQ_TWEAKS.currencyPrefix||'$';
+
+  return `
+    ${topbar()}
+    <h1 class="page-title">Spending</h1>
+    <div class="card" style="animation-delay:0ms">
+      <div class="section-title" style="margin-top:0">Today</div>
+      <div class="num" style="font-size:42px; font-weight:300; letter-spacing:-0.02em;" data-target="${total}" data-prefix="${pfx}">${fmtMoney(0)}</div>
+      <div class="pills" style="margin-top:16px">
+        ${cats.map(c => `<span class="pill cat">${c}<span class="amt">${fmtMoney(byCat[c])}</span></span>`).join('')}
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px; animation-delay:80ms">
+      <div class="section-title" style="margin-top:0">Recent</div>
+      <ul class="list">
+        ${recent.map(s => `
+          <li class="list-item row-wrap" data-id="${s.id}">
+            <div class="time-col">${s.date===today?s.time:fmtDate(s.date)}</div>
+            <div class="item-main">
+              <div class="item-title">${escapeHtml(s.note || s.cat)}</div>
+              <div class="item-sub">${s.cat}</div>
+            </div>
+            <div class="item-amt">−${fmtMoney(s.amount)}</div>
+            <button class="delete" data-del-spend="${s.id}">Delete</button>
+          </li>`).join('')}
+      </ul>
+      <button class="add-btn" data-open-form="add-spend" style="margin-top:14px"><span class="plus">+</span> Log spend</button>
+      <div class="inline-form" id="add-spend">
+        <div class="inner">
+          <div class="form-row">
+            <div class="field"><label>Category</label><select id="f-sp-cat">${cats.map(c=>`<option>${c}</option>`).join('')}</select></div>
+            <div class="field"><label>Amount</label><input type="number" id="f-sp-amount" placeholder="0"/></div>
+          </div>
+          <div class="field"><label>Note</label><input type="text" id="f-sp-note" placeholder="What was it?"/></div>
+          <div class="form-actions">
+            <button class="btn" data-cancel="add-spend">Cancel</button>
+            <button class="btn primary" id="f-sp-save">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---- FINANCE: DEBTS ---- */
+function renderDebts() {
+  const sorted = state.debts.slice().sort((a,b)=>(a.paid?1:0)-(b.paid?1:0)||(a.due||'').localeCompare(b.due||''));
+  const pfx = window.__HQ_TWEAKS.currencyPrefix||'$';
+  return `
+    ${topbar()}
+    <h1 class="page-title">Debts</h1>
+    <div class="card" style="animation-delay:0ms">
+      <div class="section-title" style="margin-top:0">Open total</div>
+      <div class="num" style="font-size:42px; font-weight:300; letter-spacing:-0.02em;" data-target="${totalDebt()}" data-prefix="${pfx}">${fmtMoney(0)}</div>
+      <div class="sub" style="color:var(--text-faint); margin-top:6px;">${state.debts.filter(d=>!d.paid).length} open · ${state.debts.filter(d=>d.paid).length} paid</div>
+    </div>
+    <div class="card" style="margin-top:16px; animation-delay:60ms">
+      <div class="section-title" style="margin-top:0">All debts</div>
+      <ul class="list">
+        ${sorted.map(d => {
+          const days = daysUntil(d.due);
+          const soon = !d.paid && days <= 7 && days >= 0;
+          const overdue = !d.paid && days < 0;
+          const dueLabel = d.paid ? `Paid` : (overdue ? `Overdue · ${fmtDate(d.due)}` : (days===0?`Due today`:`Due in ${days}d · ${fmtDate(d.due)}`));
+          return `
+          <li class="list-item row-wrap" data-id="${d.id}">
+            <div class="item-main">
+              <div class="item-title">${escapeHtml(d.creditor)}</div>
+              <div class="debt-due ${soon||overdue?'soon':''}">${dueLabel}</div>
+            </div>
+            <div class="item-amt">${fmtMoney(d.amount)}</div>
+            ${d.paid
+              ? `<span class="debt-status paid">Paid</span>`
+              : `<button class="btn" data-pay-debt="${d.id}" style="padding:6px 10px;font-size:11px;">Mark paid</button>`}
+          </li>`;
+        }).join('')}
+      </ul>
+      <button class="add-btn" data-open-form="add-debt" style="margin-top:14px"><span class="plus">+</span> Add debt</button>
+      <div class="inline-form" id="add-debt">
+        <div class="inner">
+          <div class="field"><label>Creditor</label><input type="text" id="f-debt-creditor" placeholder="Who do you owe?"/></div>
+          <div class="form-row">
+            <div class="field"><label>Amount</label><input type="number" id="f-debt-amount" placeholder="0"/></div>
+            <div class="field"><label>Due date</label><input type="date" id="f-debt-due" value="${todayISO()}"/></div>
+          </div>
+          <div class="form-actions">
+            <button class="btn" data-cancel="add-debt">Cancel</button>
+            <button class="btn primary" id="f-debt-save">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* =========================================================
+   ROUTER
+========================================================= */
+const ROUTES = {
+  'life:home': renderLifeHome,
+  'life:schedule': renderSchedule,
+  'life:goals': renderGoals,
+  'life:habits': renderHabits,
+  'life:focus': renderFocus,
+  'finance:overview': renderFinanceOverview,
+  'finance:income': renderIncome,
+  'finance:spending': renderSpending,
+  'finance:debts': renderDebts
+};
+
+function render() {
+  const tab = state.activeTab in ROUTES ? state.activeTab : 'life:home';
+  const html = ROUTES[tab]();
+  main.style.transition = 'opacity 200ms ease';
+  main.style.opacity = '0';
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      main.innerHTML = html;
+      bindMainEvents();
+      animateNumbers();
+      animateBars();
+      main.style.opacity = '1';
+    }, 60);
+  });
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.go === tab));
+  document.querySelectorAll('.bottom-nav .tab-btn').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
+}
+
+/* =========================================================
+   ANIMATIONS
+========================================================= */
+function animateNumbers() {
+  document.querySelectorAll('.num[data-target]').forEach(el => {
+    const target = Number(el.dataset.target || 0);
+    const prefix = el.dataset.prefix || '';
+    const start = performance.now();
+    const dur = 600;
+    const fmt = (n) => prefix + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    function step(now) {
+      const t = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = fmt(target * eased);
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  });
+}
+function animateBars() {
+  document.querySelectorAll('.bar-chart .bar').forEach(b => {
+    const h = b.style.height;
+    b.style.height = '0%';
+    requestAnimationFrame(() => requestAnimationFrame(() => { b.style.height = h; }));
+  });
+}
+
+/* =========================================================
+   EVENT BINDING
+========================================================= */
+function bindMainEvents() {
+  // tweaks + logout (inside main, re-bound on each render)
+  const ot = main.querySelector('#open-tweaks');
+  if (ot) ot.addEventListener('click', toggleTweaks);
+  const tlb = main.querySelector('#topbar-logout-btn');
+  if (tlb) tlb.addEventListener('click', signOut);
+
+  // navigation pills
+  main.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => setActiveTab(el.dataset.go)));
+
+  // schedule day pick
+  main.querySelectorAll('[data-pick-day]').forEach(el => el.addEventListener('click', () => {
+    state.selectedDay = el.dataset.pickDay;
+    state.viewMonth = el.dataset.pickDay.slice(0,7);
+    saveUIPrefs(); render();
+  }));
+
+  // calendar month nav
+  main.querySelectorAll('[data-cal-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.calNav);
+    const [y, m] = (state.viewMonth || todayISO().slice(0,7)).split('-').map(Number);
+    state.viewMonth = ymLocal(new Date(y, m - 1 + dir, 1));
+    saveUIPrefs(); render();
+  }));
+  const calToday = main.querySelector('[data-cal-today]');
+  if (calToday) calToday.addEventListener('click', () => {
+    const t = todayISO();
+    state.selectedDay = t;
+    state.viewMonth = t.slice(0,7);
+    saveUIPrefs(); render();
+  });
+
+  // focus task toggle
+  main.querySelectorAll('[data-toggle-focus]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.toggleFocus;
+    const t = state.focus.tasks.find(x => x.id === id);
+    if (!t) return;
+    t.done = !t.done;
+    pulse(el); render();
+    dbCall(() => sb.from('focus_tasks').update({ checked: t.done }).eq('id', id));
+  }));
+
+  // habit toggle
+  main.querySelectorAll('[data-toggle-habit]').forEach(el => el.addEventListener('click', async () => {
+    const id = el.dataset.toggleHabit;
+    const h = state.habits.find(x => x.id === id);
+    if (!h) return;
+    h.doneToday = !h.doneToday;
+    if (h.doneToday) { h.streak += 1; h.log = h.log.slice(1).concat(1); }
+    else { h.streak = Math.max(0, h.streak - 1); h.log = h.log.slice(0,-1); h.log.push(0); h.log = h.log.slice(-7); }
+    pulse(el); render();
+    const today = todayISO();
+    await dbCall(() => sb.from('habit_logs').upsert(
+      { habit_id: id, user_id: currentUser.id, date: today, checked: h.doneToday },
+      { onConflict: 'habit_id,date' }
+    ));
+    dbCall(() => sb.from('habits').update({ streak: h.streak }).eq('id', id));
+  }));
+
+  // goal toggle
+  main.querySelectorAll('[data-toggle-goal]').forEach(el => el.addEventListener('click', () => {
+    const [k, id] = el.dataset.toggleGoal.split('|');
+    const g = state.goals[k].find(x => x.id === id);
+    if (!g) return;
+    g.done = !g.done;
+    pulse(el); render();
+    dbCall(() => sb.from('goals').update({ checked: g.done }).eq('id', id));
+  }));
+
+  // delete handlers
+  main.querySelectorAll('[data-del-sched]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.delSched;
+    const day = state.selectedDay;
+    state.schedule[day] = (state.schedule[day]||[]).filter(s => s.id !== id);
+    render();
+    dbCall(() => sb.from('schedule_events').delete().eq('id', id));
+  }));
+
+  main.querySelectorAll('[data-del-goal]').forEach(el => el.addEventListener('click', () => {
+    const [k, id] = el.dataset.delGoal.split('|');
+    state.goals[k] = state.goals[k].filter(x => x.id !== id);
+    render();
+    dbCall(() => sb.from('goals').delete().eq('id', id));
+  }));
+
+  main.querySelectorAll('[data-del-focus]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.delFocus;
+    state.focus.tasks = state.focus.tasks.filter(t => t.id !== id);
+    render();
+    dbCall(() => sb.from('focus_tasks').delete().eq('id', id));
+  }));
+
+  main.querySelectorAll('[data-del-income]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.delIncome;
+    state.income = state.income.filter(x => x.id !== id);
+    render();
+    dbCall(() => sb.from('income_entries').delete().eq('id', id));
+  }));
+
+  main.querySelectorAll('[data-del-spend]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.delSpend;
+    state.spending = state.spending.filter(x => x.id !== id);
+    render();
+    dbCall(() => sb.from('spending_entries').delete().eq('id', id));
+  }));
+
+  main.querySelectorAll('[data-pay-debt]').forEach(el => el.addEventListener('click', () => {
+    const d = state.debts.find(x => x.id === el.dataset.payDebt);
+    if (!d) return;
+    d.paid = true;
+    render();
+    dbCall(() => sb.from('debts').update({ paid: true }).eq('id', d.id));
+  }));
+
+  // forms — open / cancel
+  main.querySelectorAll('[data-open-form]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeAllForms();
+    document.getElementById(el.dataset.openForm)?.classList.add('open');
+    setTimeout(() => document.getElementById(el.dataset.openForm)?.querySelector('input,select,textarea')?.focus(), 60);
+  }));
+  const addSched = main.querySelector('#add-sched-btn');
+  if (addSched) addSched.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeAllForms();
+    document.getElementById('add-sched-form').classList.add('open');
+    setTimeout(() => document.getElementById('f-sched-title')?.focus(), 60);
+  });
+  main.querySelectorAll('[data-cancel]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById(el.dataset.cancel)?.classList.remove('open');
+  }));
+
+  // form saves
+  bindFormSaves();
+
+  // focus textarea autosave (debounced)
+  const fmEl = main.querySelector('#focus-main');
+  if (fmEl) {
+    let focusTimer = null;
+    fmEl.addEventListener('input', () => {
+      state.focus.main = fmEl.value;
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => {
+        if (focusBoardId) dbCall(() => sb.from('focus_board').update({ main_focus: state.focus.main }).eq('id', focusBoardId));
+      }, 600);
+    });
+  }
+}
+
+function bindFormSaves() {
+  // schedule
+  const schedSave = main.querySelector('#f-sched-save');
+  if (schedSave) schedSave.addEventListener('click', async () => {
+    const time = main.querySelector('#f-sched-time').value || '09:00';
+    const title = main.querySelector('#f-sched-title').value.trim();
+    const sub = main.querySelector('#f-sched-sub').value.trim();
+    if (!title) return;
+    const day = state.selectedDay || todayISO();
+    const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title, note: sub }).select().single());
+    if (data) {
+      if (!state.schedule[day]) state.schedule[day] = [];
+      state.schedule[day].push({ id: data.id, time, title, sub });
+      state.schedule[day].sort((a,b) => a.time.localeCompare(b.time));
+      render();
+    }
+  });
+
+  // goals
+  main.querySelectorAll('[data-goal-save]').forEach(btn => btn.addEventListener('click', async () => {
+    const k = btn.dataset.goalSave;
+    const input = main.querySelector(`[data-goal-input="${k}"]`);
+    const text = input?.value.trim();
+    if (!text) return;
+    const type = k === 'dos' ? 'do' : 'dont';
+    const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text, checked: false }).select().single());
+    if (data) { state.goals[k].push({ id: data.id, text, done: false }); render(); }
+  }));
+
+  // habit
+  const hb = main.querySelector('#f-habit-save');
+  if (hb) hb.addEventListener('click', async () => {
+    const name = main.querySelector('#f-habit-name').value.trim();
+    if (!name) return;
+    const { data } = await dbCall(() => sb.from('habits').insert({ user_id: currentUser.id, name, streak: 0 }).select().single());
+    if (data) { state.habits.push({ id: data.id, name, streak: 0, doneToday: false, log: [0,0,0,0,0,0,0] }); render(); }
+  });
+
+  // focus task
+  const ff = main.querySelector('#f-focus-save');
+  if (ff) ff.addEventListener('click', async () => {
+    const text = main.querySelector('#f-focus-text').value.trim();
+    if (!text || !focusBoardId) return;
+    const { data } = await dbCall(() => sb.from('focus_tasks').insert({ focus_id: focusBoardId, user_id: currentUser.id, text, checked: false }).select().single());
+    if (data) { state.focus.tasks.push({ id: data.id, text, done: false }); render(); }
+  });
+
+  // income
+  const inc = main.querySelector('#f-inc-save');
+  if (inc) inc.addEventListener('click', async () => {
+    const source = main.querySelector('#f-inc-source').value.trim();
+    const amount = Number(main.querySelector('#f-inc-amount').value || 0);
+    const date = main.querySelector('#f-inc-date').value || todayISO();
+    if (!source || !amount) return;
+    const { data } = await dbCall(() => sb.from('income_entries').insert({ user_id: currentUser.id, date, source, amount }).select().single());
+    if (data) { state.income.unshift({ id: data.id, date, source, amount }); render(); }
+  });
+
+  // spending
+  const sp = main.querySelector('#f-sp-save');
+  if (sp) sp.addEventListener('click', async () => {
+    const cat = main.querySelector('#f-sp-cat').value;
+    const amount = Number(main.querySelector('#f-sp-amount').value || 0);
+    const note = main.querySelector('#f-sp-note').value.trim();
+    if (!amount) return;
+    const t = new Date();
+    const time = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+    const date = todayISO();
+    const { data } = await dbCall(() => sb.from('spending_entries').insert({ user_id: currentUser.id, date, time, category: cat, note, amount }).select().single());
+    if (data) { state.spending.unshift({ id: data.id, date, time, cat, note, amount }); render(); }
+  });
+
+  // debt
+  const db = main.querySelector('#f-debt-save');
+  if (db) db.addEventListener('click', async () => {
+    const creditor = main.querySelector('#f-debt-creditor').value.trim();
+    const amount = Number(main.querySelector('#f-debt-amount').value || 0);
+    const due = main.querySelector('#f-debt-due').value || todayISO();
+    if (!creditor || !amount) return;
+    const { data } = await dbCall(() => sb.from('debts').insert({ user_id: currentUser.id, creditor, amount, due_date: due, paid: false }).select().single());
+    if (data) { state.debts.push({ id: data.id, creditor, amount, due, paid: false }); render(); }
+  });
+}
+
+function pulse(el) {
+  el.classList.remove('pulse');
+  void el.offsetWidth;
+  el.classList.add('pulse');
+}
+function closeAllForms() {
+  document.querySelectorAll('.inline-form.open').forEach(f => f.classList.remove('open'));
+}
+document.addEventListener('click', (e) => {
+  document.querySelectorAll('.inline-form.open').forEach(f => {
+    if (!f.contains(e.target) && !e.target.closest('[data-open-form], #add-sched-btn')) {
+      f.classList.remove('open');
+    }
+  });
+});
+
+/* =========================================================
+   GLOBAL NAV BINDINGS (sidebar + bottom nav)
+   — called once after app is shown
+========================================================= */
+function initGlobalBindings() {
+  document.querySelectorAll('.sidebar .nav-item').forEach(el => {
+    el.addEventListener('click', () => setActiveTab(el.dataset.go));
+  });
+  document.querySelectorAll('.bottom-nav .tab-btn').forEach(el => {
+    el.addEventListener('click', () => setActiveTab(el.dataset.tab));
+  });
+  document.getElementById('sidebar-logout-btn').addEventListener('click', signOut);
+}
+
+/* =========================================================
+   TWEAKS PANEL
+========================================================= */
+const tweaksEl = document.getElementById('tweaks-panel');
+function toggleTweaks() { tweaksEl.classList.toggle('open'); }
+
+document.getElementById('tweaks-close').addEventListener('click', () => tweaksEl.classList.remove('open'));
+
+function setTweak(key, value) {
+  window.__HQ_TWEAKS[key] = value;
+  applyTweaks();
+  if (key === 'name') {
+    state.profile.name = value;
+    if (currentUser) dbCall(() => sb.from('profiles').update({ name: value }).eq('id', currentUser.id));
+  }
+  render();
+  syncTweaksUI();
+}
+
+function syncTweaksUI() {
+  const tw = window.__HQ_TWEAKS;
+  const twName = document.getElementById('tw-name');
+  const twCurr = document.getElementById('tw-currency');
+  if (twName) twName.value = tw.name || '';
+  if (twCurr) twCurr.value = tw.currencyPrefix || '$';
+  document.querySelectorAll('#tw-swatches .sw').forEach(s => s.classList.toggle('active', s.dataset.c === tw.accent));
+  document.querySelectorAll('#tw-density button').forEach(b => b.classList.toggle('active', b.dataset.v === tw.density));
+  document.querySelectorAll('#tw-weight button').forEach(b => b.classList.toggle('active', String(b.dataset.v) === String(tw.numberWeight)));
+  document.querySelectorAll('#tw-home button').forEach(b => b.classList.toggle('active', b.dataset.v === tw.homeLayout));
+  document.querySelectorAll('#tw-pills button').forEach(b => b.classList.toggle('active', String(b.dataset.v) === String(tw.showQuickPills)));
+}
+
+document.getElementById('tw-name').addEventListener('input', (e) => setTweak('name', e.target.value));
+document.getElementById('tw-currency').addEventListener('input', (e) => setTweak('currencyPrefix', e.target.value));
+document.querySelectorAll('#tw-swatches .sw').forEach(s => s.addEventListener('click', () => setTweak('accent', s.dataset.c)));
+document.querySelectorAll('#tw-density button').forEach(b => b.addEventListener('click', () => setTweak('density', b.dataset.v)));
+document.querySelectorAll('#tw-weight button').forEach(b => b.addEventListener('click', () => setTweak('numberWeight', Number(b.dataset.v))));
+document.querySelectorAll('#tw-home button').forEach(b => b.addEventListener('click', () => setTweak('homeLayout', b.dataset.v)));
+document.querySelectorAll('#tw-pills button').forEach(b => b.addEventListener('click', () => setTweak('showQuickPills', b.dataset.v === 'true')));
+
+window.addEventListener('message', (e) => {
+  const d = e.data || {};
+  if (d.type === '__activate_edit_mode') tweaksEl.classList.add('open');
+  if (d.type === '__deactivate_edit_mode') tweaksEl.classList.remove('open');
+});
+window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+</script>
+</body>
+</html>
