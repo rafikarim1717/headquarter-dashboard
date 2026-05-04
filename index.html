@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>HQ</title>
+<title>Headquarter</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   window.__HQ_TWEAKS = {
@@ -983,6 +983,7 @@ function showApp() {
 
 async function handleSession(session) {
   if (!session) { showLogin(); return; }
+  if (currentUser && currentUser.id === session.user.id) return;
   currentUser = session.user;
   state.profile.name = displayNameFromUser(currentUser);
   window.__HQ_TWEAKS.name = state.profile.name;
@@ -1057,13 +1058,40 @@ document.getElementById('forgot-password-btn').addEventListener('click', async (
   else loginMsg('Password reset email sent — check your inbox.', 'success');
 });
 
+let cachedSession = null;
+
+const getSession = async () => {
+  if (cachedSession) return cachedSession;
+  const { data } = await sb.auth.getSession();
+  cachedSession = data.session;
+  return cachedSession;
+};
+
 sb.auth.onAuthStateChange((_event, session) => {
+  cachedSession = session;
   handleSession(session);
 });
 
 // Check on load
-sb.auth.getSession().then(({ data: { session } }) => {
+getSession().then(session => {
   if (!session) showLogin();
+});
+
+let hiddenAt = null;
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    hiddenAt = Date.now();
+  } else {
+    if (!hiddenAt) return;
+    const hiddenDuration = Date.now() - hiddenAt;
+    hiddenAt = null;
+    if (hiddenDuration < 5 * 60 * 1000) return;
+    if (!currentUser) return;
+    loadFromSupabase(currentUser.id).then(() => render()).catch(e => {
+      console.error('Failed to refresh data', e);
+    });
+  }
 });
 
 /* =========================================================
