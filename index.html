@@ -22,6 +22,8 @@
   };
 </script>
 <style>
+@import url("https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600&display=swap");
+
   :root {
     --bg: #0f0f0f;
     --card: #1a1a1a;
@@ -62,99 +64,120 @@
   /* ============ LOGIN SCREEN ============ */
   #login-screen {
     position: fixed; inset: 0;
-    background: var(--bg);
+    background: #111;
     display: flex; align-items: center; justify-content: center;
-    z-index: 1000;
+    z-index: 1000; overflow: hidden;
   }
   #login-screen.hidden { display: none; }
-  .login-card {
-    text-align: center;
-    padding: 48px 40px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    width: 320px;
-    animation: card-in var(--t-slow) ease-out forwards;
-  }
-  .login-logo {
-    width: 52px; height: 52px;
-    background: var(--accent);
-    border-radius: 50%;
-    margin: 0 auto 20px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 600; letter-spacing: 0.2em;
-    color: #111;
-  }
-  .login-title {
-    font-size: 28px; font-weight: 300;
-    letter-spacing: 0.14em;
-    color: var(--text);
-    margin-bottom: 8px;
-  }
-  .login-tagline {
-    font-size: 12px; color: var(--text-faint);
-    letter-spacing: 0.08em;
-    margin-bottom: 32px;
-  }
-  .google-btn {
-    display: flex; align-items: center; justify-content: center; gap: 12px;
-    width: 100%; padding: 13px 20px;
-    background: #fff; color: #333;
-    border-radius: var(--r-pill);
-    font-size: 14px; font-weight: 500;
-    transition: opacity 150ms ease;
-    cursor: pointer;
-    border: none;
-  }
-  .google-btn:hover { opacity: 0.9; }
-  .google-btn:active { opacity: 0.8; }
-  .google-btn svg { flex-shrink: 0; }
 
-  .login-divider {
-    display: flex; align-items: center; gap: 12px;
-    margin: 20px 0;
-    color: var(--text-faint);
-    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  .ring {
+    position: relative;
+    width: 500px; height: 500px;
+    display: flex; justify-content: center; align-items: center;
   }
-  .login-divider::before, .login-divider::after {
-    content: ''; flex: 1; height: 1px; background: var(--border);
+  @media (max-width: 560px) {
+    .ring { width: 340px; height: 340px; }
   }
-  .login-input {
-    width: 100%; padding: 11px 14px;
-    background: #121212;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--text); font-size: 13px; font-family: inherit;
-    transition: border-color var(--t-fast) ease;
-    box-sizing: border-box;
+  .ring i {
+    position: absolute; inset: 0;
+    border: 2px solid #fff;
+    transition: 0.5s;
   }
-  .login-input:focus { outline: none; border-color: var(--accent); }
-  .login-input::placeholder { color: var(--text-faint); }
-  .login-email-form { display: flex; flex-direction: column; gap: 10px; text-align: left; }
-  .login-btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .login-btn {
-    padding: 11px 0; border-radius: var(--r-pill);
-    font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
-    transition: opacity 150ms ease;
-    border: 1px solid var(--border-strong); color: var(--text-dim);
-    background: none;
+  .ring i:nth-child(1) {
+    border-radius: 38% 62% 63% 37% / 41% 44% 56% 59%;
+    animation: ring-spin 6s linear infinite;
   }
-  .login-btn:hover { color: var(--text); }
-  .login-btn.primary { background: var(--accent); color: #111; border-color: var(--accent); }
-  .login-btn.primary:hover { opacity: 0.9; }
-  .login-forgot {
-    margin-top: 4px; font-size: 11px; color: var(--text-faint);
-    letter-spacing: 0.06em; text-align: center; cursor: pointer;
-    background: none; border: none; font-family: inherit; width: 100%;
-    transition: color var(--t-fast) ease;
+  .ring i:nth-child(2) {
+    border-radius: 41% 44% 56% 59% / 38% 62% 63% 37%;
+    animation: ring-spin 4s linear infinite;
   }
-  .login-forgot:hover { color: var(--text-dim); }
+  .ring i:nth-child(3) {
+    border-radius: 41% 44% 56% 59% / 38% 62% 63% 37%;
+    animation: ring-spin-rev 10s linear infinite;
+  }
+  .ring:hover i {
+    border: 6px solid var(--clr);
+    filter: drop-shadow(0 0 20px var(--clr));
+  }
+  @keyframes ring-spin {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  @keyframes ring-spin-rev {
+    0%   { transform: rotate(360deg); }
+    100% { transform: rotate(0deg); }
+  }
+
+  .ring-login {
+    position: absolute;
+    width: 300px; height: 100%;
+    display: flex; justify-content: center; align-items: center;
+    flex-direction: column; gap: 14px;
+  }
+  @media (max-width: 560px) {
+    .ring-login { width: 210px; gap: 10px; }
+  }
+  .ring-login h2 {
+    font-size: 2em; color: #fff;
+    font-family: 'Quicksand', var(--font);
+    font-weight: 600; letter-spacing: 0.24em;
+    margin-bottom: 2px;
+  }
+  .ring-input-box { position: relative; width: 100%; }
+  .ring-input-box input {
+    width: 100%; padding: 11px 20px;
+    background: transparent;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-radius: 40px;
+    font-size: 0.92em; color: #fff; outline: none;
+    font-family: 'Quicksand', var(--font);
+    transition: border-color 0.3s;
+  }
+  .ring-input-box input:focus { border-color: rgba(255,255,255,0.8); }
+  .ring-input-box input::placeholder { color: rgba(255,255,255,0.45); }
+
+  .ring-submit {
+    width: 100%; padding: 11px 20px;
+    background: linear-gradient(135deg, #2d3461 0%, #6a5acd 100%);
+    border: none; border-radius: 40px;
+    font-size: 0.92em; color: #fff;
+    font-family: 'Quicksand', var(--font); font-weight: 600;
+    cursor: pointer; letter-spacing: 0.08em;
+    transition: opacity 0.2s;
+  }
+  .ring-submit:hover { opacity: 0.82; }
+
+  .ring-google-btn {
+    width: 100%; padding: 11px 20px;
+    background: transparent;
+    border: 2px solid rgba(255,255,255,0.4); border-radius: 40px;
+    font-size: 0.92em; color: #fff;
+    font-family: 'Quicksand', var(--font);
+    cursor: pointer; display: flex; align-items: center;
+    justify-content: center; gap: 10px;
+    transition: border-color 0.3s, background 0.3s;
+  }
+  .ring-google-btn:hover {
+    border-color: rgba(255,255,255,0.75);
+    background: rgba(255,255,255,0.04);
+  }
+  .ring-google-btn svg { flex-shrink: 0; }
+
+  .ring-forgot {
+    color: rgba(255,255,255,0.45); font-size: 11px;
+    font-family: 'Quicksand', var(--font);
+    background: none; border: none; cursor: pointer;
+    letter-spacing: 0.06em; transition: color 0.2s;
+  }
+  .ring-forgot:hover { color: rgba(255,255,255,0.8); }
+
   .login-msg {
-    font-size: 12px; text-align: center; margin-top: 2px;
+    font-size: 12px; text-align: center;
     display: none; line-height: 1.5;
+    font-family: 'Quicksand', var(--font);
   }
-  .login-msg.error { color: #ff8a80; display: block; }
-  .login-msg.success { color: var(--good); display: block; }
+  .login-msg.error  { color: #ff8a80; display: block; }
+  .login-msg.success { color: #8aa888; display: block; }
 
   /* ============ APP SHELL ============ */
   .app {
@@ -541,30 +564,34 @@
 
 <!-- Login Screen -->
 <div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">HQ</div>
-    <div class="login-title">HQ</div>
-    <div class="login-tagline">Your life, organized.</div>
-    <button class="google-btn" id="google-login-btn">
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M17.64 9.20455C17.64 8.56637 17.5827 7.95273 17.4764 7.36364H9V10.845H13.8436C13.635 11.97 13.0009 12.9232 12.0477 13.5614V15.8195H14.9564C16.6582 14.2527 17.64 11.9455 17.64 9.20455Z" fill="#4285F4"/>
-        <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5614C11.2418 14.1014 10.2109 14.4205 9 14.4205C6.65591 14.4205 4.67182 12.8373 3.96409 10.71H0.957275V13.0418C2.43818 15.9832 5.48182 18 9 18Z" fill="#34A853"/>
-        <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="#FBBC05"/>
-        <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.48182 0 2.43818 2.01682 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="#EA4335"/>
-      </svg>
-      Continue with Google
-    </button>
-
-    <div class="login-divider">or</div>
-
-    <div class="login-email-form">
-      <input class="login-input" type="email" id="login-email" placeholder="Email address" autocomplete="email">
-      <input class="login-input" type="password" id="login-password" placeholder="Password" autocomplete="current-password">
-      <div class="login-btn-row">
-        <button class="login-btn" id="email-login-btn">Login</button>
-        <button class="login-btn primary" id="email-signup-btn">Sign Up</button>
+  <div class="ring">
+    <i style="--clr:#4f8ef7;"></i>
+    <i style="--clr:#9b59b6;"></i>
+    <i style="--clr:#7f8c8d;"></i>
+    <div class="ring-login">
+      <h2>HQ</h2>
+      <div class="ring-input-box">
+        <input type="email" id="login-email" placeholder="Email address" autocomplete="email">
       </div>
-      <button class="login-forgot" id="forgot-password-btn">Forgot password?</button>
+      <div class="ring-input-box">
+        <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+      </div>
+      <div class="ring-input-box">
+        <button class="ring-submit" id="email-login-btn">Sign in</button>
+      </div>
+      <div class="ring-input-box">
+        <button class="ring-google-btn" id="google-login-btn">
+          <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+            <path d="M17.64 9.20455C17.64 8.56637 17.5827 7.95273 17.4764 7.36364H9V10.845H13.8436C13.635 11.97 13.0009 12.9232 12.0477 13.5614V15.8195H14.9564C16.6582 14.2527 17.64 11.9455 17.64 9.20455Z" fill="#4285F4"/>
+            <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5614C11.2418 14.1014 10.2109 14.4205 9 14.4205C6.65591 14.4205 4.67182 12.8373 3.96409 10.71H0.957275V13.0418C2.43818 15.9832 5.48182 18 9 18Z" fill="#34A853"/>
+            <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="#FBBC05"/>
+            <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.48182 0 2.43818 2.01682 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="#EA4335"/>
+          </svg>
+          Continue with Google
+        </button>
+      </div>
+      <button class="ring-forgot" id="forgot-password-btn">Forgot password?</button>
+      <button id="email-signup-btn" style="display:none"></button>
       <div class="login-msg" id="login-msg"></div>
     </div>
   </div>
