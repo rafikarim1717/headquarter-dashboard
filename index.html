@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Headquarter</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="HQ">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   window.__HQ_TWEAKS = {
@@ -1014,7 +1019,7 @@ async function signOut() {
 document.getElementById('google-login-btn').addEventListener('click', async () => {
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.href }
+    options: { redirectTo: window.location.origin }
   });
   if (error) showToast('Login failed: ' + error.message);
 });
@@ -1072,10 +1077,8 @@ sb.auth.onAuthStateChange((_event, session) => {
   handleSession(session);
 });
 
-// Check on load
-getSession().then(session => {
-  if (!session) showLogin();
-});
+// Check on load — catches OAuth redirect sessions on mobile
+getSession().then(handleSession);
 
 let hiddenAt = null;
 
@@ -2000,6 +2003,12 @@ window.addEventListener('message', (e) => {
   if (d.type === '__deactivate_edit_mode') tweaksEl.classList.remove('open');
 });
 window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js');
+  });
+}
 </script>
 </body>
 </html>
