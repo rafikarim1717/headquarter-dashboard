@@ -445,6 +445,36 @@
   .habit-grid-7 .cell { aspect-ratio: 1 / 1; border-radius: 4px; background: #232323; }
   .habit-grid-7 .cell.on { background: var(--accent); }
 
+  /* ---- habit delete ---- */
+  .habit { position: relative; }
+  .habit-del {
+    position: absolute; top: 10px; right: 10px;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: color-mix(in oklab, var(--danger) 12%, transparent);
+    color: var(--danger); font-size: 15px; line-height: 1;
+    opacity: 0; pointer-events: none;
+    transition: opacity 200ms ease, background 150ms ease;
+    cursor: pointer;
+  }
+  .habit:hover .habit-del,
+  .habit.delete-mode .habit-del { opacity: 1; pointer-events: auto; }
+  .habit.delete-mode { opacity: 0.6; }
+  @keyframes habit-shake {
+    0%,100% { transform: translateX(0); }
+    20%     { transform: translateX(-5px); }
+    40%     { transform: translateX(5px); }
+    60%     { transform: translateX(-3px); }
+    80%     { transform: translateX(3px); }
+  }
+  .habit.shaking { animation: habit-shake 300ms ease; }
+  .habit.deleting {
+    opacity: 0; transform: scale(0.95);
+    transition: opacity 250ms ease, transform 250ms ease;
+    pointer-events: none;
+  }
+
   /* ============ FOCUS BOARD ============ */
   .focus-card { padding: 28px 24px; }
   .focus-input { width: 100%; font-size: 22px; font-weight: 300; line-height: 1.3; color: var(--text); background: transparent; border: 0; resize: none; min-height: 80px; letter-spacing: -0.01em; }
@@ -468,6 +498,28 @@
     opacity: 0; transition: opacity var(--t-fast) ease;
   }
   .list-item:hover .delete { opacity: 1; }
+
+  /* ============ SCHEDULE EDIT ============ */
+  .sched-item { display: block; border-bottom: 1px solid var(--border); }
+  .sched-item:last-child { border-bottom: 0; }
+  .sched-item > .list-item { border-bottom: 0; }
+  .sched-acts {
+    display: flex; align-items: center; gap: 2px;
+    opacity: 0; transition: opacity var(--t-fast) ease;
+    flex-shrink: 0;
+  }
+  .sched-item:hover .sched-acts { opacity: 1; }
+  .sched-edit-btn {
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-dim); padding: 6px 10px;
+    transition: color var(--t-fast) ease;
+  }
+  .sched-edit-btn:hover { color: var(--text); }
+  .sched-del-btn {
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--danger); padding: 6px 10px;
+  }
+  .sched-item .inline-form.open { max-height: 420px; }
 
   /* ============ DEBTS ============ */
   .debt-due { font-size: 11px; color: var(--text-faint); }
@@ -533,6 +585,47 @@
   body[data-density="compact"] .metric .num { font-size: 28px; }
   .num[data-target] { display: inline-block; }
 
+  /* ============ ALARM TOGGLE ============ */
+  .alarm-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 0;
+  }
+  .alarm-label {
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-faint); font-weight: 500;
+  }
+  .toggle-switch {
+    position: relative; width: 36px; height: 20px;
+    cursor: pointer; flex-shrink: 0;
+  }
+  .toggle-switch input {
+    position: absolute; opacity: 0; width: 0; height: 0;
+  }
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: #2a2a2a; border-radius: 20px;
+    transition: background 200ms ease;
+  }
+  .toggle-track::after {
+    content: ''; position: absolute;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #555; top: 3px; left: 3px;
+    transition: transform 200ms ease, background 200ms ease;
+  }
+  .toggle-switch input:checked + .toggle-track {
+    background: color-mix(in oklab, var(--accent) 28%, #1a1a1a);
+  }
+  .toggle-switch input:checked + .toggle-track::after {
+    transform: translateX(16px); background: var(--accent);
+  }
+  .alarm-time-row { display: none; }
+  .alarm-time-row.visible { display: block; }
+  .alarm-tag {
+    margin-left: 8px; font-size: 10px;
+    color: var(--text-faint); letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+  }
+
   /* ============ TOAST ============ */
   #toast {
     position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
@@ -569,7 +662,7 @@
     <i style="--clr:#9b59b6;"></i>
     <i style="--clr:#7f8c8d;"></i>
     <div class="ring-login">
-      <h2>HQ</h2>
+      <h2>Headquarters</h2>
       <div class="ring-input-box">
         <input type="email" id="login-email" placeholder="Email address" autocomplete="email">
       </div>
@@ -605,7 +698,7 @@
 <!-- App Shell (hidden until authenticated) -->
 <div class="app" id="app" style="display:none">
   <aside class="sidebar">
-    <div class="brand"><span class="dot"></span><span>HQ</span></div>
+    <div class="brand"><span class="dot"></span><span>Headquarters</span></div>
 
     <div class="nav-group-label">Life</div>
     <button class="nav-item" data-go="life:home"><span class="glyph">◉</span><span>Today</span></button>
@@ -728,6 +821,8 @@ function escapeHtml(s) {
 ========================================================= */
 let currentUser = null;
 let focusBoardId = null;  // UUID of focus_board row for current user
+const firedAlarms = new Set(); // event IDs that have already fired today
+let alarmInterval = null;
 
 let state = {
   profile: { name: 'Friend' },
@@ -860,7 +955,7 @@ async function loadFromSupabase(userId) {
   (eventsRes.data || []).forEach(e => {
     const d = e.date;
     if (!state.schedule[d]) state.schedule[d] = [];
-    state.schedule[d].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '' });
+    state.schedule[d].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '', alarm_time: e.alarm_time || null });
   });
 
   // Goals
@@ -938,7 +1033,7 @@ async function seedSampleData(userId) {
   state.schedule = {};
   (schedData || []).forEach(e => {
     if (!state.schedule[e.date]) state.schedule[e.date] = [];
-    state.schedule[e.date].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '' });
+    state.schedule[e.date].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '', alarm_time: null });
   });
 
   // Goals
@@ -1035,6 +1130,14 @@ async function handleSession(session) {
   syncTweaksUI();
   render();
   initGlobalBindings();
+
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  checkAlarms();
+  if (!alarmInterval) {
+    alarmInterval = setInterval(checkAlarms, 60000);
+  }
 }
 
 async function signOut() {
@@ -1118,7 +1221,7 @@ document.addEventListener('visibilitychange', () => {
     hiddenAt = null;
     if (hiddenDuration < 5 * 60 * 1000) return;
     if (!currentUser) return;
-    loadFromSupabase(currentUser.id).then(() => render()).catch(e => {
+    loadFromSupabase(currentUser.id).then(() => { render(); checkAlarms(); }).catch(e => {
       console.error('Failed to refresh data', e);
     });
   }
@@ -1309,13 +1412,41 @@ function renderSchedule() {
       <div class="section-title" style="margin-top:0">${selDate.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'})}<span class="meta">${list.length} ${list.length===1?'block':'blocks'}</span></div>
       <ul class="list" id="sched-list">
         ${list.map(s => `
-          <li class="list-item row-wrap" data-id="${s.id}">
-            <div class="time-col">${s.time}</div>
-            <div class="item-main">
-              <div class="item-title">${escapeHtml(s.title)}</div>
-              ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
+          <li class="sched-item" data-id="${s.id}">
+            <div class="list-item row-wrap">
+              <div class="time-col">${s.time}</div>
+              <div class="item-main">
+                <div class="item-title">${escapeHtml(s.title)}${s.alarm_time ? `<span class="alarm-tag">⏰ ${s.alarm_time}</span>` : ''}</div>
+                ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
+              </div>
+              <div class="sched-acts">
+                <button class="sched-edit-btn" data-edit-sched="${s.id}">Edit</button>
+                <button class="sched-del-btn" data-del-sched="${s.id}">Delete</button>
+              </div>
             </div>
-            <button class="delete" data-del-sched="${s.id}">Delete</button>
+            <div class="inline-form" id="edit-sched-${s.id}">
+              <div class="inner">
+                <div class="form-row">
+                  <div class="field"><label>Time</label><input type="time" id="f-edit-time-${s.id}" value="${s.time}"/></div>
+                  <div class="field"><label>Title</label><input type="text" id="f-edit-title-${s.id}" value="${escapeHtml(s.title)}"/></div>
+                </div>
+                <div class="field"><label>Note</label><input type="text" id="f-edit-sub-${s.id}" value="${escapeHtml(s.sub||'')}"/></div>
+                <div class="alarm-row">
+                  <span class="alarm-label">Set alarm</span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="f-edit-alarm-${s.id}" ${s.alarm_time ? 'checked' : ''}>
+                    <span class="toggle-track"></span>
+                  </label>
+                </div>
+                <div class="alarm-time-row ${s.alarm_time ? 'visible' : ''}" id="edit-alarm-time-row-${s.id}">
+                  <div class="field"><label>Alarm time</label><input type="time" id="f-edit-alarm-time-${s.id}" value="${s.alarm_time || s.time}"/></div>
+                </div>
+                <div class="form-actions">
+                  <button class="btn" data-edit-cancel="${s.id}">Cancel</button>
+                  <button class="btn primary" data-edit-save="${s.id}">Save</button>
+                </div>
+              </div>
+            </div>
           </li>`).join('') || `<li class="list-item"><div class="item-sub">No events. Add one below.</div></li>`}
       </ul>
       <button class="add-btn" id="add-sched-btn" style="margin-top:14px"><span class="plus">+</span> Add event</button>
@@ -1326,6 +1457,16 @@ function renderSchedule() {
             <div class="field"><label>Title</label><input type="text" id="f-sched-title" placeholder="e.g. Deep work"/></div>
           </div>
           <div class="field"><label>Note</label><input type="text" id="f-sched-sub" placeholder="optional"/></div>
+          <div class="alarm-row">
+            <span class="alarm-label">Set alarm</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="f-sched-alarm">
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+          <div class="alarm-time-row" id="alarm-time-row">
+            <div class="field"><label>Alarm time</label><input type="time" id="f-sched-alarm-time" value="09:00"/></div>
+          </div>
           <div class="form-actions">
             <button class="btn" data-cancel="add-sched-form">Cancel</button>
             <button class="btn primary" id="f-sched-save">Add</button>
@@ -1392,6 +1533,7 @@ function renderHabits() {
     <div class="habit-grid">
       ${state.habits.map(h => `
         <div class="habit ${h.doneToday?'checked':''}" data-habit="${h.id}">
+          <button class="habit-del" data-del-habit="${h.id}">×</button>
           <div class="habit-top">
             <div class="habit-name">${escapeHtml(h.name)}</div>
             <div class="habit-streak"><span class="num">${h.streak}</span> day${h.streak===1?'':'s'}</div>
@@ -1779,6 +1921,40 @@ function bindMainEvents() {
     dbCall(() => sb.from('habits').update({ streak: h.streak }).eq('id', id));
   }));
 
+  // habit delete — × button click
+  main.querySelectorAll('[data-del-habit]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const id = el.dataset.delHabit;
+    const card = el.closest('.habit');
+    if (!card) return;
+    card.classList.remove('delete-mode');
+    card.classList.add('deleting');
+    setTimeout(() => {
+      state.habits = state.habits.filter(h => h.id !== id);
+      render();
+      dbCall(() => sb.from('habits').delete().eq('id', id));
+      dbCall(() => sb.from('habit_logs').delete().eq('habit_id', id));
+    }, 260);
+  }));
+
+  // habit long-press — mobile delete mode
+  main.querySelectorAll('.habit').forEach(card => {
+    let pressTimer = null;
+    const startPress = (e) => {
+      if (e.target.closest('[data-toggle-habit], .habit-del')) return;
+      pressTimer = setTimeout(() => {
+        pressTimer = null;
+        card.classList.add('shaking', 'delete-mode');
+        card.addEventListener('animationend', () => card.classList.remove('shaking'), { once: true });
+      }, 500);
+    };
+    const cancelPress = () => { clearTimeout(pressTimer); pressTimer = null; };
+    card.addEventListener('touchstart',  startPress,   { passive: true });
+    card.addEventListener('touchend',    cancelPress,  { passive: true });
+    card.addEventListener('touchmove',   cancelPress,  { passive: true });
+    card.addEventListener('touchcancel', cancelPress,  { passive: true });
+  });
+
   // goal toggle
   main.querySelectorAll('[data-toggle-goal]').forEach(el => el.addEventListener('click', () => {
     const [k, id] = el.dataset.toggleGoal.split('|');
@@ -1797,6 +1973,85 @@ function bindMainEvents() {
     render();
     dbCall(() => sb.from('schedule_events').delete().eq('id', id));
   }));
+
+  // schedule edit handlers
+  main.querySelectorAll('[data-edit-sched]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.editSched;
+    const form = document.getElementById('edit-sched-' + id);
+    if (!form) return;
+    const isOpen = form.classList.contains('open');
+    closeAllForms();
+    if (!isOpen) form.classList.add('open');
+  }));
+
+  main.querySelectorAll('[data-edit-cancel]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.editCancel;
+    const form = document.getElementById('edit-sched-' + id);
+    if (form) form.classList.remove('open');
+  }));
+
+  main.querySelectorAll('[data-edit-save]').forEach(el => el.addEventListener('click', async () => {
+    const id = el.dataset.editSave;
+    const timeEl  = document.getElementById('f-edit-time-'  + id);
+    const titleEl = document.getElementById('f-edit-title-' + id);
+    const subEl   = document.getElementById('f-edit-sub-'   + id);
+    const alarmEl = document.getElementById('f-edit-alarm-' + id);
+    const alarmTimeEl = document.getElementById('f-edit-alarm-time-' + id);
+    if (!timeEl || !titleEl) return;
+    const newTime  = timeEl.value.trim();
+    const newTitle = titleEl.value.trim();
+    if (!newTitle) { titleEl.focus(); return; }
+    const newSub       = subEl ? subEl.value.trim() : '';
+    const alarmEnabled = alarmEl ? alarmEl.checked : false;
+    const newAlarmTime = (alarmEnabled && alarmTimeEl) ? alarmTimeEl.value : null;
+
+    const day = state.selectedDay;
+    const arr = state.schedule[day] || [];
+    const idx = arr.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    arr[idx] = { ...arr[idx], time: newTime, title: newTitle, sub: newSub, alarm_time: newAlarmTime };
+
+    // update DOM in-place
+    const li = document.querySelector(`.sched-item[data-id="${id}"]`);
+    if (li) {
+      const titleDiv = li.querySelector('.item-title');
+      if (titleDiv) titleDiv.innerHTML = escapeHtml(newTitle) + (newAlarmTime ? `<span class="alarm-tag">⏰ ${newAlarmTime}</span>` : '');
+      const subDiv = li.querySelector('.item-sub');
+      if (newSub) {
+        if (subDiv) subDiv.textContent = newSub;
+        else {
+          const mainDiv = li.querySelector('.item-main');
+          if (mainDiv) { const d = document.createElement('div'); d.className = 'item-sub'; d.textContent = newSub; mainDiv.appendChild(d); }
+        }
+      } else if (subDiv) subDiv.remove();
+      const timeDiv = li.querySelector('.time-col');
+      if (timeDiv) timeDiv.textContent = newTime;
+    }
+
+    const form = document.getElementById('edit-sched-' + id);
+    if (form) form.classList.remove('open');
+
+    dbCall(() => sb.from('schedule_events').update({
+      time: newTime, title: newTitle, note: newSub, alarm_time: newAlarmTime
+    }).eq('id', id));
+  }));
+
+  // alarm toggle in edit forms
+  main.querySelectorAll('.sched-item [id^="f-edit-alarm-"]').forEach(toggle => {
+    const id = toggle.id.replace('f-edit-alarm-', '');
+    const timeRow = document.getElementById('edit-alarm-time-row-' + id);
+    const alarmTimeInput = document.getElementById('f-edit-alarm-time-' + id);
+    const timeInput = document.getElementById('f-edit-time-' + id);
+    if (!timeRow) return;
+    toggle.addEventListener('change', () => {
+      if (toggle.checked) {
+        timeRow.classList.add('visible');
+        if (alarmTimeInput && timeInput && !alarmTimeInput.value) alarmTimeInput.value = timeInput.value;
+      } else {
+        timeRow.classList.remove('visible');
+      }
+    });
+  });
 
   main.querySelectorAll('[data-del-goal]').forEach(el => el.addEventListener('click', () => {
     const [k, id] = el.dataset.delGoal.split('|');
@@ -1848,6 +2103,24 @@ function bindMainEvents() {
     document.getElementById('add-sched-form').classList.add('open');
     setTimeout(() => document.getElementById('f-sched-title')?.focus(), 60);
   });
+
+  // alarm toggle show/hide + sync time
+  const alarmToggle = main.querySelector('#f-sched-alarm');
+  const alarmTimeRow = main.querySelector('#alarm-time-row');
+  if (alarmToggle && alarmTimeRow) {
+    alarmToggle.addEventListener('change', () => {
+      alarmTimeRow.classList.toggle('visible', alarmToggle.checked);
+      if (alarmToggle.checked) {
+        const t = main.querySelector('#f-sched-time').value;
+        if (t) main.querySelector('#f-sched-alarm-time').value = t;
+      }
+    });
+    main.querySelector('#f-sched-time')?.addEventListener('change', () => {
+      if (alarmToggle.checked) {
+        main.querySelector('#f-sched-alarm-time').value = main.querySelector('#f-sched-time').value;
+      }
+    });
+  }
   main.querySelectorAll('[data-cancel]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     document.getElementById(el.dataset.cancel)?.classList.remove('open');
@@ -1879,10 +2152,12 @@ function bindFormSaves() {
     const sub = main.querySelector('#f-sched-sub').value.trim();
     if (!title) return;
     const day = state.selectedDay || todayISO();
-    const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title, note: sub }).select().single());
+    const alarmOn = main.querySelector('#f-sched-alarm')?.checked;
+    const alarm_time = alarmOn ? (main.querySelector('#f-sched-alarm-time')?.value || time) : null;
+    const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title, note: sub, alarm_time }).select().single());
     if (data) {
       if (!state.schedule[day]) state.schedule[day] = [];
-      state.schedule[day].push({ id: data.id, time, title, sub });
+      state.schedule[day].push({ id: data.id, time, title, sub, alarm_time });
       state.schedule[day].sort((a,b) => a.time.localeCompare(b.time));
       render();
     }
@@ -1968,6 +2243,9 @@ document.addEventListener('click', (e) => {
       f.classList.remove('open');
     }
   });
+  if (!e.target.closest('.habit.delete-mode')) {
+    document.querySelectorAll('.habit.delete-mode').forEach(c => c.classList.remove('delete-mode'));
+  }
 });
 
 /* =========================================================
@@ -1982,6 +2260,54 @@ function initGlobalBindings() {
     el.addEventListener('click', () => setActiveTab(el.dataset.tab));
   });
   document.getElementById('sidebar-logout-btn').addEventListener('click', signOut);
+}
+
+/* =========================================================
+   ALARMS
+========================================================= */
+function playAlarmBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 440;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+    osc.onended = () => ctx.close();
+  } catch (e) {}
+}
+
+function fireAlarm(ev) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('HQ — ' + ev.title, {
+      body: 'Scheduled for ' + ev.time,
+      icon: '/icon-192.png'
+    });
+  }
+  playAlarmBeep();
+}
+
+function checkAlarms() {
+  const today = todayISO();
+  const events = state.schedule[today] || [];
+  if (!events.length) return;
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  events.forEach(ev => {
+    if (!ev.alarm_time) return;
+    if (firedAlarms.has(ev.id)) return;
+    const [hh, mm] = ev.alarm_time.split(':').map(Number);
+    const alarmMinutes = hh * 60 + mm;
+    if (Math.abs(nowMinutes - alarmMinutes) <= 1) {
+      firedAlarms.add(ev.id);
+      fireAlarm(ev);
+    }
+  });
 }
 
 /* =========================================================
