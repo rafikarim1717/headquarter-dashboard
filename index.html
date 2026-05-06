@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Headquarter</title>
+<link rel="icon" href="icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f0f0f">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -734,6 +736,115 @@
     animation: blink 1.2s ease-in-out infinite;
   }
   @keyframes blink { 0%,100% { opacity: 0.2; } 50% { opacity: 1; } }
+
+  /* ============ NOTES ============ */
+  .notes-header { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+  .notes-header .page-title { flex: 1; margin: 0; }
+  .notes-controls { display: flex; align-items: center; gap: 6px; }
+  .notes-ctrl-wrap { position: relative; }
+  .notes-ctrl-btn {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-dim); padding: 6px 11px;
+    border: 1px solid var(--border); border-radius: var(--r-pill);
+    transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+    white-space: nowrap;
+  }
+  .notes-ctrl-btn:hover, .notes-ctrl-btn.active { color: var(--text); border-color: var(--border-strong); }
+  .notes-ctrl-btn .caret { font-size: 8px; opacity: 0.55; }
+  .notes-dropdown {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    background: var(--card); border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm); overflow: hidden; z-index: 200;
+    display: none; min-width: 120px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .notes-dropdown.open { display: block; }
+  .notes-dropdown button {
+    display: block; width: 100%; text-align: left;
+    padding: 9px 14px; font-size: 12px; color: var(--text-dim);
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .notes-dropdown button:hover { background: #222; color: var(--text); }
+  .notes-dropdown button.sel { color: var(--accent); }
+  /* note cards */
+  .notes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap); }
+  @media (min-width: 720px) { .notes-grid { grid-template-columns: repeat(3, 1fr); } }
+  .notes-list-view { display: flex; flex-direction: column; gap: 8px; }
+  .note-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--r-card); padding: 18px 20px; cursor: pointer;
+    transition: border-color var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .note-card:hover { border-color: var(--border-strong); background: #1c1c1c; }
+  .note-card-title {
+    font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .note-card-title.empty { color: var(--text-faint); font-weight: 400; }
+  .note-card-preview {
+    font-size: 12px; color: var(--text-dim); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .note-card-date { font-size: 11px; color: var(--text-faint); margin-top: 10px; letter-spacing: 0.04em; }
+  /* note editor */
+  .note-editor-header { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+  .note-back-btn {
+    width: 32px; height: 32px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; border: 1px solid var(--border);
+    color: var(--text-dim); font-size: 15px;
+    transition: border-color var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .note-back-btn:hover { border-color: var(--border-strong); color: var(--text); }
+  .note-editor-meta { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+  .note-saved-lbl {
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-faint); opacity: 0;
+    transition: opacity 400ms ease;
+  }
+  .note-saved-lbl.show { opacity: 1; }
+  .note-del-btn {
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--danger); padding: 5px 8px; opacity: 0.7;
+    transition: opacity var(--t-fast) ease;
+  }
+  .note-del-btn:hover { opacity: 1; }
+  .note-title-input {
+    width: 100%; font-size: 26px; font-weight: 500; color: var(--text);
+    background: transparent; border: 0; outline: none; padding: 0 0 14px;
+    letter-spacing: -0.02em; line-height: 1.2;
+    border-bottom: 1px solid var(--border);
+  }
+  .note-title-input::placeholder { color: var(--text-faint); font-weight: 400; }
+  .note-toolbar {
+    display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border); padding: 8px 0; margin-bottom: 18px;
+  }
+  .tb-btn {
+    padding: 5px 10px; border-radius: 6px;
+    font-size: 12px; color: var(--text-dim);
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+    user-select: none;
+  }
+  .tb-btn:hover { background: #252525; color: var(--text); }
+  .tb-btn.tb-active { background: color-mix(in oklab, var(--accent) 14%, transparent); color: var(--accent); }
+  .tb-btn-b { font-weight: 700; }
+  .tb-btn-i { font-style: italic; }
+  .tb-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+  .note-content {
+    outline: none; font-size: 16px; line-height: 1.7; color: var(--text);
+    min-height: 300px; padding-bottom: 60px; caret-color: var(--accent);
+  }
+  .note-content:empty::before { content: attr(data-placeholder); color: var(--text-faint); pointer-events: none; display: block; }
+  .note-content h1 { font-size: 28px; font-weight: 500; margin: 18px 0 6px; line-height: 1.25; color: var(--text); }
+  .note-content h2 { font-size: 22px; font-weight: 500; margin: 14px 0 5px; line-height: 1.3; color: var(--text); }
+  .note-content h3 { font-size: 18px; font-weight: 500; margin: 12px 0 4px; line-height: 1.35; color: var(--text); }
+  .note-content p { margin: 4px 0; }
+  .note-content ul { padding-left: 22px; margin: 6px 0; }
+  .note-content li { margin: 3px 0; }
+  .note-content b, .note-content strong { font-weight: 600; }
+  .note-content i, .note-content em { color: var(--text-dim); }
 </style>
 </head>
 <body>
@@ -789,6 +900,7 @@
     <button class="nav-item" data-go="life:goals"><span class="glyph">◇</span><span>Goals &amp; Rules</span></button>
     <button class="nav-item" data-go="life:habits"><span class="glyph">◎</span><span>Habits</span></button>
     <button class="nav-item" data-go="life:focus"><span class="glyph">◉</span><span>Focus</span></button>
+    <button class="nav-item" data-go="life:notes"><span class="glyph">◫</span><span>Notes</span></button>
 
     <div class="nav-group-label">Finance</div>
     <button class="nav-item" data-go="finance:overview"><span class="glyph">∿</span><span>Overview</span></button>
@@ -913,12 +1025,17 @@ let state = {
   goals: { dos: [], donts: [] },
   habits: [],     // [{id, name, streak, doneToday, log:[7]}]
   focus: { main: '', tasks: [] },
+  notes: [],      // [{id, title, content, created_at, updated_at}]
   income: [],
   spending: [],
   debts: [],
   selectedDay: todayISO(),
   activeTab: 'life:home',
-  viewMonth: todayISO().slice(0, 7)
+  viewMonth: todayISO().slice(0, 7),
+  activeNoteId: null,
+  notesSort: 'newest',
+  notesFilter: 'all',
+  notesDisplay: 'grid'
 };
 
 /* =========================================================
@@ -1008,7 +1125,7 @@ async function loadFromSupabase(userId) {
   const [
     profileRes, eventsRes, goalsRes, habitsRes,
     habitLogsRes, focusBoardRes, focusTasksRes,
-    incomeRes, spendingRes, debtsRes
+    incomeRes, spendingRes, debtsRes, notesRes
   ] = await Promise.all([
     sb.from('profiles').select('*').eq('id', userId).maybeSingle(),
     sb.from('schedule_events').select('*').eq('user_id', userId),
@@ -1019,7 +1136,8 @@ async function loadFromSupabase(userId) {
     sb.from('focus_tasks').select('*').eq('user_id', userId).order('created_at'),
     sb.from('income_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
     sb.from('spending_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
-    sb.from('debts').select('*').eq('user_id', userId).order('due_date')
+    sb.from('debts').select('*').eq('user_id', userId).order('due_date'),
+    sb.from('notes').select('*').eq('user_id', userId).order('updated_at', { ascending: false })
   ]);
 
   const isNewUser = !profileRes.data;
@@ -1071,6 +1189,9 @@ async function loadFromSupabase(userId) {
   state.income   = (incomeRes.data   || []).map(i => ({ id: i.id, date: i.date, source: i.source, amount: Number(i.amount) }));
   state.spending = (spendingRes.data  || []).map(s => ({ id: s.id, date: s.date, time: s.time, cat: s.category, note: s.note, amount: Number(s.amount) }));
   state.debts    = (debtsRes.data     || []).map(d => ({ id: d.id, creditor: d.creditor, amount: Number(d.amount), due: d.due_date, paid: d.paid }));
+
+  // Notes
+  state.notes = (notesRes.data || []).map(n => ({ id: n.id, title: n.title || '', content: n.content || '', created_at: n.created_at, updated_at: n.updated_at }));
 }
 
 function compute7DayLog(logs) {
@@ -1705,6 +1826,121 @@ function renderFocus() {
   `;
 }
 
+/* ---- LIFE: NOTES ---- */
+function stripHtml(html) {
+  return (html || '').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+}
+function noteDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const noteStart  = new Date(d); noteStart.setHours(0,0,0,0);
+  if (noteStart.getTime() === todayStart.getTime()) return 'Today';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+function getFilteredNotes() {
+  let notes = [...state.notes];
+  if (state.notesFilter === 'today') {
+    const t = todayISO();
+    notes = notes.filter(n => (n.updated_at || n.created_at || '').slice(0, 10) === t);
+  } else if (state.notesFilter === 'week') {
+    const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+    notes = notes.filter(n => new Date(n.updated_at || n.created_at) >= weekAgo);
+  }
+  if (state.notesSort === 'oldest') {
+    notes.sort((a, b) => new Date(a.updated_at||a.created_at) - new Date(b.updated_at||b.created_at));
+  } else if (state.notesSort === 'az') {
+    notes.sort((a, b) => (a.title||'').localeCompare(b.title||''));
+  } else {
+    notes.sort((a, b) => new Date(b.updated_at||b.created_at) - new Date(a.updated_at||a.created_at));
+  }
+  return notes;
+}
+
+function renderNotesList() {
+  const notes  = getFilteredNotes();
+  const isGrid = state.notesDisplay === 'grid';
+  const sortLabels   = { newest: 'Newest', oldest: 'Oldest', az: 'A–Z' };
+  const filterLabels = { all: 'All', today: 'Today', week: 'This week' };
+  return `
+    ${topbar()}
+    <div class="notes-header">
+      <h1 class="page-title" style="margin:0">Notes</h1>
+      <div class="notes-controls">
+        <div class="notes-ctrl-wrap">
+          <button class="notes-ctrl-btn" id="notes-sort-btn">
+            ${sortLabels[state.notesSort]}<span class="caret">▾</span>
+          </button>
+          <div class="notes-dropdown" id="notes-sort-dd">
+            <button data-sort="newest" class="${state.notesSort==='newest'?'sel':''}">Newest</button>
+            <button data-sort="oldest" class="${state.notesSort==='oldest'?'sel':''}">Oldest</button>
+            <button data-sort="az"     class="${state.notesSort==='az'    ?'sel':''}">A–Z</button>
+          </div>
+        </div>
+        <div class="notes-ctrl-wrap">
+          <button class="notes-ctrl-btn" id="notes-filter-btn">
+            ${filterLabels[state.notesFilter]}<span class="caret">▾</span>
+          </button>
+          <div class="notes-dropdown" id="notes-filter-dd">
+            <button data-filter="all"   class="${state.notesFilter==='all'   ?'sel':''}">All</button>
+            <button data-filter="today" class="${state.notesFilter==='today' ?'sel':''}">Today</button>
+            <button data-filter="week"  class="${state.notesFilter==='week'  ?'sel':''}">This week</button>
+          </div>
+        </div>
+        <button class="notes-ctrl-btn ${isGrid?'active':''}" id="notes-view-btn" title="Toggle layout">
+          ${isGrid ? '▦' : '☰'}
+        </button>
+      </div>
+    </div>
+    <div class="${isGrid ? 'notes-grid' : 'notes-list-view'}">
+      ${notes.map(n => `
+        <div class="note-card" data-open-note="${n.id}">
+          <div class="note-card-title ${n.title?'':'empty'}">${n.title ? escapeHtml(n.title) : 'Untitled'}</div>
+          <div class="note-card-preview">${escapeHtml(stripHtml(n.content).slice(0, 100))}</div>
+          <div class="note-card-date">${noteDate(n.updated_at || n.created_at)}</div>
+        </div>`).join('') || `<div style="color:var(--text-faint);font-size:13px;padding:20px 0">No notes yet.</div>`}
+    </div>
+    <button class="add-btn" id="add-note-btn" style="margin-top:18px"><span class="plus">+</span> New note</button>
+  `;
+}
+
+function renderNoteEditor() {
+  const n = state.notes.find(x => x.id === state.activeNoteId);
+  if (!n) { state.activeNoteId = null; return renderNotesList(); }
+  return `
+    ${topbar()}
+    <div class="note-editor-header">
+      <button class="note-back-btn" id="note-back-btn">←</button>
+      <div class="note-editor-meta">
+        <span class="note-saved-lbl" id="note-saved-lbl">Saved</span>
+        <button class="note-del-btn" id="note-del-btn">Delete</button>
+      </div>
+    </div>
+    <input class="note-title-input" id="note-title" type="text"
+      value="${escapeHtml(n.title || '')}" placeholder="Title" autocomplete="off"/>
+    <div class="note-toolbar" id="note-toolbar">
+      <div style="display:flex;align-items:center;gap:2px">
+        <button class="tb-btn" data-cmd="formatBlock" data-val="p"  title="Normal">Normal</button>
+        <button class="tb-btn" data-cmd="formatBlock" data-val="h1" title="H1">H1</button>
+        <button class="tb-btn" data-cmd="formatBlock" data-val="h2" title="H2">H2</button>
+        <button class="tb-btn" data-cmd="formatBlock" data-val="h3" title="H3">H3</button>
+      </div>
+      <div class="tb-sep"></div>
+      <div style="display:flex;align-items:center;gap:2px">
+        <button class="tb-btn tb-btn-b" data-cmd="bold"                title="Bold">B</button>
+        <button class="tb-btn tb-btn-i" data-cmd="italic"              title="Italic">I</button>
+        <button class="tb-btn"          data-cmd="insertUnorderedList" title="Bullet list">•</button>
+      </div>
+    </div>
+    <div class="note-content" id="note-content" contenteditable="true"
+      data-placeholder="Start writing...">${n.content || ''}</div>
+  `;
+}
+
+function renderNotes() {
+  return state.activeNoteId !== null ? renderNoteEditor() : renderNotesList();
+}
+
 /* ---- FINANCE: OVERVIEW ---- */
 function thisMonthIncome() {
   const ym = ymLocal(new Date());
@@ -1977,6 +2213,7 @@ const ROUTES = {
   'life:goals': renderGoals,
   'life:habits': renderHabits,
   'life:focus': renderFocus,
+  'life:notes': renderNotes,
   'finance:overview': renderFinanceOverview,
   'finance:income': renderIncome,
   'finance:spending': renderSpending,
@@ -2515,6 +2752,153 @@ function bindMainEvents() {
       ta.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') ta.blur(); });
     });
   });
+
+  // ---- NOTES ----
+  // list view: open note
+  main.querySelectorAll('[data-open-note]').forEach(el => el.addEventListener('click', () => {
+    state.activeNoteId = el.dataset.openNote;
+    render();
+  }));
+
+  // list view: new note
+  const addNoteBtn = main.querySelector('#add-note-btn');
+  if (addNoteBtn) addNoteBtn.addEventListener('click', async () => {
+    const now = new Date().toISOString();
+    const { data } = await dbCall(() =>
+      sb.from('notes').insert({ user_id: currentUser.id, title: '', content: '', updated_at: now }).select().single()
+    );
+    if (data) {
+      state.notes.unshift({ id: data.id, title: '', content: '', created_at: data.created_at, updated_at: data.updated_at || now });
+      state.activeNoteId = data.id;
+      render();
+    }
+  });
+
+  // list view: sort dropdown
+  const sortBtn = main.querySelector('#notes-sort-btn');
+  const sortDd  = main.querySelector('#notes-sort-dd');
+  if (sortBtn && sortDd) {
+    sortBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sortDd.classList.toggle('open');
+      main.querySelector('#notes-filter-dd')?.classList.remove('open');
+    });
+    sortDd.querySelectorAll('[data-sort]').forEach(btn => btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.notesSort = btn.dataset.sort;
+      sortDd.classList.remove('open');
+      render();
+    }));
+  }
+
+  // list view: filter dropdown
+  const filterBtn = main.querySelector('#notes-filter-btn');
+  const filterDd  = main.querySelector('#notes-filter-dd');
+  if (filterBtn && filterDd) {
+    filterBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      filterDd.classList.toggle('open');
+      main.querySelector('#notes-sort-dd')?.classList.remove('open');
+    });
+    filterDd.querySelectorAll('[data-filter]').forEach(btn => btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.notesFilter = btn.dataset.filter;
+      filterDd.classList.remove('open');
+      render();
+    }));
+  }
+
+  // list view: grid/list toggle
+  const viewBtn = main.querySelector('#notes-view-btn');
+  if (viewBtn) viewBtn.addEventListener('click', () => {
+    state.notesDisplay = state.notesDisplay === 'grid' ? 'list' : 'grid';
+    render();
+  });
+
+  // editor: back
+  const noteBackBtn = main.querySelector('#note-back-btn');
+  if (noteBackBtn) noteBackBtn.addEventListener('click', () => {
+    state.activeNoteId = null;
+    render();
+  });
+
+  // editor: delete
+  const noteDelBtn = main.querySelector('#note-del-btn');
+  if (noteDelBtn) noteDelBtn.addEventListener('click', () => {
+    const id = state.activeNoteId;
+    state.notes = state.notes.filter(n => n.id !== id);
+    state.activeNoteId = null;
+    render();
+    dbCall(() => sb.from('notes').delete().eq('id', id));
+  });
+
+  // editor: autosave (title + content, debounced 1000ms)
+  const noteTitleEl   = main.querySelector('#note-title');
+  const noteContentEl = main.querySelector('#note-content');
+  const noteSavedLbl  = main.querySelector('#note-saved-lbl');
+  let noteSaveTimer = null;
+  const triggerNoteSave = () => {
+    clearTimeout(noteSaveTimer);
+    noteSaveTimer = setTimeout(async () => {
+      const id = state.activeNoteId;
+      if (!id) return;
+      const n = state.notes.find(x => x.id === id);
+      if (!n || !noteTitleEl || !noteContentEl) return;
+      n.title = noteTitleEl.value;
+      n.content = noteContentEl.innerHTML;
+      n.updated_at = new Date().toISOString();
+      if (noteSavedLbl) {
+        noteSavedLbl.classList.add('show');
+        setTimeout(() => noteSavedLbl.classList.remove('show'), 2000);
+      }
+      await dbCall(() => sb.from('notes').update({
+        title: n.title, content: n.content, updated_at: n.updated_at
+      }).eq('id', id));
+    }, 1000);
+  };
+  if (noteTitleEl)   noteTitleEl.addEventListener('input', triggerNoteSave);
+  if (noteContentEl) noteContentEl.addEventListener('input', triggerNoteSave);
+
+  // editor: toolbar
+  const updateTbState = () => {
+    if (!noteContentEl) return;
+    const isBold   = document.queryCommandState('bold');
+    const isItalic = document.queryCommandState('italic');
+    const isList   = document.queryCommandState('insertUnorderedList');
+    const block    = (document.queryCommandValue('formatBlock') || '').toLowerCase().trim();
+    main.querySelectorAll('.tb-btn').forEach(btn => {
+      const cmd = btn.dataset.cmd, val = btn.dataset.val;
+      if (!cmd) return;
+      let on = false;
+      if (cmd === 'bold')                on = isBold;
+      else if (cmd === 'italic')         on = isItalic;
+      else if (cmd === 'insertUnorderedList') on = isList;
+      else if (cmd === 'formatBlock') {
+        if (val === 'p') on = !block || block === 'p' || block === 'div' || block === 'normal';
+        else on = block === val;
+      }
+      btn.classList.toggle('tb-active', on);
+    });
+  };
+  main.querySelectorAll('.tb-btn').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault(); // keep contenteditable focus
+      if (!noteContentEl) return;
+      const cmd = btn.dataset.cmd;
+      const val = btn.dataset.val || null;
+      if (!cmd) return;
+      document.execCommand(cmd, false, val);
+      setTimeout(updateTbState, 10);
+      triggerNoteSave();
+    });
+  });
+  if (noteContentEl) {
+    noteContentEl.addEventListener('keyup',   updateTbState);
+    noteContentEl.addEventListener('mouseup', updateTbState);
+    noteContentEl.addEventListener('focus',   updateTbState);
+    // focus the editor on load if content is empty
+    if (!noteContentEl.innerHTML.trim()) setTimeout(() => noteContentEl.focus(), 80);
+  }
 }
 
 function bindFormSaves() {
@@ -2616,6 +3000,11 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.inline-form.open').forEach(f => {
     if (!f.contains(e.target) && !e.target.closest('[data-open-form], #add-sched-btn')) {
       f.classList.remove('open');
+    }
+  });
+  document.querySelectorAll('.notes-dropdown.open').forEach(dd => {
+    if (!dd.contains(e.target) && !e.target.closest('#notes-sort-btn, #notes-filter-btn')) {
+      dd.classList.remove('open');
     }
   });
   if (!e.target.closest('.habit.delete-mode')) {
