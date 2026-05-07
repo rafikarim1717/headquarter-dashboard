@@ -67,4 +67,22 @@ function initGlobalBindings() {
     });
   }
   document.getElementById('sidebar-logout-btn')?.addEventListener('click', signOut);
+
+  const tooltip = document.getElementById('nav-tooltip');
+  const tooltipTargets = document.querySelectorAll('.sidebar .nav-item[data-tooltip], .sidebar-signout[data-tooltip]');
+  if (tooltip) {
+    tooltipTargets.forEach(el => {
+      el.addEventListener('mouseenter', () => {
+        const sb = document.getElementById('sidebar');
+        if (!sb || !sb.classList.contains('collapsed')) return;
+        const rect = el.getBoundingClientRect();
+        tooltip.textContent = el.dataset.tooltip;
+        tooltip.style.top = (rect.top + rect.height / 2) + 'px';
+        tooltip.style.left = (rect.right + 6) + 'px';
+        tooltip.style.transform = 'translateY(-50%)';
+        tooltip.classList.add('visible');
+      });
+      el.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
+    });
+  }
 }

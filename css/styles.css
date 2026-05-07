@@ -183,6 +183,13 @@
     padding: 4px 12px 20px; white-space: nowrap; flex-shrink: 0;
   }
   .sidebar-brand .dot { width: 8px; height: 8px; flex-shrink: 0; background: var(--accent); border-radius: 50%; }
+  .brand-hq {
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: rgba(255,255,255,0.85); font-weight: 500; flex-shrink: 0;
+    max-width: 0; opacity: 0; overflow: hidden;
+    transition: max-width 200ms ease, opacity 200ms ease;
+  }
+  .sidebar.collapsed .brand-hq { max-width: 40px; opacity: 1; }
   .sidebar-brand .brand-label {
     font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
     color: rgba(255,255,255,0.85); font-weight: 500;
@@ -241,6 +248,15 @@
   .sidebar-signout .nav-label { max-width: 120px; overflow: hidden; transition: max-width 200ms ease, opacity 200ms ease; }
   .sidebar.collapsed .sidebar-signout .nav-label { max-width: 0; opacity: 0; }
   .sidebar-signout:hover { color: var(--danger); }
+
+  #nav-tooltip {
+    position: fixed; z-index: 999;
+    background: #1a1a1a; color: #ffffff; font-size: 12px;
+    padding: 4px 10px; border-radius: 6px; border: 1px solid #2a2a2a;
+    white-space: nowrap; pointer-events: none;
+    opacity: 0; transition: opacity 150ms ease;
+  }
+  #nav-tooltip.visible { opacity: 1; }
 
   main {
     min-width: 0; padding: 16px 16px 96px;
