@@ -4,7 +4,9 @@
       "Bash(powershell *)",
       "Bash(Remove-Item \"C:\\\\Users\\\\Asus\\\\Desktop\\\\Work\\\\HQ-Dashboard\\\\hq_decoded.html\" -ErrorAction SilentlyContinue)",
       "Bash(Get-ChildItem \"C:\\\\Users\\\\Asus\\\\Desktop\\\\Work\\\\HQ-Dashboard\")",
-      "Bash(Select-Object Name, Length)"
+      "Bash(Select-Object Name, Length)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(New-Item *)"
     ]
   }
 }
