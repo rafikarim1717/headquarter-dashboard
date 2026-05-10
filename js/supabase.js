@@ -34,17 +34,16 @@ async function dbCall(fn) {
 ========================================================= */
 async function loadFromSupabase(userId) {
   const [
-    profileRes, eventsRes, goalsRes, habitsRes,
-    habitLogsRes, focusBoardRes, focusTasksRes,
+    profileRes, eventsRes, goalsRes, goalLogsRes,
+    projectsRes, projectTasksRes,
     incomeRes, spendingRes, debtsRes, notesRes
   ] = await Promise.all([
     sb.from('profiles').select('*').eq('id', userId).maybeSingle(),
     sb.from('schedule_events').select('*').eq('user_id', userId),
     sb.from('goals').select('*').eq('user_id', userId).order('created_at'),
-    sb.from('habits').select('*').eq('user_id', userId).order('created_at'),
-    sb.from('habit_logs').select('*').eq('user_id', userId),
-    sb.from('focus_board').select('*').eq('user_id', userId).maybeSingle(),
-    sb.from('focus_tasks').select('*').eq('user_id', userId).order('created_at'),
+    sb.from('goal_logs').select('*').eq('user_id', userId),
+    sb.from('projects').select('*').eq('user_id', userId).order('created_at'),
+    sb.from('project_tasks').select('*').eq('user_id', userId).order('created_at'),
     sb.from('income_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
     sb.from('spending_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
     sb.from('debts').select('*').eq('user_id', userId).order('due_date'),
@@ -71,30 +70,22 @@ async function loadFromSupabase(userId) {
   });
 
   // Goals
-  state.goals.dos   = (goalsRes.data || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, done: g.checked }));
-  state.goals.donts = (goalsRes.data || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, done: g.checked }));
+  state.goals.dos   = (goalsRes.data || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text }));
+  state.goals.donts = (goalsRes.data || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text }));
+  state.goalLogs    = (goalLogsRes.data || []).map(l => ({ id: l.id, goal_id: l.goal_id, user_id: l.user_id, date: l.date, checked: l.checked }));
 
-  // Habits + logs
-  const allLogs = habitLogsRes.data || [];
-  const today = todayISO();
-  state.habits = (habitsRes.data || []).map(h => {
-    const hLogs = allLogs.filter(l => l.habit_id === h.id);
-    const doneToday = hLogs.some(l => l.date === today && l.checked);
-    const log = compute7DayLog(hLogs);
-    return { id: h.id, name: h.name, streak: h.streak || 0, doneToday, log };
+  // Projects
+  const allProjectTasks = projectTasksRes.data || [];
+  state.projects = (projectsRes.data || []).map(p => {
+    const tasks = allProjectTasks.filter(t => t.project_id === p.id);
+    return {
+      id: p.id,
+      name: p.name,
+      status: p.status,
+      deadline: p.deadline,
+      tasks: tasks.map(t => ({ id: t.id, text: t.text, description: t.description || '', checked: t.checked }))
+    };
   });
-
-  // Focus board
-  if (focusBoardRes.data) {
-    focusBoardId = focusBoardRes.data.id;
-    state.focus.main = focusBoardRes.data.main_focus || '';
-    state.focus.tasks = (focusTasksRes.data || []).map(t => ({ id: t.id, text: t.text, done: t.checked, description: t.description || '' }));
-  } else {
-    // Create empty focus board for user
-    const { data: fb } = await sb.from('focus_board').insert({ user_id: userId, main_focus: '' }).select().single();
-    if (fb) focusBoardId = fb.id;
-    state.focus = { main: '', tasks: [] };
-  }
 
   // Finance
   state.income   = (incomeRes.data   || []).map(i => ({ id: i.id, date: i.date, source: i.source, amount: Number(i.amount) }));
@@ -153,37 +144,50 @@ async function seedSampleData(userId) {
 
   // Goals
   const goalRows = [
-    ...def.goals.dos.map(g => ({ user_id: userId, type: 'do', text: g.text, checked: g.done })),
-    ...def.goals.donts.map(g => ({ user_id: userId, type: 'dont', text: g.text, checked: g.done }))
+    ...def.goals.dos.map(g => ({ user_id: userId, type: 'do', text: g.text })),
+    ...def.goals.donts.map(g => ({ user_id: userId, type: 'dont', text: g.text }))
   ];
   const { data: goalData } = await sb.from('goals').insert(goalRows).select();
-  state.goals.dos   = (goalData || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, done: g.checked }));
-  state.goals.donts = (goalData || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, done: g.checked }));
+  state.goals.dos   = (goalData || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text }));
+  state.goals.donts = (goalData || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text }));
 
-  // Habits + logs
-  const habitRows = def.habits.map(h => ({ user_id: userId, name: h.name, streak: h.streak }));
-  const { data: habitData } = await sb.from('habits').insert(habitRows).select();
+  // Goal logs — seed today's checked state from defaultState
   const today = todayISO();
-  const logRows = [];
-  (habitData || []).forEach((h, i) => {
-    const defH = def.habits[i];
-    for (let j = 6; j >= 0; j--) {
-      const d = new Date(); d.setDate(d.getDate() - j);
-      const iso = isoLocal(d);
-      logRows.push({ habit_id: h.id, user_id: userId, date: iso, checked: defH.log[6 - j] === 1 });
-    }
+  const defDos   = def.goals.dos;
+  const defDonts = def.goals.donts;
+  const goalLogRows = [];
+  (goalData || []).forEach(g => {
+    const defList = g.type === 'do' ? defDos : defDonts;
+    const defGoal = defList.find(d => d.text === g.text);
+    if (defGoal && defGoal.done) goalLogRows.push({ user_id: userId, goal_id: g.id, date: today, checked: true });
   });
-  await sb.from('habit_logs').insert(logRows);
-  state.habits = (habitData || []).map((h, i) => ({ ...def.habits[i], id: h.id }));
+  const { data: glData } = goalLogRows.length
+    ? await sb.from('goal_logs').insert(goalLogRows).select()
+    : { data: [] };
+  state.goalLogs = (glData || []).map(l => ({ id: l.id, goal_id: l.goal_id, user_id: l.user_id, date: l.date, checked: l.checked }));
 
-  // Focus board
-  const { data: fb } = await sb.from('focus_board').insert({ user_id: userId, main_focus: def.focus.main }).select().single();
-  if (fb) {
-    focusBoardId = fb.id;
-    const taskRows = def.focus.tasks.map(t => ({ focus_id: fb.id, user_id: userId, text: t.text, checked: t.done }));
-    const { data: taskData } = await sb.from('focus_tasks').insert(taskRows).select();
-    state.focus = { main: def.focus.main, tasks: (taskData || []).map(t => ({ id: t.id, text: t.text, done: t.checked })) };
-  }
+  // Projects
+  const now = new Date().toISOString();
+  const projectRows = def.projects.map(p => ({ user_id: userId, name: p.name, status: p.status, deadline: p.deadline || null, updated_at: now }));
+  const { data: projData } = await sb.from('projects').insert(projectRows).select();
+  const projTaskRows = [];
+  (projData || []).forEach((p, i) => {
+    const defP = def.projects[i];
+    (defP.tasks || []).forEach(t => {
+      projTaskRows.push({ user_id: userId, project_id: p.id, text: t.text, description: t.description || null, checked: t.checked });
+    });
+  });
+  const { data: projTaskData } = projTaskRows.length ? await sb.from('project_tasks').insert(projTaskRows).select() : { data: [] };
+  state.projects = (projData || []).map((p, i) => {
+    const tasks = (projTaskData || []).filter(t => t.project_id === p.id);
+    return {
+      id: p.id,
+      name: p.name,
+      status: p.status,
+      deadline: p.deadline,
+      tasks: tasks.map(t => ({ id: t.id, text: t.text, description: t.description || '', checked: t.checked }))
+    };
+  });
 
   // Income
   const incomeRows = def.income.map(i => ({ user_id: userId, date: i.date, source: i.source, amount: i.amount }));

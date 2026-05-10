@@ -50,7 +50,6 @@ function escapeHtml(s) {
    IN-MEMORY STATE  (populated from Supabase on login)
 ========================================================= */
 let currentUser = null;
-let focusBoardId = null;  // UUID of focus_board row for current user
 const firedAlarms = new Set(); // event IDs that have already fired today
 let alarmInterval = null;
 let clockIntervalId = null;
@@ -60,8 +59,10 @@ let state = {
   profile: { name: 'Friend' },
   schedule: {},   // { [iso-date]: [{id, time, title, sub}] }
   goals: { dos: [], donts: [] },
-  habits: [],     // [{id, name, streak, doneToday, log:[7]}]
-  focus: { main: '', tasks: [] },
+  goalLogs: [],   // [{id, goal_id, user_id, date, checked}]
+  projects: [],       // [{id, name, status, deadline, tasks:[{id,text,description,checked}]}]
+  projectsFilter: 'all',
+  expandedProjectIds: [],
   notes: [],      // [{id, title, content, created_at, updated_at}]
   income: [],
   spending: [],
@@ -72,7 +73,8 @@ let state = {
   activeNoteId: null,
   notesSort: 'newest',
   notesFilter: 'all',
-  notesDisplay: 'grid'
+  notesDisplay: 'grid',
+  commitPreviewTab: 'weekly'
 };
 
 /* =========================================================
@@ -117,22 +119,36 @@ function defaultState() {
         { text: 'No infinite scroll after 9pm', done: false }
       ]
     },
-    habits: [
-      { name: 'Cold shower',  streak: 12, doneToday: true,  log: [1,1,1,1,1,1,1] },
-      { name: 'Read 20 pages', streak: 5,  doneToday: true,  log: [1,0,1,1,1,1,1] },
-      { name: 'No sugar',      streak: 3,  doneToday: false, log: [1,1,1,0,1,1,0] },
-      { name: 'Meditate 10m',  streak: 22, doneToday: true,  log: [1,1,1,1,1,1,1] },
-      { name: 'Stretch',       streak: 1,  doneToday: false, log: [0,1,0,0,1,0,0] }
+    projects: [
+      {
+        name: 'Client Website',
+        status: 'active',
+        deadline: dayKey(14),
+        tasks: [
+          { text: 'Wireframes approved', description: '', checked: true },
+          { text: 'Build homepage section', description: 'Hero + nav + footer', checked: false },
+          { text: 'Mobile responsiveness pass', description: '', checked: false }
+        ]
+      },
+      {
+        name: 'Personal Development',
+        status: 'active',
+        deadline: null,
+        tasks: [
+          { text: 'Finish online course', description: 'Chapter 4–8 remaining', checked: false },
+          { text: 'Weekly review habit', description: '', checked: false }
+        ]
+      },
+      {
+        name: 'Side Business',
+        status: 'on_hold',
+        deadline: null,
+        tasks: [
+          { text: 'Business model canvas', description: '', checked: false },
+          { text: 'Market research', description: '', checked: false }
+        ]
+      }
     ],
-    focus: {
-      main: 'Ship the HQ dashboard MVP and get 10 friends using it.',
-      tasks: [
-        { text: 'Lock LIFE tab data model', done: true },
-        { text: 'Wire Finance overview metrics', done: true },
-        { text: 'Inline-form pattern for all add buttons', done: false },
-        { text: 'Send to first 3 testers', done: false }
-      ]
-    },
     income: [
       { date: today,        source: 'Studio retainer — Westwind',  amount: 18500000 },
       { date: dayKey(-6),   source: 'Consulting — Marlow & Co',    amount: 7200000 },
@@ -211,9 +227,8 @@ function topbar() {
   const lifePills = [
     { tab: 'life:home', label: 'Today' },
     { tab: 'life:schedule', label: 'Schedule' },
-    { tab: 'life:goals', label: 'Goals' },
-    { tab: 'life:habits', label: 'Habits' },
-    { tab: 'life:focus', label: 'Focus' },
+    { tab: 'life:commitments', label: 'Commitments' },
+    { tab: 'life:projects', label: 'Projects' },
     { tab: 'life:notes', label: 'Notes' }
   ];
   const financePills = [
@@ -245,26 +260,69 @@ function topbar() {
 function renderLifeHome() {
   const today = todayISO();
   const sched = (state.schedule[today] || []).slice(0, 5);
-  const focus = state.focus;
   const layout = window.__HQ_TWEAKS.homeLayout;
   const showPills = String(window.__HQ_TWEAKS.showQuickPills) === 'true' || window.__HQ_TWEAKS.showQuickPills === true;
 
-  const focusBlock = `
-    <div class="card" style="animation-delay:60ms">
-      <div class="section-title" style="margin-top:0">Current focus</div>
-      <div style="font-size:${layout==='hero'?'22px':'18px'}; font-weight:300; line-height:1.35; letter-spacing:-0.01em;">${escapeHtml(focus.main)}</div>
-      <ul class="list" style="margin-top:14px">
-        ${focus.tasks.slice(0, 3).map(t => `
-          <li class="list-item" style="padding:10px 0">
-            <span class="check ${t.done?'checked':''}" data-toggle-focus="${t.id}"></span>
-            <span class="check-label ${t.done?'done':''}">${escapeHtml(t.text)}</span>
-          </li>
-        `).join('')}
-      </ul>
+  const score = computeDailyScore();
+  const scoreBlock = `
+    <div class="card" style="animation-delay:0ms">
+      <div class="section-title" style="margin-top:0">Daily score</div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
+        <div style="font-size:48px;font-weight:var(--num-weight,200);color:var(--accent);font-variant-numeric:tabular-nums;line-height:1">${score}</div>
+        <div style="font-size:16px;color:var(--text-faint)">/100</div>
+      </div>
     </div>`;
 
-  const scheduleBlock = `
-    <div class="card" style="animation-delay:120ms">
+  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const totalGoals = allGoals.length;
+  const checkedTodayCount = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
+  const commitmentsBlock = (delay) => `
+    <div class="card" style="animation-delay:${delay}ms">
+      <div class="section-title" style="margin-top:0">Commitments <span class="meta" data-go="life:commitments" style="cursor:pointer">View all →</span></div>
+      <ul class="list" style="padding:0">
+        ${allGoals.length === 0
+          ? `<li class="list-item"><div class="item-sub">No commitments yet.</div></li>`
+          : allGoals.map(g => {
+              const isChecked = getTodayLog(g.id)?.checked || false;
+              const isDo = (state.goals.dos || []).some(d => d.id === g.id);
+              return `<li class="list-item" style="padding:8px 0;gap:10px">
+                <span class="commit-type-pill ${isDo ? 'do' : 'dont'}">${isDo ? 'DO' : 'DONT'}</span>
+                <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1">${escapeHtml(g.text)}</span>
+                <span style="color:${isChecked ? 'var(--good)' : 'var(--text-faint)'};font-size:14px">${isChecked ? '✓' : '○'}</span>
+              </li>`;
+            }).join('')}
+      </ul>
+      <div style="font-size:12px;color:var(--text-faint);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">${checkedTodayCount} of ${totalGoals} done today</div>
+    </div>`;
+
+  const firstActive = (state.projects || []).find(p => p.status === 'active');
+  const projDone  = firstActive ? firstActive.tasks.filter(t => t.checked).length : 0;
+  const projTotal = firstActive ? firstActive.tasks.length : 0;
+  const projPct   = projTotal ? Math.round(projDone / projTotal * 100) : 0;
+  const projectsBlock = (delay) => `
+    <div class="card" style="animation-delay:${delay}ms">
+      <div class="section-title" style="margin-top:0">Active project</div>
+      ${firstActive ? `
+        <div style="font-size:${layout === 'hero' ? '18px' : '15px'};font-weight:500;line-height:1.35">${escapeHtml(firstActive.name)}</div>
+        ${projTotal > 0 ? `
+          <div class="proj-progress">
+            <div class="proj-progress-meta"><span>${projDone} / ${projTotal} tasks done</span><span>${projPct}%</span></div>
+            <div class="progress"><div class="bar" style="width:${projPct}%"></div></div>
+          </div>
+          <ul class="list" style="margin-top:12px">
+            ${firstActive.tasks.slice(0, 3).map(t => `
+              <li class="list-item" style="padding:8px 0">
+                <span class="check ${t.checked ? 'checked' : ''}" data-toggle-proj-task="${firstActive.id}|${t.id}"></span>
+                <span class="check-label ${t.checked ? 'done' : ''}">${escapeHtml(t.text)}</span>
+              </li>
+            `).join('')}
+          </ul>
+        ` : '<div style="font-size:12px;color:var(--text-faint);margin-top:8px">No tasks yet.</div>'}
+      ` : `<div style="font-size:12px;color:var(--text-faint)">No active projects.</div>`}
+    </div>`;
+
+  const scheduleBlock = (delay) => `
+    <div class="card" style="animation-delay:${delay}ms">
       <div class="section-title" style="margin-top:0">Today's schedule <span class="meta">${sched.length} blocks</span></div>
       <ul class="list">
         ${sched.map(s => `
@@ -279,16 +337,19 @@ function renderLifeHome() {
     </div>`;
 
   const pillsBlock = showPills ? `
-    <div class="pills" style="margin: 18px 4px 4px;">
+    <div class="pills" style="margin:18px 4px 4px">
       <button class="pill" data-go="life:schedule">Schedule</button>
-      <button class="pill" data-go="life:goals">Goals</button>
-      <button class="pill" data-go="life:habits">Habits</button>
-      <button class="pill" data-go="life:focus">Focus</button>
+      <button class="pill" data-go="life:commitments">Commitments</button>
+      <button class="pill" data-go="life:projects">Projects</button>
     </div>` : '';
+
+  const stacked = scheduleBlock(60) + commitmentsBlock(120) + projectsBlock(180);
+  const hero    = projectsBlock(60) + scheduleBlock(120) + commitmentsBlock(180);
 
   return `
     ${topbar()}
-    ${layout === 'hero' ? focusBlock + scheduleBlock : scheduleBlock + focusBlock}
+    ${scoreBlock}
+    ${layout === 'hero' ? hero : stacked}
     ${pillsBlock}
   `;
 }
@@ -420,162 +481,328 @@ function renderSchedule() {
   `;
 }
 
-/* ---- LIFE: GOALS ---- */
-function renderGoals() {
-  const dos = state.goals.dos;
-  const dosDone = dos.filter(d => d.done).length;
-  const pct = dos.length ? Math.round(dosDone / dos.length * 100) : 0;
+/* ---- LIFE: COMMITMENTS — helpers ---- */
+function getTodayLog(goalId) {
+  const t = todayISO();
+  return state.goalLogs.find(l => l.goal_id === goalId && l.date === t) || null;
+}
+function getLogByDate(goalId, date) {
+  return state.goalLogs.find(l => l.goal_id === goalId && l.date === date) || null;
+}
+function getDayCompliancePct(dateIso) {
+  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  if (!allGoals.length) return 0;
+  const checked = allGoals.filter(g => {
+    const log = state.goalLogs.find(l => l.goal_id === g.id && l.date === dateIso);
+    return log && log.checked;
+  }).length;
+  return (checked / allGoals.length) * 100;
+}
+function getCurrentWeekDays() {
+  const today = new Date();
+  const dow = today.getDay();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+  monday.setHours(0, 0, 0, 0);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+function computeDailyScore() {
+  const today = todayISO();
+  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const totalGoals = allGoals.length;
+  const checkedToday = totalGoals ? allGoals.filter(g => getTodayLog(g.id)?.checked).length : 0;
+  const commitScore = totalGoals ? Math.round((checkedToday / totalGoals) * 55) : 55;
+  const schedScore  = (state.schedule[today] || []).length > 0 ? 15 : 0;
+  const finScore    = state.spending.filter(s => s.date === today).length === 0 ? 30 : 15;
+  return commitScore + schedScore + finScore;
+}
 
-  const col = (title, items, key) => `
-    <div class="card">
-      <div class="section-title" style="margin-top:0">${title} <span class="meta">${items.filter(i=>i.done).length} / ${items.length}</span></div>
-      <ul class="list" style="padding:0">
-        ${items.map(i => `
-          <li class="goal-item">
-            <div class="list-item" style="padding:10px 0; align-items:center">
-              <span class="check ${i.done?'checked':''}" data-toggle-goal="${key}|${i.id}"></span>
-              <span class="check-label ${i.done?'done':''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
-              <div class="fin-acts">
-                <button class="fin-edit-btn" data-edit-goal="${key}|${i.id}">&#x270E;</button>
-                <button class="fin-del-btn" data-del-goal="${key}|${i.id}">Delete</button>
-              </div>
-            </div>
-            <div class="inline-form" id="edit-goal-${i.id}">
-              <div class="inner">
-                <div class="field"><label>Edit</label><input type="text" id="f-goal-${i.id}" value="${escapeHtml(i.text)}" placeholder="..."/></div>
-                <div class="form-actions">
-                  <button class="btn" data-cancel="edit-goal-${i.id}">Cancel</button>
-                  <button class="btn primary" data-save-goal="${key}|${i.id}">Save</button>
+function renderCommitments() {
+  const today = todayISO();
+  const dos   = state.goals.dos   || [];
+  const donts = state.goals.donts || [];
+  const allGoals  = [...dos, ...donts];
+  const totalGoals = allGoals.length;
+
+  const dosChecked   = dos.filter(g => getTodayLog(g.id)?.checked).length;
+  const dontsChecked = donts.filter(g => getTodayLog(g.id)?.checked).length;
+  const overallPct   = totalGoals ? Math.round((dosChecked + dontsChecked) / totalGoals * 100) : 0;
+  const dosPct   = dos.length   ? Math.round(dosChecked   / dos.length   * 100) : 0;
+  const dontsPct = donts.length ? Math.round(dontsChecked / donts.length * 100) : 0;
+
+  function col(title, items, key) {
+    return `
+      <div class="card" style="animation-delay:40ms">
+        <div class="section-title" style="margin-top:0">${title} <span class="meta">${items.filter(i => getTodayLog(i.id)?.checked).length} / ${items.length}</span></div>
+        <ul class="list" style="padding:0">
+          ${items.map(i => {
+            const isChecked = getTodayLog(i.id)?.checked || false;
+            return `
+            <li class="goal-item">
+              <div class="list-item" style="padding:10px 0;align-items:center">
+                <span class="check ${isChecked ? 'checked' : ''}" data-toggle-goal="${key}|${i.id}"></span>
+                <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
+                <div class="fin-acts">
+                  <button class="fin-edit-btn" data-edit-goal="${key}|${i.id}">&#x270E;</button>
+                  <button class="fin-del-btn" data-del-goal="${key}|${i.id}">Delete</button>
                 </div>
               </div>
+              <div class="inline-form" id="edit-goal-${i.id}">
+                <div class="inner">
+                  <div class="field"><label>Edit</label><input type="text" id="f-goal-${i.id}" value="${escapeHtml(i.text)}" placeholder="..."/></div>
+                  <div class="form-actions">
+                    <button class="btn" data-cancel="edit-goal-${i.id}">Cancel</button>
+                    <button class="btn primary" data-save-goal="${key}|${i.id}">Save</button>
+                  </div>
+                </div>
+              </div>
+            </li>`;
+          }).join('')}
+        </ul>
+        <button class="add-btn" data-open-form="add-goal-${key}" style="margin-top:14px"><span class="plus">+</span> Add</button>
+        <div class="inline-form" id="add-goal-${key}">
+          <div class="inner">
+            <div class="field"><label>${title.slice(0, -1)}</label><input type="text" data-goal-input="${key}" placeholder="${key === 'dos' ? 'e.g. Drink 2L water' : 'e.g. No phone in bed'}"/></div>
+            <div class="form-actions">
+              <button class="btn" data-cancel="add-goal-${key}">Cancel</button>
+              <button class="btn primary" data-goal-save="${key}">Add</button>
             </div>
-          </li>`).join('')}
-      </ul>
-      <button class="add-btn" data-open-form="add-goal-${key}" style="margin-top:14px"><span class="plus">+</span> Add</button>
-      <div class="inline-form" id="add-goal-${key}">
-        <div class="inner">
-          <div class="field"><label>${title.slice(0,-1)}</label><input type="text" data-goal-input="${key}" placeholder="${key==='dos'?'e.g. Drink 2L water':'e.g. No phone in bed'}"/></div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="add-goal-${key}">Cancel</button>
-            <button class="btn primary" data-goal-save="${key}">Add</button>
           </div>
         </div>
-      </div>
-    </div>`;
+      </div>`;
+  }
+
+  // Weekly recap
+  const weekDayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const weekDays = getCurrentWeekDays();
+  const weeklyHtml = weekDays.map((d, i) => {
+    const iso = isoLocal(d);
+    const isFuture = iso > today;
+    const isToday  = iso === today;
+    if (isFuture) return `<div class="week-day"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle future">–</div><div class="week-pct">–</div></div>`;
+    const pct = getDayCompliancePct(iso);
+    const cls  = pct >= 80 ? 'full' : pct >= 40 ? 'half' : 'low';
+    const char = pct >= 80 ? '●' : pct >= 40 ? '◐' : '○';
+    return `<div class="week-day${isToday ? ' today' : ''}"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle ${cls}">${char}</div><div class="week-pct">${Math.round(pct)}%</div></div>`;
+  }).join('');
+
+  // Monthly compliance calendar
+  const [vy, vm] = today.slice(0, 7).split('-').map(Number);
+  const monthLabel  = new Date(vy, vm - 1, 1).toLocaleDateString(undefined, { month: 'long' });
+  const firstDow    = new Date(vy, vm - 1, 1).getDay();
+  const daysInMonth = new Date(vy, vm, 0).getDate();
+  const calDows = ['S','M','T','W','T','F','S'];
+  let monthCalHtml = calDows.map(d => `<div class="commit-cal-dow">${d}</div>`).join('');
+  for (let i = 0; i < firstDow; i++) monthCalHtml += `<div class="commit-cal-cell other"></div>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = `${String(vy).padStart(4,'0')}-${String(vm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const isToday  = iso === today;
+    const isFuture = iso > today;
+    let bg = '';
+    let tt = '';
+    if (!isFuture && totalGoals > 0) {
+      const pct = getDayCompliancePct(iso);
+      if (pct >= 80)      bg = `background:color-mix(in oklab, var(--accent) 80%, transparent);`;
+      else if (pct >= 40) bg = `background:color-mix(in oklab, var(--accent) 30%, transparent);`;
+      else if (pct > 0)   bg = `background:color-mix(in oklab, var(--danger) 30%, transparent);`;
+      if (pct > 0) tt = `title="${Math.round(pct)}%"`;
+    }
+    monthCalHtml += `<div class="commit-cal-cell${isToday ? ' today' : ''}${isFuture ? ' future' : ''}" style="${bg}" ${tt}>${day}</div>`;
+  }
 
   return `
     ${topbar()}
-    <h1 class="page-title">Goals &amp; Rules</h1>
-    <div class="card" style="animation-delay:40ms">
+    <h1 class="page-title">Commitments</h1>
+    <div class="card" style="animation-delay:0ms">
       <div class="section-title" style="margin-top:0">Today's progress</div>
-      <div style="display:flex; align-items:baseline; gap:10px;">
-        <div style="font-size:32px; font-weight:300; font-variant-numeric: tabular-nums;">${pct}<span style="font-size:18px; color:var(--text-faint)">%</span></div>
-        <div style="font-size:12px; color:var(--text-faint)">of Do's checked</div>
+      <div class="commit-progress-row">
+        <span class="commit-prog-label">Do's</span>
+        <div class="progress" style="flex:1;margin-top:0"><div class="bar" style="width:${dosPct}%"></div></div>
+        <span class="commit-prog-meta">${dosChecked} / ${dos.length}</span>
       </div>
-      <div class="progress"><div class="bar" style="width:${pct}%"></div></div>
-      <div class="progress-meta"><span>${dosDone} done</span><span>${dos.length - dosDone} to go</span></div>
+      <div class="commit-progress-row" style="margin-top:10px">
+        <span class="commit-prog-label">Don'ts</span>
+        <div class="progress" style="flex:1;margin-top:0"><div class="bar" style="width:${dontsPct}%"></div></div>
+        <span class="commit-prog-meta">${dontsChecked} / ${donts.length}</span>
+      </div>
+      <div class="commit-big-pct">
+        <div style="font-size:48px;font-weight:200;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1">${overallPct}<span style="font-size:24px">%</span></div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:6px">today's compliance</div>
+      </div>
     </div>
-    <div class="card-row" style="grid-template-columns: 1fr; margin-top:16px;">
-      ${col("Do's", state.goals.dos, 'dos')}
-      ${col("Don'ts", state.goals.donts, 'donts')}
+    <div style="margin-top:16px">${col("Do's", dos, 'dos')}</div>
+    <div style="margin-top:16px">${col("Don'ts", donts, 'donts')}</div>
+    <div class="card" style="margin-top:16px;animation-delay:80ms">
+      <div class="commit-preview-tabs">
+        <button class="commit-tab-btn${state.commitPreviewTab === 'weekly' ? ' active' : ''}" data-commit-tab="weekly">Weekly</button>
+        <button class="commit-tab-btn${state.commitPreviewTab === 'monthly' ? ' active' : ''}" data-commit-tab="monthly">Monthly</button>
+      </div>
+      ${state.commitPreviewTab === 'weekly'
+        ? `<div class="week-strip" style="margin-top:12px">${weeklyHtml}</div>`
+        : `<div style="font-size:11px;color:var(--text-faint);margin-bottom:8px;text-align:right">${monthLabel}</div><div class="commit-cal-grid">${monthCalHtml}</div>`
+      }
     </div>
   `;
 }
 
-/* ---- LIFE: HABITS ---- */
-function renderHabits() {
+/* ---- LIFE: PROJECTS ---- */
+function renderProjectCard(p, i) {
+  const isExpanded = (state.expandedProjectIds || []).includes(p.id);
+  const doneTasks  = p.tasks.filter(t => t.checked).length;
+  const totalTasks = p.tasks.length;
+  const pct        = totalTasks ? Math.round(doneTasks / totalTasks * 100) : 0;
+  const isDone     = p.status === 'done';
+
+  let deadlineHtml = '';
+  if (p.deadline) {
+    const days = daysUntil(p.deadline);
+    const isUrgent  = !isDone && days <= 7 && days >= 0;
+    const isOverdue = !isDone && days < 0;
+    const label = isDone ? fmtDate(p.deadline)
+                : days === 0 ? 'Due today'
+                : days < 0  ? `Overdue · ${fmtDate(p.deadline)}`
+                : `Due ${fmtDate(p.deadline)}`;
+    deadlineHtml = `<span class="proj-deadline${isUrgent||isOverdue?' urgent':''}">${label}</span>`;
+  }
+
+  const statusLabels = { active: 'Active', on_hold: 'On Hold', done: 'Done' };
+  const statusBadge  = `<span class="proj-badge proj-badge-${p.status}">${statusLabels[p.status]}</span>`;
+
   return `
-    ${topbar()}
-    <h1 class="page-title">Habits</h1>
-    <div class="habit-grid">
-      ${state.habits.map(h => `
-        <div class="habit ${h.doneToday?'checked':''}" data-habit="${h.id}">
-          <button class="habit-del" data-del-habit="${h.id}">×</button>
-          <button class="habit-edit" data-edit-habit="${h.id}">✎</button>
-          <div class="habit-top">
-            <div class="habit-name">${escapeHtml(h.name)}</div>
-            <div class="habit-streak"><span class="num">${h.streak}</span> day${h.streak===1?'':'s'}</div>
+    <div class="card proj-card" style="animation-delay:${i*60}ms" data-proj-id="${p.id}">
+      <div class="proj-card-header">
+        <div class="proj-card-title-row">
+          <div class="proj-name${isDone?' done':''}">${escapeHtml(p.name)}</div>
+          <div class="proj-meta-row">
+            ${statusBadge}
+            ${deadlineHtml}
           </div>
-          <div class="habit-grid-7">
-            ${h.log.map(v => `<div class="cell ${v?'on':''}"></div>`).join('')}
-          </div>
-          <div class="habit-row">
-            <span class="check ${h.doneToday?'checked':''}" data-toggle-habit="${h.id}"></span>
-            <span class="status">${h.doneToday?'Done today':'Tap to mark'}</span>
-          </div>
-          <div class="habit-edit-form">
-            <input class="habit-edit-input" data-habit-edit-input="${h.id}" type="text" value="${escapeHtml(h.name)}" placeholder="Habit name"/>
-            <div class="habit-edit-actions">
-              <button class="btn" data-habit-edit-cancel="${h.id}">Cancel</button>
-              <button class="btn primary" data-habit-edit-save="${h.id}">Save</button>
-            </div>
-          </div>
-        </div>`).join('')}
-    </div>
-    <button class="add-btn" data-open-form="add-habit" style="margin-top:18px"><span class="plus">+</span> Add habit</button>
-    <div class="inline-form" id="add-habit">
-      <div class="inner">
-        <div class="field"><label>Name</label><input type="text" id="f-habit-name" placeholder="e.g. 10k steps"/></div>
-        <div class="form-actions">
-          <button class="btn" data-cancel="add-habit">Cancel</button>
-          <button class="btn primary" id="f-habit-save">Add</button>
+        </div>
+        <div class="proj-card-acts">
+          <button class="fin-edit-btn" data-edit-proj="${p.id}" title="Edit">&#x270E;</button>
+          <button class="fin-edit-btn" data-toggle-proj-done="${p.id}" title="${isDone?'Reopen':'Mark done'}" style="color:${isDone?'var(--text-faint)':'var(--good)'}">${isDone?'↩':'✓'}</button>
+          <button class="fin-del-btn" data-del-proj="${p.id}" title="Delete">&#x00D7;</button>
         </div>
       </div>
-    </div>
-  `;
-}
-
-/* ---- LIFE: FOCUS ---- */
-function renderFocus() {
-  const f = state.focus;
-  const done = f.tasks.filter(t => t.done).length;
-  return `
-    ${topbar()}
-    <h1 class="page-title">Focus</h1>
-    <div class="card focus-card">
-      <div class="focus-meta">Main focus</div>
-      <textarea class="focus-input" id="focus-main" placeholder="What are you working toward?">${escapeHtml(f.main)}</textarea>
-    </div>
-    <div class="card" style="animation-delay:80ms">
-      <div class="section-title" style="margin-top:0">Sub-tasks <span class="meta">${done} of ${f.tasks.length} done</span></div>
-      <ul class="list">
-        ${f.tasks.map(t => `
-          <li class="focus-task-item" data-id="${t.id}">
-            <div class="list-item row-wrap" style="padding:12px 0; align-items:flex-start">
-              <span class="check ${t.done?'checked':''}" data-toggle-focus="${t.id}" style="margin-top:2px; flex-shrink:0"></span>
-              <div class="check-label ${t.done?'done':''}" style="flex:1; min-width:0">
-                <div data-task-text="${t.id}">${escapeHtml(t.text)}</div>
-                <div class="task-desc-wrap" data-desc-id="${t.id}">${t.description ? `<div class="task-desc-text">${escapeHtml(t.description.length > 80 ? t.description.slice(0, 80) + '...' : t.description)}</div>` : `<div class="task-desc-ph">Add description...</div>`}</div>
-              </div>
-              <div class="focus-task-acts">
-                <button class="fin-edit-btn" data-edit-focus="${t.id}">✎</button>
-                <button class="fin-del-btn" data-del-focus="${t.id}">Delete</button>
-              </div>
-            </div>
-            <div class="inline-form" id="edit-focus-${t.id}">
-              <div class="inner">
-                <div class="field"><label>Task</label><input type="text" id="f-ef-text-${t.id}" value="${escapeHtml(t.text)}"/></div>
-                <div class="field"><label>Description</label><textarea id="f-ef-desc-${t.id}" rows="2" placeholder="Description (optional)">${escapeHtml(t.description||'')}</textarea></div>
-                <div class="form-actions">
-                  <button class="btn" data-cancel="edit-focus-${t.id}">Cancel</button>
-                  <button class="btn primary" data-save-focus="${t.id}">Save</button>
-                </div>
-              </div>
-            </div>
-          </li>`).join('')}
-      </ul>
-      <button class="add-btn" data-open-form="add-focus" style="margin-top:14px"><span class="plus">+</span> Add sub-task</button>
-      <div class="inline-form" id="add-focus">
+      ${totalTasks > 0 ? `
+        <div class="proj-progress">
+          <div class="proj-progress-meta">
+            <span>${doneTasks} / ${totalTasks} tasks done</span>
+            <span>${pct}%</span>
+          </div>
+          <div class="progress"><div class="bar" style="width:${pct}%"></div></div>
+        </div>
+      ` : ''}
+      <div class="inline-form" id="edit-proj-${p.id}">
         <div class="inner">
-          <div class="field"><label>Sub-task</label><input type="text" id="f-focus-text" placeholder="What's the next concrete step?"/></div>
-          <div class="field"><label>Description</label><textarea id="f-focus-desc" rows="2" placeholder="Description (optional)"></textarea></div>
+          <div class="field"><label>Project name</label><input type="text" id="f-ep-name-${p.id}" value="${escapeHtml(p.name)}"/></div>
+          <div class="form-row">
+            <div class="field"><label>Status</label><select id="f-ep-status-${p.id}">
+              <option value="active"  ${p.status==='active'  ?'selected':''}>Active</option>
+              <option value="on_hold" ${p.status==='on_hold' ?'selected':''}>On Hold</option>
+              <option value="done"    ${p.status==='done'    ?'selected':''}>Done</option>
+            </select></div>
+            <div class="field"><label>Deadline</label><input type="date" id="f-ep-deadline-${p.id}" value="${p.deadline||''}"/></div>
+          </div>
           <div class="form-actions">
-            <button class="btn" data-cancel="add-focus">Cancel</button>
-            <button class="btn primary" id="f-focus-save">Add</button>
+            <button class="btn" data-cancel="edit-proj-${p.id}">Cancel</button>
+            <button class="btn primary" data-save-proj="${p.id}">Save</button>
           </div>
         </div>
       </div>
+      <button class="proj-expand-btn" data-toggle-proj-expand="${p.id}">
+        <span>${isExpanded?'▼':'▶'}</span>
+        <span>${isExpanded?'Hide tasks':'Show tasks'}</span>
+      </button>
+      ${isExpanded ? `
+        <div class="proj-tasks" id="proj-tasks-${p.id}">
+          <ul class="list" style="margin-top:4px">
+            ${p.tasks.map(t => `
+              <li class="focus-task-item" data-id="${t.id}">
+                <div class="list-item row-wrap" style="padding:10px 0; align-items:flex-start">
+                  <span class="check ${t.checked?'checked':''}" data-toggle-proj-task="${p.id}|${t.id}" style="margin-top:2px;flex-shrink:0"></span>
+                  <div class="check-label ${t.checked?'done':''}" style="flex:1;min-width:0">
+                    <div>${escapeHtml(t.text)}</div>
+                    ${t.description ? `<div class="task-desc-text">${escapeHtml(t.description.length>80?t.description.slice(0,80)+'...':t.description)}</div>` : ''}
+                  </div>
+                  <div class="focus-task-acts">
+                    <button class="fin-edit-btn" data-edit-proj-task="${p.id}|${t.id}">&#x270E;</button>
+                    <button class="fin-del-btn" data-del-proj-task="${p.id}|${t.id}">&#x00D7;</button>
+                  </div>
+                </div>
+                <div class="inline-form" id="edit-proj-task-${t.id}">
+                  <div class="inner">
+                    <div class="field"><label>Task</label><input type="text" id="f-ept-text-${t.id}" value="${escapeHtml(t.text)}"/></div>
+                    <div class="field"><label>Description</label><textarea id="f-ept-desc-${t.id}" rows="2" placeholder="Description (optional)">${escapeHtml(t.description||'')}</textarea></div>
+                    <div class="form-actions">
+                      <button class="btn" data-cancel="edit-proj-task-${t.id}">Cancel</button>
+                      <button class="btn primary" data-save-proj-task="${p.id}|${t.id}">Save</button>
+                    </div>
+                  </div>
+                </div>
+              </li>
+            `).join('')}
+          </ul>
+          <button class="add-btn" data-open-form="add-proj-task-${p.id}" style="margin-top:10px"><span class="plus">+</span> Add task</button>
+          <div class="inline-form" id="add-proj-task-${p.id}">
+            <div class="inner">
+              <div class="field"><label>Task</label><input type="text" id="f-pt-text-${p.id}" placeholder="What needs to be done?"/></div>
+              <div class="field"><label>Description</label><textarea id="f-pt-desc-${p.id}" rows="2" placeholder="Description (optional)"></textarea></div>
+              <div class="form-actions">
+                <button class="btn" data-cancel="add-proj-task-${p.id}">Cancel</button>
+                <button class="btn primary" data-save-proj-task-new="${p.id}">Add</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    </div>`;
+}
+
+function renderProjects() {
+  const filter = state.projectsFilter || 'all';
+  const allProjects = state.projects || [];
+  const filtered = filter === 'all' ? allProjects : allProjects.filter(p => p.status === filter);
+  const filterLabels = { all: 'All', active: 'Active', on_hold: 'On Hold', done: 'Done' };
+
+  return `
+    ${topbar()}
+    <div class="projects-header">
+      <h1 class="page-title" style="margin:0">Projects</h1>
+      <button class="add-btn-inline" data-open-form="add-project-form">+ New Project</button>
     </div>
+    <div class="pills" style="margin: 14px 0 18px">
+      ${['all','active','on_hold','done'].map(f =>
+        `<button class="pill${filter===f?' active':''}" data-proj-filter="${f}">${filterLabels[f]}</button>`
+      ).join('')}
+    </div>
+    <div class="inline-form" id="add-project-form">
+      <div class="inner">
+        <div class="field"><label>Project name</label><input type="text" id="f-proj-name" placeholder="e.g. Client Website"/></div>
+        <div class="form-row">
+          <div class="field"><label>Status</label><select id="f-proj-status">
+            <option value="active">Active</option>
+            <option value="on_hold">On Hold</option>
+            <option value="done">Done</option>
+          </select></div>
+          <div class="field"><label>Deadline (optional)</label><input type="date" id="f-proj-deadline"/></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" data-cancel="add-project-form">Cancel</button>
+          <button class="btn primary" id="f-proj-save">Add</button>
+        </div>
+      </div>
+    </div>
+    ${filtered.length === 0
+      ? `<div style="color:var(--text-faint);font-size:13px;padding:20px 0">No projects${filter!=='all'?' with this status':''}.</div>`
+      : filtered.map((p, i) => renderProjectCard(p, i)).join('')
+    }
   `;
 }
 
@@ -1076,111 +1303,165 @@ function bindMainEvents() {
     saveUIPrefs(); render();
   });
 
-  // focus task toggle
-  main.querySelectorAll('[data-toggle-focus]').forEach(el => el.addEventListener('click', () => {
-    const id = el.dataset.toggleFocus;
-    const t = state.focus.tasks.find(x => x.id === id);
-    if (!t) return;
-    t.done = !t.done;
-    pulse(el); render();
-    dbCall(() => sb.from('focus_tasks').update({ checked: t.done }).eq('id', id));
+  // project filter pills
+  main.querySelectorAll('[data-proj-filter]').forEach(el => el.addEventListener('click', () => {
+    state.projectsFilter = el.dataset.projFilter;
+    render();
   }));
 
-  // habit toggle
-  main.querySelectorAll('[data-toggle-habit]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.toggleHabit;
-    const h = state.habits.find(x => x.id === id);
-    if (!h) return;
-    h.doneToday = !h.doneToday;
-    if (h.doneToday) { h.streak += 1; h.log = h.log.slice(1).concat(1); }
-    else { h.streak = Math.max(0, h.streak - 1); h.log = h.log.slice(0,-1); h.log.push(0); h.log = h.log.slice(-7); }
-    pulse(el); render();
-    const today = todayISO();
-    await dbCall(() => sb.from('habit_logs').upsert(
-      { habit_id: id, user_id: currentUser.id, date: today, checked: h.doneToday },
-      { onConflict: 'habit_id,date' }
-    ));
-    dbCall(() => sb.from('habits').update({ streak: h.streak }).eq('id', id));
-  }));
-
-  // habit delete — × button click
-  main.querySelectorAll('[data-del-habit]').forEach(el => el.addEventListener('click', (e) => {
+  // project expand/collapse
+  main.querySelectorAll('[data-toggle-proj-expand]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
-    const id = el.dataset.delHabit;
-    const card = el.closest('.habit');
-    if (!card) return;
-    card.classList.remove('delete-mode');
-    card.classList.add('deleting');
-    setTimeout(() => {
-      state.habits = state.habits.filter(h => h.id !== id);
+    const id = el.dataset.toggleProjExpand;
+    const idx = state.expandedProjectIds.indexOf(id);
+    if (idx === -1) state.expandedProjectIds.push(id);
+    else state.expandedProjectIds.splice(idx, 1);
+    render();
+  }));
+
+  // project task toggle (Today + Projects pages)
+  main.querySelectorAll('[data-toggle-proj-task]').forEach(el => el.addEventListener('click', () => {
+    const [projId, taskId] = el.dataset.toggleProjTask.split('|');
+    const proj = state.projects.find(p => p.id === projId);
+    if (!proj) return;
+    const task = proj.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    task.checked = !task.checked;
+    pulse(el); render();
+    dbCall(() => sb.from('project_tasks').update({ checked: task.checked }).eq('id', taskId));
+  }));
+
+  // project delete
+  main.querySelectorAll('[data-del-proj]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.delProj;
+    state.projects = state.projects.filter(p => p.id !== id);
+    state.expandedProjectIds = state.expandedProjectIds.filter(eid => eid !== id);
+    render();
+    dbCall(() => sb.from('projects').delete().eq('id', id));
+  }));
+
+  // project edit open
+  main.querySelectorAll('[data-edit-proj]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const id = el.dataset.editProj;
+    const form = document.getElementById('edit-proj-' + id);
+    if (!form) return;
+    const isOpen = form.classList.contains('open');
+    closeAllForms();
+    if (!isOpen) form.classList.add('open');
+  }));
+
+  // project edit save
+  main.querySelectorAll('[data-save-proj]').forEach(el => el.addEventListener('click', async () => {
+    const id = el.dataset.saveProj;
+    const nameEl     = document.getElementById('f-ep-name-'     + id);
+    const statusEl   = document.getElementById('f-ep-status-'   + id);
+    const deadlineEl = document.getElementById('f-ep-deadline-' + id);
+    if (!nameEl) return;
+    const newName     = nameEl.value.trim();
+    if (!newName) { nameEl.focus(); return; }
+    const newStatus   = statusEl   ? statusEl.value             : 'active';
+    const newDeadline = deadlineEl ? (deadlineEl.value || null) : null;
+    const proj = state.projects.find(p => p.id === id);
+    if (proj) { proj.name = newName; proj.status = newStatus; proj.deadline = newDeadline; }
+    render();
+    dbCall(() => sb.from('projects').update({ name: newName, status: newStatus, deadline: newDeadline, updated_at: new Date().toISOString() }).eq('id', id));
+  }));
+
+  // project toggle done/reopen
+  main.querySelectorAll('[data-toggle-proj-done]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.toggleProjDone;
+    const proj = state.projects.find(p => p.id === id);
+    if (!proj) return;
+    proj.status = proj.status === 'done' ? 'active' : 'done';
+    render();
+    dbCall(() => sb.from('projects').update({ status: proj.status, updated_at: new Date().toISOString() }).eq('id', id));
+  }));
+
+  // project task delete
+  main.querySelectorAll('[data-del-proj-task]').forEach(el => el.addEventListener('click', () => {
+    const [projId, taskId] = el.dataset.delProjTask.split('|');
+    const proj = state.projects.find(p => p.id === projId);
+    if (!proj) return;
+    proj.tasks = proj.tasks.filter(t => t.id !== taskId);
+    render();
+    dbCall(() => sb.from('project_tasks').delete().eq('id', taskId));
+  }));
+
+  // project task edit open
+  main.querySelectorAll('[data-edit-proj-task]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const [, taskId] = el.dataset.editProjTask.split('|');
+    const form = document.getElementById('edit-proj-task-' + taskId);
+    if (!form) return;
+    const isOpen = form.classList.contains('open');
+    closeAllForms();
+    if (!isOpen) form.classList.add('open');
+  }));
+
+  // project task edit save
+  main.querySelectorAll('[data-save-proj-task]').forEach(el => el.addEventListener('click', async () => {
+    const [projId, taskId] = el.dataset.saveProjTask.split('|');
+    const textEl = document.getElementById('f-ept-text-' + taskId);
+    const descEl = document.getElementById('f-ept-desc-' + taskId);
+    if (!textEl) return;
+    const newText = textEl.value.trim();
+    if (!newText) { textEl.focus(); return; }
+    const newDesc = descEl ? descEl.value.trim() : '';
+    const proj = state.projects.find(p => p.id === projId);
+    if (proj) {
+      const task = proj.tasks.find(t => t.id === taskId);
+      if (task) { task.text = newText; task.description = newDesc; }
+    }
+    render();
+    dbCall(() => sb.from('project_tasks').update({ text: newText, description: newDesc || null }).eq('id', taskId));
+  }));
+
+  // project add task (per-project inline form)
+  main.querySelectorAll('[data-save-proj-task-new]').forEach(btn => btn.addEventListener('click', async () => {
+    const projId = btn.dataset.saveProjTaskNew;
+    const textEl = main.querySelector(`#f-pt-text-${projId}`);
+    const descEl = main.querySelector(`#f-pt-desc-${projId}`);
+    const text = textEl ? textEl.value.trim() : '';
+    const desc = descEl ? descEl.value.trim() : '';
+    if (!text) { textEl?.focus(); return; }
+    const proj = state.projects.find(p => p.id === projId);
+    if (!proj) return;
+    const { data } = await dbCall(() => sb.from('project_tasks').insert({ user_id: currentUser.id, project_id: projId, text, description: desc || null, checked: false }).select().single());
+    if (data) {
+      proj.tasks.push({ id: data.id, text, description: desc, checked: false });
       render();
-      dbCall(() => sb.from('habits').delete().eq('id', id));
-      dbCall(() => sb.from('habit_logs').delete().eq('habit_id', id));
-    }, 260);
-  }));
-
-  // habit long-press — mobile delete mode
-  main.querySelectorAll('.habit').forEach(card => {
-    let pressTimer = null;
-    const startPress = (e) => {
-      if (e.target.closest('[data-toggle-habit], .habit-del, .habit-edit')) return;
-      pressTimer = setTimeout(() => {
-        pressTimer = null;
-        card.classList.add('shaking', 'delete-mode');
-        card.addEventListener('animationend', () => card.classList.remove('shaking'), { once: true });
-      }, 500);
-    };
-    const cancelPress = () => { clearTimeout(pressTimer); pressTimer = null; };
-    card.addEventListener('touchstart',  startPress,   { passive: true });
-    card.addEventListener('touchend',    cancelPress,  { passive: true });
-    card.addEventListener('touchmove',   cancelPress,  { passive: true });
-    card.addEventListener('touchcancel', cancelPress,  { passive: true });
-  });
-
-  // habit edit — ✎ button
-  main.querySelectorAll('[data-edit-habit]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const id = el.dataset.editHabit;
-    const card = el.closest('.habit');
-    if (!card) return;
-    main.querySelectorAll('.habit.editing').forEach(c => { if (c !== card) c.classList.remove('editing'); });
-    card.classList.toggle('editing');
-    if (card.classList.contains('editing')) {
-      const input = card.querySelector(`[data-habit-edit-input="${id}"]`);
-      if (input) setTimeout(() => { input.focus(); input.select(); }, 30);
     }
   }));
 
-  main.querySelectorAll('[data-habit-edit-cancel]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const card = el.closest('.habit');
-    if (card) card.classList.remove('editing');
+  // commitments preview tab switch
+  main.querySelectorAll('[data-commit-tab]').forEach(el => el.addEventListener('click', () => {
+    state.commitPreviewTab = el.dataset.commitTab;
+    render();
   }));
 
-  main.querySelectorAll('[data-habit-edit-save]').forEach(el => el.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    const id = el.dataset.habitEditSave;
-    const card = el.closest('.habit');
-    const input = card?.querySelector(`[data-habit-edit-input="${id}"]`);
-    if (!input) return;
-    const newName = input.value.trim();
-    if (!newName) { input.focus(); return; }
-    const h = state.habits.find(x => x.id === id);
-    if (h) h.name = newName;
-    const nameEl = card.querySelector('.habit-name');
-    if (nameEl) nameEl.textContent = newName;
-    card.classList.remove('editing');
-    dbCall(() => sb.from('habits').update({ name: newName }).eq('id', id));
-  }));
-
-  // goal toggle
-  main.querySelectorAll('[data-toggle-goal]').forEach(el => el.addEventListener('click', () => {
+  // goal toggle → upsert goal_logs
+  main.querySelectorAll('[data-toggle-goal]').forEach(el => el.addEventListener('click', async () => {
     const [k, id] = el.dataset.toggleGoal.split('|');
-    const g = state.goals[k].find(x => x.id === id);
-    if (!g) return;
-    g.done = !g.done;
+    const g = (state.goals[k] || []).find(x => x.id === id);
+    if (!g || !currentUser) return;
+    const today = todayISO();
+    const existingLog = getTodayLog(id);
+    const newChecked = existingLog ? !existingLog.checked : true;
+    if (existingLog) {
+      existingLog.checked = newChecked;
+    } else {
+      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked });
+    }
     pulse(el); render();
-    dbCall(() => sb.from('goals').update({ checked: g.done }).eq('id', id));
+    const { data } = await dbCall(() => sb.from('goal_logs').upsert(
+      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked },
+      { onConflict: 'goal_id,date' }
+    ).select().single());
+    if (data) {
+      const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
+      if (localLog && !localLog.id) localLog.id = data.id;
+    }
   }));
 
   // delete handlers
@@ -1306,41 +1587,6 @@ function bindMainEvents() {
     dbCall(() => sb.from('goals').update({ text: newText }).eq('id', id));
   }));
 
-  main.querySelectorAll('[data-del-focus]').forEach(el => el.addEventListener('click', () => {
-    const id = el.dataset.delFocus;
-    state.focus.tasks = state.focus.tasks.filter(t => t.id !== id);
-    render();
-    dbCall(() => sb.from('focus_tasks').delete().eq('id', id));
-  }));
-
-  // focus task edit — open/save
-  main.querySelectorAll('[data-edit-focus]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const id = el.dataset.editFocus;
-    const form = document.getElementById('edit-focus-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
-  }));
-
-  main.querySelectorAll('[data-save-focus]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.saveFocus;
-    const textEl = document.getElementById('f-ef-text-' + id);
-    const descEl = document.getElementById('f-ef-desc-' + id);
-    if (!textEl) return;
-    const newText = textEl.value.trim();
-    if (!newText) { textEl.focus(); return; }
-    const newDesc = descEl ? descEl.value.trim() : '';
-    const t = state.focus.tasks.find(x => x.id === id);
-    if (t) { t.text = newText; t.description = newDesc; }
-    const taskTextEl = document.querySelector(`[data-task-text="${id}"]`);
-    if (taskTextEl) taskTextEl.textContent = newText;
-    const descWrap = document.querySelector(`[data-desc-id="${id}"]`);
-    if (descWrap) descWrap.innerHTML = newDesc ? `<div class="task-desc-text">${escapeHtml(newDesc.length > 80 ? newDesc.slice(0, 80) + '...' : newDesc)}</div>` : `<div class="task-desc-ph">Add description...</div>`;
-    document.getElementById('edit-focus-' + id)?.classList.remove('open');
-    dbCall(() => sb.from('focus_tasks').update({ text: newText, description: newDesc || null }).eq('id', id));
-  }));
 
   main.querySelectorAll('[data-del-income]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delIncome;
@@ -1511,19 +1757,6 @@ function bindMainEvents() {
 
   // form saves
   bindFormSaves();
-
-  // focus textarea autosave (debounced)
-  const fmEl = main.querySelector('#focus-main');
-  if (fmEl) {
-    let focusTimer = null;
-    fmEl.addEventListener('input', () => {
-      state.focus.main = fmEl.value;
-      clearTimeout(focusTimer);
-      focusTimer = setTimeout(() => {
-        if (focusBoardId) dbCall(() => sb.from('focus_board').update({ main_focus: state.focus.main }).eq('id', focusBoardId));
-      }, 600);
-    });
-  }
 
 
   // ---- NOTES ----
@@ -1729,27 +1962,23 @@ function bindFormSaves() {
     const text = input?.value.trim();
     if (!text) return;
     const type = k === 'dos' ? 'do' : 'dont';
-    const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text, checked: false }).select().single());
-    if (data) { state.goals[k].push({ id: data.id, text, done: false }); render(); }
+    const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text }).select().single());
+    if (data) { state.goals[k].push({ id: data.id, text }); render(); }
   }));
 
-  // habit
-  const hb = main.querySelector('#f-habit-save');
-  if (hb) hb.addEventListener('click', async () => {
-    const name = main.querySelector('#f-habit-name').value.trim();
-    if (!name) return;
-    const { data } = await dbCall(() => sb.from('habits').insert({ user_id: currentUser.id, name, streak: 0 }).select().single());
-    if (data) { state.habits.push({ id: data.id, name, streak: 0, doneToday: false, log: [0,0,0,0,0,0,0] }); render(); }
-  });
-
-  // focus task
-  const ff = main.querySelector('#f-focus-save');
-  if (ff) ff.addEventListener('click', async () => {
-    const text = main.querySelector('#f-focus-text').value.trim();
-    const desc = (main.querySelector('#f-focus-desc')?.value || '').trim();
-    if (!text || !focusBoardId) return;
-    const { data } = await dbCall(() => sb.from('focus_tasks').insert({ focus_id: focusBoardId, user_id: currentUser.id, text, checked: false, description: desc || null }).select().single());
-    if (data) { state.focus.tasks.push({ id: data.id, text, done: false, description: desc }); render(); }
+  // add new project
+  const newProj = main.querySelector('#f-proj-save');
+  if (newProj) newProj.addEventListener('click', async () => {
+    const name     = main.querySelector('#f-proj-name')?.value.trim();
+    const status   = main.querySelector('#f-proj-status')?.value || 'active';
+    const deadline = main.querySelector('#f-proj-deadline')?.value || null;
+    if (!name) { main.querySelector('#f-proj-name')?.focus(); return; }
+    const now = new Date().toISOString();
+    const { data } = await dbCall(() => sb.from('projects').insert({ user_id: currentUser.id, name, status, deadline: deadline || null, updated_at: now }).select().single());
+    if (data) {
+      state.projects.push({ id: data.id, name, status, deadline: data.deadline, tasks: [] });
+      render();
+    }
   });
 
   // income
@@ -1808,9 +2037,6 @@ document.addEventListener('click', (e) => {
       dd.classList.remove('open');
     }
   });
-  if (!e.target.closest('.habit.delete-mode')) {
-    document.querySelectorAll('.habit.delete-mode').forEach(c => c.classList.remove('delete-mode'));
-  }
 });
 
 /* =========================================================

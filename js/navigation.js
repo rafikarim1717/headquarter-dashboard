@@ -10,9 +10,8 @@ function setActiveTab(tab) {
 const ROUTES = {
   'life:home': renderLifeHome,
   'life:schedule': renderSchedule,
-  'life:goals': renderGoals,
-  'life:habits': renderHabits,
-  'life:focus': renderFocus,
+  'life:commitments': renderCommitments,
+  'life:projects': renderProjects,
   'life:notes': renderNotes,
   'finance:overview': renderFinanceOverview,
   'finance:income': renderIncome,
