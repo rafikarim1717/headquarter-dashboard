@@ -122,6 +122,7 @@ function defaultState() {
     projects: [
       {
         name: 'Client Website',
+        description: '',
         status: 'active',
         deadline: dayKey(14),
         tasks: [
@@ -132,6 +133,7 @@ function defaultState() {
       },
       {
         name: 'Personal Development',
+        description: '',
         status: 'active',
         deadline: null,
         tasks: [
@@ -141,6 +143,7 @@ function defaultState() {
       },
       {
         name: 'Side Business',
+        description: '',
         status: 'on_hold',
         deadline: null,
         tasks: [
@@ -629,6 +632,7 @@ function renderProjectCard(p, i) {
           <button class="fin-del-btn" data-del-proj="${p.id}" title="Delete">&#x00D7;</button>
         </div>
       </div>
+      ${p.description ? `<div class="proj-desc">${escapeHtml(p.description.length > 120 ? p.description.slice(0, 120) + '...' : p.description)}</div>` : ''}
       ${totalTasks > 0 ? `
         <div class="proj-progress">
           <div class="proj-progress-meta">
@@ -1401,17 +1405,18 @@ function bindMainEvents() {
     showModal({
       title: 'New Project',
       fields: [
-        { id: 'name',     label: 'Project name',        type: 'text',   value: '', placeholder: 'e.g. Client Website' },
-        { id: 'status',   label: 'Status',              type: 'select', value: 'active', options: [{ value: 'active', label: 'Active' }, { value: 'on_hold', label: 'On Hold' }, { value: 'done', label: 'Done' }] },
-        { id: 'deadline', label: 'Deadline (optional)', type: 'date',   value: '' }
+        { id: 'name',        label: 'Project name',        type: 'text',     value: '', placeholder: 'e.g. Client Website' },
+        { id: 'description', label: 'Description',         type: 'textarea', value: '', placeholder: 'Optional project description' },
+        { id: 'status',      label: 'Status',              type: 'select',   value: 'active', options: [{ value: 'active', label: 'Active' }, { value: 'on_hold', label: 'On Hold' }, { value: 'done', label: 'Done' }] },
+        { id: 'deadline',    label: 'Deadline (optional)', type: 'date',     value: '' }
       ],
       saveLabel: 'Add',
-      onSave: async ({ name, status, deadline }) => {
+      onSave: async ({ name, description, status, deadline }) => {
         const trimmed = name.trim();
         if (!trimmed) return;
         const now = new Date().toISOString();
-        const { data } = await dbCall(() => sb.from('projects').insert({ user_id: currentUser.id, name: trimmed, status, deadline: deadline || null, updated_at: now }).select().single());
-        if (data) { state.projects.push({ id: data.id, name: trimmed, status, deadline: data.deadline, tasks: [] }); render(); }
+        const { data } = await dbCall(() => sb.from('projects').insert({ user_id: currentUser.id, name: trimmed, description: description.trim() || null, status, deadline: deadline || null, updated_at: now }).select().single());
+        if (data) { state.projects.push({ id: data.id, name: trimmed, description: description.trim(), status, deadline: data.deadline, tasks: [] }); render(); }
       }
     });
   }));
@@ -1424,17 +1429,18 @@ function bindMainEvents() {
     showModal({
       title: 'Edit Project',
       fields: [
-        { id: 'name',     label: 'Project name', type: 'text',   value: proj.name },
-        { id: 'status',   label: 'Status',       type: 'select', value: proj.status, options: [{ value: 'active', label: 'Active' }, { value: 'on_hold', label: 'On Hold' }, { value: 'done', label: 'Done' }] },
-        { id: 'deadline', label: 'Deadline',      type: 'date',   value: proj.deadline || '' }
+        { id: 'name',        label: 'Project name', type: 'text',     value: proj.name },
+        { id: 'description', label: 'Description',  type: 'textarea', value: proj.description || '', placeholder: 'Optional project description' },
+        { id: 'status',      label: 'Status',       type: 'select',   value: proj.status, options: [{ value: 'active', label: 'Active' }, { value: 'on_hold', label: 'On Hold' }, { value: 'done', label: 'Done' }] },
+        { id: 'deadline',    label: 'Deadline',     type: 'date',     value: proj.deadline || '' }
       ],
       saveLabel: 'Save',
-      onSave: ({ name, status, deadline }) => {
+      onSave: ({ name, description, status, deadline }) => {
         const trimmed = name.trim();
         if (!trimmed) return;
-        proj.name = trimmed; proj.status = status; proj.deadline = deadline || null;
+        proj.name = trimmed; proj.description = description.trim(); proj.status = status; proj.deadline = deadline || null;
         render();
-        dbCall(() => sb.from('projects').update({ name: trimmed, status, deadline: deadline || null, updated_at: new Date().toISOString() }).eq('id', id));
+        dbCall(() => sb.from('projects').update({ name: trimmed, description: description.trim() || null, status, deadline: deadline || null, updated_at: new Date().toISOString() }).eq('id', id));
       }
     });
   }));
