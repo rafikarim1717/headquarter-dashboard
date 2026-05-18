@@ -264,13 +264,19 @@ function renderLifeHome() {
   const showPills = String(window.__HQ_TWEAKS.showQuickPills) === 'true' || window.__HQ_TWEAKS.showQuickPills === true;
 
   const score = computeDailyScore();
+  const _allGoalsHome = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const _totalGoalsHome = _allGoalsHome.length;
+  const scoreColor = score >= 70 ? 'var(--accent)' : score >= 40 ? '#c8a850' : 'var(--danger)';
   const scoreBlock = `
     <div class="card" style="animation-delay:0ms">
       <div class="section-title" style="margin-top:0">Daily score</div>
-      <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
-        <div style="font-size:48px;font-weight:var(--num-weight,200);color:var(--accent);font-variant-numeric:tabular-nums;line-height:1">${score}</div>
-        <div style="font-size:16px;color:var(--text-faint)">/100</div>
-      </div>
+      ${_totalGoalsHome === 0
+        ? `<div style="font-size:13px;color:var(--text-faint);margin-top:12px">Add commitments to start tracking</div>`
+        : `<div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
+            <div class="num" data-target="${score}" style="font-size:48px;font-weight:var(--num-weight,200);color:${scoreColor};font-variant-numeric:tabular-nums;line-height:1">0</div>
+            <div style="font-size:16px;color:var(--text-faint)">/100</div>
+          </div>`
+      }
     </div>`;
 
   const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
@@ -428,55 +434,9 @@ function renderSchedule() {
                 <button class="sched-del-btn" data-del-sched="${s.id}">Delete</button>
               </div>
             </div>
-            <div class="inline-form" id="edit-sched-${s.id}">
-              <div class="inner">
-                <div class="form-row">
-                  <div class="field"><label>Time</label><input type="time" id="f-edit-time-${s.id}" value="${s.time}"/></div>
-                  <div class="field"><label>Title</label><input type="text" id="f-edit-title-${s.id}" value="${escapeHtml(s.title)}"/></div>
-                </div>
-                <div class="field"><label>Note</label><input type="text" id="f-edit-sub-${s.id}" value="${escapeHtml(s.sub||'')}"/></div>
-                <div class="alarm-row">
-                  <span class="alarm-label">Set alarm</span>
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="f-edit-alarm-${s.id}" ${s.alarm_time ? 'checked' : ''}>
-                    <span class="toggle-track"></span>
-                  </label>
-                </div>
-                <div class="alarm-time-row ${s.alarm_time ? 'visible' : ''}" id="edit-alarm-time-row-${s.id}">
-                  <div class="field"><label>Alarm time</label><input type="time" id="f-edit-alarm-time-${s.id}" value="${s.alarm_time || s.time}"/></div>
-                </div>
-                <div class="form-actions">
-                  <button class="btn" data-edit-cancel="${s.id}">Cancel</button>
-                  <button class="btn primary" data-edit-save="${s.id}">Save</button>
-                </div>
-              </div>
-            </div>
           </li>`).join('') || `<li class="list-item"><div class="item-sub">No events. Add one below.</div></li>`}
       </ul>
       <button class="add-btn" id="add-sched-btn" style="margin-top:14px"><span class="plus">+</span> Add event</button>
-      <div class="inline-form" id="add-sched-form">
-        <div class="inner">
-          <div class="form-row">
-            <div class="field"><label>Time</label><input type="time" id="f-sched-time" value="09:00"/></div>
-            <div class="field"><label>Title</label><input type="text" id="f-sched-title" placeholder="e.g. Deep work"/></div>
-          </div>
-          <div class="field"><label>Note</label><input type="text" id="f-sched-sub" placeholder="optional"/></div>
-          <div class="alarm-row">
-            <span class="alarm-label">Set alarm</span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="f-sched-alarm">
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-          <div class="alarm-time-row" id="alarm-time-row">
-            <div class="field"><label>Alarm time</label><input type="time" id="f-sched-alarm-time" value="09:00"/></div>
-          </div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="add-sched-form">Cancel</button>
-            <button class="btn primary" id="f-sched-save">Add</button>
-          </div>
-        </div>
-      </div>
     </div>
   `;
 }
@@ -513,14 +473,11 @@ function getCurrentWeekDays() {
   return days;
 }
 function computeDailyScore() {
-  const today = todayISO();
   const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
   const totalGoals = allGoals.length;
-  const checkedToday = totalGoals ? allGoals.filter(g => getTodayLog(g.id)?.checked).length : 0;
-  const commitScore = totalGoals ? Math.round((checkedToday / totalGoals) * 55) : 55;
-  const schedScore  = (state.schedule[today] || []).length > 0 ? 15 : 0;
-  const finScore    = state.spending.filter(s => s.date === today).length === 0 ? 30 : 15;
-  return commitScore + schedScore + finScore;
+  if (!totalGoals) return 0;
+  const checkedToday = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
+  return Math.round((checkedToday / totalGoals) * 100);
 }
 
 function renderCommitments() {
@@ -553,28 +510,10 @@ function renderCommitments() {
                   <button class="fin-del-btn" data-del-goal="${key}|${i.id}">Delete</button>
                 </div>
               </div>
-              <div class="inline-form" id="edit-goal-${i.id}">
-                <div class="inner">
-                  <div class="field"><label>Edit</label><input type="text" id="f-goal-${i.id}" value="${escapeHtml(i.text)}" placeholder="..."/></div>
-                  <div class="form-actions">
-                    <button class="btn" data-cancel="edit-goal-${i.id}">Cancel</button>
-                    <button class="btn primary" data-save-goal="${key}|${i.id}">Save</button>
-                  </div>
-                </div>
-              </div>
             </li>`;
           }).join('')}
         </ul>
-        <button class="add-btn" data-open-form="add-goal-${key}" style="margin-top:14px"><span class="plus">+</span> Add</button>
-        <div class="inline-form" id="add-goal-${key}">
-          <div class="inner">
-            <div class="field"><label>${title.slice(0, -1)}</label><input type="text" data-goal-input="${key}" placeholder="${key === 'dos' ? 'e.g. Drink 2L water' : 'e.g. No phone in bed'}"/></div>
-            <div class="form-actions">
-              <button class="btn" data-cancel="add-goal-${key}">Cancel</button>
-              <button class="btn primary" data-goal-save="${key}">Add</button>
-            </div>
-          </div>
-        </div>
+        <button class="add-btn" data-modal-add="goal-${key}" style="margin-top:14px"><span class="plus">+</span> Add</button>
       </div>`;
   }
 
@@ -699,23 +638,6 @@ function renderProjectCard(p, i) {
           <div class="progress"><div class="bar" style="width:${pct}%"></div></div>
         </div>
       ` : ''}
-      <div class="inline-form" id="edit-proj-${p.id}">
-        <div class="inner">
-          <div class="field"><label>Project name</label><input type="text" id="f-ep-name-${p.id}" value="${escapeHtml(p.name)}"/></div>
-          <div class="form-row">
-            <div class="field"><label>Status</label><select id="f-ep-status-${p.id}">
-              <option value="active"  ${p.status==='active'  ?'selected':''}>Active</option>
-              <option value="on_hold" ${p.status==='on_hold' ?'selected':''}>On Hold</option>
-              <option value="done"    ${p.status==='done'    ?'selected':''}>Done</option>
-            </select></div>
-            <div class="field"><label>Deadline</label><input type="date" id="f-ep-deadline-${p.id}" value="${p.deadline||''}"/></div>
-          </div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="edit-proj-${p.id}">Cancel</button>
-            <button class="btn primary" data-save-proj="${p.id}">Save</button>
-          </div>
-        </div>
-      </div>
       <button class="proj-expand-btn" data-toggle-proj-expand="${p.id}">
         <span>${isExpanded?'▼':'▶'}</span>
         <span>${isExpanded?'Hide tasks':'Show tasks'}</span>
@@ -736,30 +658,10 @@ function renderProjectCard(p, i) {
                     <button class="fin-del-btn" data-del-proj-task="${p.id}|${t.id}">&#x00D7;</button>
                   </div>
                 </div>
-                <div class="inline-form" id="edit-proj-task-${t.id}">
-                  <div class="inner">
-                    <div class="field"><label>Task</label><input type="text" id="f-ept-text-${t.id}" value="${escapeHtml(t.text)}"/></div>
-                    <div class="field"><label>Description</label><textarea id="f-ept-desc-${t.id}" rows="2" placeholder="Description (optional)">${escapeHtml(t.description||'')}</textarea></div>
-                    <div class="form-actions">
-                      <button class="btn" data-cancel="edit-proj-task-${t.id}">Cancel</button>
-                      <button class="btn primary" data-save-proj-task="${p.id}|${t.id}">Save</button>
-                    </div>
-                  </div>
-                </div>
               </li>
             `).join('')}
           </ul>
-          <button class="add-btn" data-open-form="add-proj-task-${p.id}" style="margin-top:10px"><span class="plus">+</span> Add task</button>
-          <div class="inline-form" id="add-proj-task-${p.id}">
-            <div class="inner">
-              <div class="field"><label>Task</label><input type="text" id="f-pt-text-${p.id}" placeholder="What needs to be done?"/></div>
-              <div class="field"><label>Description</label><textarea id="f-pt-desc-${p.id}" rows="2" placeholder="Description (optional)"></textarea></div>
-              <div class="form-actions">
-                <button class="btn" data-cancel="add-proj-task-${p.id}">Cancel</button>
-                <button class="btn primary" data-save-proj-task-new="${p.id}">Add</button>
-              </div>
-            </div>
-          </div>
+          <button class="add-btn" data-modal-add="proj-task" data-proj-id="${p.id}" style="margin-top:10px"><span class="plus">+</span> Add task</button>
         </div>
       ` : ''}
     </div>`;
@@ -775,29 +677,12 @@ function renderProjects() {
     ${topbar()}
     <div class="projects-header">
       <h1 class="page-title" style="margin:0">Projects</h1>
-      <button class="add-btn-inline" data-open-form="add-project-form">+ New Project</button>
+      <button class="add-btn-inline" data-modal-add="project">+ New Project</button>
     </div>
     <div class="pills" style="margin: 14px 0 18px">
       ${['all','active','on_hold','done'].map(f =>
         `<button class="pill${filter===f?' active':''}" data-proj-filter="${f}">${filterLabels[f]}</button>`
       ).join('')}
-    </div>
-    <div class="inline-form" id="add-project-form">
-      <div class="inner">
-        <div class="field"><label>Project name</label><input type="text" id="f-proj-name" placeholder="e.g. Client Website"/></div>
-        <div class="form-row">
-          <div class="field"><label>Status</label><select id="f-proj-status">
-            <option value="active">Active</option>
-            <option value="on_hold">On Hold</option>
-            <option value="done">Done</option>
-          </select></div>
-          <div class="field"><label>Deadline (optional)</label><input type="date" id="f-proj-deadline"/></div>
-        </div>
-        <div class="form-actions">
-          <button class="btn" data-cancel="add-project-form">Cancel</button>
-          <button class="btn primary" id="f-proj-save">Add</button>
-        </div>
-      </div>
     </div>
     ${filtered.length === 0
       ? `<div style="color:var(--text-faint);font-size:13px;padding:20px 0">No projects${filter!=='all'?' with this status':''}.</div>`
@@ -1054,35 +939,9 @@ function renderIncome() {
                 <button class="fin-del-btn" data-del-income="${i.id}">Delete</button>
               </div>
             </div>
-            <div class="inline-form" id="edit-inc-${i.id}">
-              <div class="inner">
-                <div class="form-row">
-                  <div class="field"><label>Date</label><input type="date" id="f-ei-date-${i.id}" value="${i.date}"/></div>
-                  <div class="field"><label>Source</label><input type="text" id="f-ei-source-${i.id}" value="${escapeHtml(i.source)}"/></div>
-                </div>
-                <div class="field"><label>Amount</label><input type="number" id="f-ei-amount-${i.id}" value="${i.amount}"/></div>
-                <div class="form-actions">
-                  <button class="btn" data-cancel="edit-inc-${i.id}">Cancel</button>
-                  <button class="btn primary" data-save-inc="${i.id}">Save</button>
-                </div>
-              </div>
-            </div>
           </li>`).join('') || `<li class="list-item"><div class="item-sub">No income yet.</div></li>`}
       </ul>
-      <button class="add-btn" data-open-form="add-income" style="margin-top:14px"><span class="plus">+</span> Log income</button>
-      <div class="inline-form" id="add-income">
-        <div class="inner">
-          <div class="field"><label>Source</label><input type="text" id="f-inc-source" placeholder="e.g. Client A"/></div>
-          <div class="form-row">
-            <div class="field"><label>Amount</label><input type="number" id="f-inc-amount" placeholder="0"/></div>
-            <div class="field"><label>Date</label><input type="date" id="f-inc-date" value="${todayISO()}"/></div>
-          </div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="add-income">Cancel</button>
-            <button class="btn primary" id="f-inc-save">Add</button>
-          </div>
-        </div>
-      </div>
+      <button class="add-btn" data-modal-add="income" style="margin-top:14px"><span class="plus">+</span> Log income</button>
     </div>
   `;
 }
@@ -1124,38 +983,9 @@ function renderSpending() {
                 <button class="fin-del-btn" data-del-spend="${s.id}">Delete</button>
               </div>
             </div>
-            <div class="inline-form" id="edit-spend-${s.id}">
-              <div class="inner">
-                <div class="form-row">
-                  <div class="field"><label>Category</label><select id="f-es-cat-${s.id}">${cats.map(c=>`<option ${c===s.cat?'selected':''}>${c}</option>`).join('')}</select></div>
-                  <div class="field"><label>Amount</label><input type="number" id="f-es-amount-${s.id}" value="${s.amount}"/></div>
-                </div>
-                <div class="form-row">
-                  <div class="field"><label>Note</label><input type="text" id="f-es-note-${s.id}" value="${escapeHtml(s.note||'')}"/></div>
-                  <div class="field"><label>Time</label><input type="time" id="f-es-time-${s.id}" value="${s.time||''}"/></div>
-                </div>
-                <div class="form-actions">
-                  <button class="btn" data-cancel="edit-spend-${s.id}">Cancel</button>
-                  <button class="btn primary" data-save-spend="${s.id}">Save</button>
-                </div>
-              </div>
-            </div>
           </li>`).join('')}
       </ul>
-      <button class="add-btn" data-open-form="add-spend" style="margin-top:14px"><span class="plus">+</span> Log spend</button>
-      <div class="inline-form" id="add-spend">
-        <div class="inner">
-          <div class="form-row">
-            <div class="field"><label>Category</label><select id="f-sp-cat">${cats.map(c=>`<option>${c}</option>`).join('')}</select></div>
-            <div class="field"><label>Amount</label><input type="number" id="f-sp-amount" placeholder="0"/></div>
-          </div>
-          <div class="field"><label>Note</label><input type="text" id="f-sp-note" placeholder="What was it?"/></div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="add-spend">Cancel</button>
-            <button class="btn primary" id="f-sp-save">Add</button>
-          </div>
-        </div>
-      </div>
+      <button class="add-btn" data-modal-add="spend" style="margin-top:14px"><span class="plus">+</span> Log spend</button>
     </div>
   `;
 }
@@ -1197,36 +1027,10 @@ function renderDebts() {
               <button class="fin-edit-btn" data-edit-debt="${d.id}">Edit</button>
               <button class="fin-del-btn" data-del-debt="${d.id}">Delete</button>
             </div>
-            <div class="inline-form" id="edit-debt-${d.id}">
-              <div class="inner">
-                <div class="field"><label>Creditor</label><input type="text" id="f-ed-creditor-${d.id}" value="${escapeHtml(d.creditor)}"/></div>
-                <div class="form-row">
-                  <div class="field"><label>Amount</label><input type="number" id="f-ed-amount-${d.id}" value="${d.amount}"/></div>
-                  <div class="field"><label>Due date</label><input type="date" id="f-ed-due-${d.id}" value="${d.due}"/></div>
-                </div>
-                <div class="form-actions">
-                  <button class="btn" data-cancel="edit-debt-${d.id}">Cancel</button>
-                  <button class="btn primary" data-save-debt="${d.id}">Save</button>
-                </div>
-              </div>
-            </div>
           </li>`;
         }).join('')}
       </ul>
-      <button class="add-btn" data-open-form="add-debt" style="margin-top:14px"><span class="plus">+</span> Add debt</button>
-      <div class="inline-form" id="add-debt">
-        <div class="inner">
-          <div class="field"><label>Creditor</label><input type="text" id="f-debt-creditor" placeholder="Who do you owe?"/></div>
-          <div class="form-row">
-            <div class="field"><label>Amount</label><input type="number" id="f-debt-amount" placeholder="0"/></div>
-            <div class="field"><label>Due date</label><input type="date" id="f-debt-due" value="${todayISO()}"/></div>
-          </div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="add-debt">Cancel</button>
-            <button class="btn primary" id="f-debt-save">Add</button>
-          </div>
-        </div>
-      </div>
+      <button class="add-btn" data-modal-add="debt" style="margin-top:14px"><span class="plus">+</span> Add debt</button>
     </div>
   `;
 }
@@ -1256,6 +1060,98 @@ function animateBars() {
     b.style.height = '0%';
     requestAnimationFrame(() => requestAnimationFrame(() => { b.style.height = h; }));
   });
+}
+
+/* =========================================================
+   MODAL SYSTEM
+========================================================= */
+function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
+  let container = document.getElementById('modal-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'modal-container';
+    document.body.appendChild(container);
+  }
+
+  function renderField(f) {
+    const lbl = `<div class="modal-label">${escapeHtml(f.label)}</div>`;
+    let input;
+    if (f.type === 'select') {
+      const opts = (f.options || []).map(o => {
+        const val = typeof o === 'object' ? o.value : o;
+        const lab = typeof o === 'object' ? o.label : o;
+        return `<option value="${escapeHtml(String(val))}"${String(val) === String(f.value) ? ' selected' : ''}>${escapeHtml(lab)}</option>`;
+      }).join('');
+      input = `<select id="modal-f-${f.id}">${opts}</select>`;
+    } else if (f.type === 'textarea') {
+      input = `<textarea id="modal-f-${f.id}" rows="3" placeholder="${escapeHtml(f.placeholder||'')}">${escapeHtml(f.value||'')}</textarea>`;
+    } else if (f.type === 'toggle') {
+      input = `<label class="toggle-switch"><input type="checkbox" id="modal-f-${f.id}"${f.value ? ' checked' : ''}><span class="toggle-track"></span></label>`;
+    } else {
+      input = `<input type="${f.type||'text'}" id="modal-f-${f.id}" value="${escapeHtml(String(f.value??''))}" placeholder="${escapeHtml(f.placeholder||'')}"/>`;
+    }
+    return `<div class="modal-field" data-field-id="${f.id}">${lbl}${input}</div>`;
+  }
+
+  container.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-card" id="modal-card">
+        <div class="modal-header">
+          <span class="modal-title">${escapeHtml(title)}</span>
+          <button class="modal-x" id="modal-x">&#xD7;</button>
+        </div>
+        <div class="modal-fields" id="modal-fields">
+          ${fields.map(renderField).join('')}
+        </div>
+        <div class="modal-footer">
+          <button class="btn" id="modal-cancel">Cancel</button>
+          <button class="btn primary" id="modal-save">${escapeHtml(saveLabel)}</button>
+        </div>
+      </div>
+    </div>`;
+
+  // Wire up toggle → show/hide controlled fields
+  fields.forEach(f => {
+    if (f.type !== 'toggle' || !f.controls) return;
+    const toggleEl = document.getElementById('modal-f-' + f.id);
+    const controlled = container.querySelector(`[data-field-id="${f.controls}"]`);
+    if (!toggleEl || !controlled) return;
+    controlled.style.display = toggleEl.checked ? '' : 'none';
+    toggleEl.addEventListener('change', () => {
+      controlled.style.display = toggleEl.checked ? '' : 'none';
+    });
+  });
+
+  function closeModal() {
+    container.innerHTML = '';
+    document.removeEventListener('keydown', escHandler);
+    if (onClose) onClose();
+  }
+  function escHandler(e) { if (e.key === 'Escape') closeModal(); }
+  document.addEventListener('keydown', escHandler);
+
+  document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target.id === 'modal-overlay') closeModal(); });
+  document.getElementById('modal-x').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const values = {};
+    fields.forEach(f => {
+      const el = document.getElementById('modal-f-' + f.id);
+      if (!el) return;
+      if (f.type === 'toggle') values[f.id] = el.checked;
+      else if (f.type === 'number') values[f.id] = Number(el.value || 0);
+      else values[f.id] = el.value;
+    });
+    closeModal();
+    if (onSave) onSave(values);
+  });
+
+  // Focus first text input
+  setTimeout(() => {
+    const first = container.querySelector('input:not([type="checkbox"]), select, textarea');
+    if (first) first.focus();
+  }, 50);
 }
 
 /* =========================================================
@@ -1340,34 +1236,6 @@ function bindMainEvents() {
     dbCall(() => sb.from('projects').delete().eq('id', id));
   }));
 
-  // project edit open
-  main.querySelectorAll('[data-edit-proj]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const id = el.dataset.editProj;
-    const form = document.getElementById('edit-proj-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
-  }));
-
-  // project edit save
-  main.querySelectorAll('[data-save-proj]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.saveProj;
-    const nameEl     = document.getElementById('f-ep-name-'     + id);
-    const statusEl   = document.getElementById('f-ep-status-'   + id);
-    const deadlineEl = document.getElementById('f-ep-deadline-' + id);
-    if (!nameEl) return;
-    const newName     = nameEl.value.trim();
-    if (!newName) { nameEl.focus(); return; }
-    const newStatus   = statusEl   ? statusEl.value             : 'active';
-    const newDeadline = deadlineEl ? (deadlineEl.value || null) : null;
-    const proj = state.projects.find(p => p.id === id);
-    if (proj) { proj.name = newName; proj.status = newStatus; proj.deadline = newDeadline; }
-    render();
-    dbCall(() => sb.from('projects').update({ name: newName, status: newStatus, deadline: newDeadline, updated_at: new Date().toISOString() }).eq('id', id));
-  }));
-
   // project toggle done/reopen
   main.querySelectorAll('[data-toggle-proj-done]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.toggleProjDone;
@@ -1386,52 +1254,6 @@ function bindMainEvents() {
     proj.tasks = proj.tasks.filter(t => t.id !== taskId);
     render();
     dbCall(() => sb.from('project_tasks').delete().eq('id', taskId));
-  }));
-
-  // project task edit open
-  main.querySelectorAll('[data-edit-proj-task]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const [, taskId] = el.dataset.editProjTask.split('|');
-    const form = document.getElementById('edit-proj-task-' + taskId);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
-  }));
-
-  // project task edit save
-  main.querySelectorAll('[data-save-proj-task]').forEach(el => el.addEventListener('click', async () => {
-    const [projId, taskId] = el.dataset.saveProjTask.split('|');
-    const textEl = document.getElementById('f-ept-text-' + taskId);
-    const descEl = document.getElementById('f-ept-desc-' + taskId);
-    if (!textEl) return;
-    const newText = textEl.value.trim();
-    if (!newText) { textEl.focus(); return; }
-    const newDesc = descEl ? descEl.value.trim() : '';
-    const proj = state.projects.find(p => p.id === projId);
-    if (proj) {
-      const task = proj.tasks.find(t => t.id === taskId);
-      if (task) { task.text = newText; task.description = newDesc; }
-    }
-    render();
-    dbCall(() => sb.from('project_tasks').update({ text: newText, description: newDesc || null }).eq('id', taskId));
-  }));
-
-  // project add task (per-project inline form)
-  main.querySelectorAll('[data-save-proj-task-new]').forEach(btn => btn.addEventListener('click', async () => {
-    const projId = btn.dataset.saveProjTaskNew;
-    const textEl = main.querySelector(`#f-pt-text-${projId}`);
-    const descEl = main.querySelector(`#f-pt-desc-${projId}`);
-    const text = textEl ? textEl.value.trim() : '';
-    const desc = descEl ? descEl.value.trim() : '';
-    if (!text) { textEl?.focus(); return; }
-    const proj = state.projects.find(p => p.id === projId);
-    if (!proj) return;
-    const { data } = await dbCall(() => sb.from('project_tasks').insert({ user_id: currentUser.id, project_id: projId, text, description: desc || null, checked: false }).select().single());
-    if (data) {
-      proj.tasks.push({ id: data.id, text, description: desc, checked: false });
-      render();
-    }
   }));
 
   // commitments preview tab switch
@@ -1464,7 +1286,7 @@ function bindMainEvents() {
     }
   }));
 
-  // delete handlers
+  // ---- SCHEDULE ----
   main.querySelectorAll('[data-del-sched]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delSched;
     const day = state.selectedDay;
@@ -1473,86 +1295,63 @@ function bindMainEvents() {
     dbCall(() => sb.from('schedule_events').delete().eq('id', id));
   }));
 
-  // schedule edit handlers
   main.querySelectorAll('[data-edit-sched]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const id = el.dataset.editSched;
-    const form = document.getElementById('edit-sched-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
-  }));
-
-  main.querySelectorAll('[data-edit-cancel]').forEach(el => el.addEventListener('click', () => {
-    const id = el.dataset.editCancel;
-    const form = document.getElementById('edit-sched-' + id);
-    if (form) form.classList.remove('open');
-  }));
-
-  main.querySelectorAll('[data-edit-save]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.editSave;
-    const timeEl  = document.getElementById('f-edit-time-'  + id);
-    const titleEl = document.getElementById('f-edit-title-' + id);
-    const subEl   = document.getElementById('f-edit-sub-'   + id);
-    const alarmEl = document.getElementById('f-edit-alarm-' + id);
-    const alarmTimeEl = document.getElementById('f-edit-alarm-time-' + id);
-    if (!timeEl || !titleEl) return;
-    const newTime  = timeEl.value.trim();
-    const newTitle = titleEl.value.trim();
-    if (!newTitle) { titleEl.focus(); return; }
-    const newSub       = subEl ? subEl.value.trim() : '';
-    const alarmEnabled = alarmEl ? alarmEl.checked : false;
-    const newAlarmTime = (alarmEnabled && alarmTimeEl) ? alarmTimeEl.value : null;
-
     const day = state.selectedDay;
-    const arr = state.schedule[day] || [];
-    const idx = arr.findIndex(s => s.id === id);
-    if (idx === -1) return;
-    arr[idx] = { ...arr[idx], time: newTime, title: newTitle, sub: newSub, alarm_time: newAlarmTime };
-
-    // update DOM in-place
-    const li = document.querySelector(`.sched-item[data-id="${id}"]`);
-    if (li) {
-      const titleDiv = li.querySelector('.item-title');
-      if (titleDiv) titleDiv.innerHTML = escapeHtml(newTitle) + (newAlarmTime ? `<span class="alarm-tag">⏰ ${newAlarmTime}</span>` : '');
-      const subDiv = li.querySelector('.item-sub');
-      if (newSub) {
-        if (subDiv) subDiv.textContent = newSub;
-        else {
-          const mainDiv = li.querySelector('.item-main');
-          if (mainDiv) { const d = document.createElement('div'); d.className = 'item-sub'; d.textContent = newSub; mainDiv.appendChild(d); }
-        }
-      } else if (subDiv) subDiv.remove();
-      const timeDiv = li.querySelector('.time-col');
-      if (timeDiv) timeDiv.textContent = newTime;
-    }
-
-    const form = document.getElementById('edit-sched-' + id);
-    if (form) form.classList.remove('open');
-
-    dbCall(() => sb.from('schedule_events').update({
-      time: newTime, title: newTitle, note: newSub, alarm_time: newAlarmTime
-    }).eq('id', id));
+    const s = (state.schedule[day] || []).find(ev => ev.id === id);
+    if (!s) return;
+    showModal({
+      title: 'Edit Event',
+      fields: [
+        { id: 'time',       label: 'Time',       type: 'time',   value: s.time },
+        { id: 'title',      label: 'Title',      type: 'text',   value: s.title },
+        { id: 'note',       label: 'Note',       type: 'text',   value: s.sub || '', placeholder: 'optional' },
+        { id: 'alarm',      label: 'Set alarm',  type: 'toggle', value: !!s.alarm_time, controls: 'alarm_time' },
+        { id: 'alarm_time', label: 'Alarm time', type: 'time',   value: s.alarm_time || s.time }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ time, title, note, alarm, alarm_time }) => {
+        if (!title.trim()) return;
+        const newAlarmTime = alarm ? (alarm_time || time) : null;
+        const arr = state.schedule[day] || [];
+        const idx = arr.findIndex(ev => ev.id === id);
+        if (idx !== -1) arr[idx] = { ...arr[idx], time, title: title.trim(), sub: note.trim(), alarm_time: newAlarmTime };
+        render();
+        dbCall(() => sb.from('schedule_events').update({ time, title: title.trim(), note: note.trim(), alarm_time: newAlarmTime }).eq('id', id));
+      }
+    });
   }));
 
-  // alarm toggle in edit forms
-  main.querySelectorAll('.sched-item [id^="f-edit-alarm-"]').forEach(toggle => {
-    const id = toggle.id.replace('f-edit-alarm-', '');
-    const timeRow = document.getElementById('edit-alarm-time-row-' + id);
-    const alarmTimeInput = document.getElementById('f-edit-alarm-time-' + id);
-    const timeInput = document.getElementById('f-edit-time-' + id);
-    if (!timeRow) return;
-    toggle.addEventListener('change', () => {
-      if (toggle.checked) {
-        timeRow.classList.add('visible');
-        if (alarmTimeInput && timeInput && !alarmTimeInput.value) alarmTimeInput.value = timeInput.value;
-      } else {
-        timeRow.classList.remove('visible');
+  const addSched = main.querySelector('#add-sched-btn');
+  if (addSched) addSched.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const day = state.selectedDay || todayISO();
+    showModal({
+      title: 'Add Event',
+      fields: [
+        { id: 'time',       label: 'Time',       type: 'time',   value: '09:00' },
+        { id: 'title',      label: 'Title',      type: 'text',   value: '', placeholder: 'e.g. Deep work' },
+        { id: 'note',       label: 'Note',       type: 'text',   value: '', placeholder: 'optional' },
+        { id: 'alarm',      label: 'Set alarm',  type: 'toggle', value: false, controls: 'alarm_time' },
+        { id: 'alarm_time', label: 'Alarm time', type: 'time',   value: '09:00' }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ time, title, note, alarm, alarm_time }) => {
+        if (!title.trim()) return;
+        const alarm_time_val = alarm ? (alarm_time || time) : null;
+        const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title: title.trim(), note: note.trim(), alarm_time: alarm_time_val }).select().single());
+        if (data) {
+          if (!state.schedule[day]) state.schedule[day] = [];
+          state.schedule[day].push({ id: data.id, time, title: title.trim(), sub: note.trim(), alarm_time: alarm_time_val });
+          state.schedule[day].sort((a, b) => a.time.localeCompare(b.time));
+          render();
+        }
       }
     });
   });
 
+  // ---- COMMITMENTS ----
   main.querySelectorAll('[data-del-goal]').forEach(el => el.addEventListener('click', () => {
     const [k, id] = el.dataset.delGoal.split('|');
     state.goals[k] = state.goals[k].filter(x => x.id !== id);
@@ -1562,32 +1361,129 @@ function bindMainEvents() {
 
   main.querySelectorAll('[data-edit-goal]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
-    const [, id] = el.dataset.editGoal.split('|');
-    const form = document.getElementById('edit-goal-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) {
-      form.classList.add('open');
-      setTimeout(() => form.querySelector('input')?.focus(), 60);
-    }
+    const [k, id] = el.dataset.editGoal.split('|');
+    const g = (state.goals[k] || []).find(x => x.id === id);
+    if (!g) return;
+    showModal({
+      title: 'Edit Commitment',
+      fields: [{ id: 'text', label: k === 'dos' ? "Do" : "Don't", type: 'text', value: g.text, placeholder: '...' }],
+      saveLabel: 'Save',
+      onSave: ({ text }) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        g.text = trimmed;
+        const textEl = document.querySelector(`[data-goal-text="${id}"]`);
+        if (textEl) textEl.textContent = trimmed;
+        dbCall(() => sb.from('goals').update({ text: trimmed }).eq('id', id));
+      }
+    });
   }));
 
-  main.querySelectorAll('[data-save-goal]').forEach(el => el.addEventListener('click', async () => {
-    const [k, id] = el.dataset.saveGoal.split('|');
-    const input = document.getElementById('f-goal-' + id);
-    if (!input) return;
-    const newText = input.value.trim();
-    if (!newText) { input.focus(); return; }
-    const g = state.goals[k].find(x => x.id === id);
-    if (g) g.text = newText;
-    const textEl = document.querySelector(`[data-goal-text="${id}"]`);
-    if (textEl) textEl.textContent = newText;
-    document.getElementById('edit-goal-' + id)?.classList.remove('open');
-    dbCall(() => sb.from('goals').update({ text: newText }).eq('id', id));
+  main.querySelectorAll('[data-modal-add^="goal-"]').forEach(btn => btn.addEventListener('click', () => {
+    const key = btn.dataset.modalAdd.replace('goal-', '');
+    const isDo = key === 'dos';
+    showModal({
+      title: isDo ? 'Add Do' : "Add Don't",
+      fields: [{ id: 'text', label: isDo ? 'Do' : "Don't", type: 'text', value: '', placeholder: isDo ? 'e.g. Drink 2L water' : 'e.g. No phone in bed' }],
+      saveLabel: 'Add',
+      onSave: async ({ text }) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const type = isDo ? 'do' : 'dont';
+        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text: trimmed }).select().single());
+        if (data) { state.goals[key].push({ id: data.id, text: trimmed }); render(); }
+      }
+    });
   }));
 
+  // ---- PROJECTS ----
+  main.querySelectorAll('[data-modal-add="project"]').forEach(btn => btn.addEventListener('click', () => {
+    showModal({
+      title: 'New Project',
+      fields: [
+        { id: 'name',     label: 'Project name',        type: 'text',   value: '', placeholder: 'e.g. Client Website' },
+        { id: 'status',   label: 'Status',              type: 'select', value: 'active', options: [{ value: 'active', label: 'Active' }, { value: 'on_hold', label: 'On Hold' }, { value: 'done', label: 'Done' }] },
+        { id: 'deadline', label: 'Deadline (optional)', type: 'date',   value: '' }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ name, status, deadline }) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        const now = new Date().toISOString();
+        const { data } = await dbCall(() => sb.from('projects').insert({ user_id: currentUser.id, name: trimmed, status, deadline: deadline || null, updated_at: now }).select().single());
+        if (data) { state.projects.push({ id: data.id, name: trimmed, status, deadline: data.deadline, tasks: [] }); render(); }
+      }
+    });
+  }));
 
+  main.querySelectorAll('[data-edit-proj]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const id = el.dataset.editProj;
+    const proj = state.projects.find(p => p.id === id);
+    if (!proj) return;
+    showModal({
+      title: 'Edit Project',
+      fields: [
+        { id: 'name',     label: 'Project name', type: 'text',   value: proj.name },
+        { id: 'status',   label: 'Status',       type: 'select', value: proj.status, options: [{ value: 'active', label: 'Active' }, { value: 'on_hold', label: 'On Hold' }, { value: 'done', label: 'Done' }] },
+        { id: 'deadline', label: 'Deadline',      type: 'date',   value: proj.deadline || '' }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ name, status, deadline }) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        proj.name = trimmed; proj.status = status; proj.deadline = deadline || null;
+        render();
+        dbCall(() => sb.from('projects').update({ name: trimmed, status, deadline: deadline || null, updated_at: new Date().toISOString() }).eq('id', id));
+      }
+    });
+  }));
+
+  main.querySelectorAll('[data-modal-add="proj-task"]').forEach(btn => btn.addEventListener('click', () => {
+    const projId = btn.dataset.projId;
+    showModal({
+      title: 'Add Task',
+      fields: [
+        { id: 'text',        label: 'Task',        type: 'text',     value: '', placeholder: 'What needs to be done?' },
+        { id: 'description', label: 'Description', type: 'textarea', value: '', placeholder: 'Description (optional)' }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ text, description }) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const proj = state.projects.find(p => p.id === projId);
+        if (!proj) return;
+        const { data } = await dbCall(() => sb.from('project_tasks').insert({ user_id: currentUser.id, project_id: projId, text: trimmed, description: description.trim() || null, checked: false }).select().single());
+        if (data) { proj.tasks.push({ id: data.id, text: trimmed, description: description.trim(), checked: false }); render(); }
+      }
+    });
+  }));
+
+  main.querySelectorAll('[data-edit-proj-task]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const [projId, taskId] = el.dataset.editProjTask.split('|');
+    const proj = state.projects.find(p => p.id === projId);
+    if (!proj) return;
+    const task = proj.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    showModal({
+      title: 'Edit Task',
+      fields: [
+        { id: 'text',        label: 'Task',        type: 'text',     value: task.text },
+        { id: 'description', label: 'Description', type: 'textarea', value: task.description || '', placeholder: 'Description (optional)' }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ text, description }) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        task.text = trimmed; task.description = description.trim();
+        render();
+        dbCall(() => sb.from('project_tasks').update({ text: trimmed, description: description.trim() || null }).eq('id', taskId));
+      }
+    });
+  }));
+
+  // ---- INCOME ----
   main.querySelectorAll('[data-del-income]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delIncome;
     state.income = state.income.filter(x => x.id !== id);
@@ -1595,38 +1491,51 @@ function bindMainEvents() {
     dbCall(() => sb.from('income_entries').delete().eq('id', id));
   }));
 
-  // income edit — open/save
   main.querySelectorAll('[data-edit-income]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const id = el.dataset.editIncome;
-    const form = document.getElementById('edit-inc-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
+    const item = state.income.find(x => x.id === id);
+    if (!item) return;
+    showModal({
+      title: 'Edit Income',
+      fields: [
+        { id: 'source', label: 'Source', type: 'text',   value: item.source },
+        { id: 'amount', label: 'Amount', type: 'number', value: item.amount },
+        { id: 'date',   label: 'Date',   type: 'date',   value: item.date }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ source, amount, date }) => {
+        const src = source.trim();
+        const amt = Number(amount);
+        if (!src || !amt) return;
+        item.source = src; item.amount = amt; item.date = date;
+        render();
+        dbCall(() => sb.from('income_entries').update({ source: src, amount: amt, date }).eq('id', id));
+      }
+    });
   }));
 
-  main.querySelectorAll('[data-save-inc]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.saveInc;
-    const dateEl   = document.getElementById('f-ei-date-'   + id);
-    const sourceEl = document.getElementById('f-ei-source-' + id);
-    const amtEl    = document.getElementById('f-ei-amount-' + id);
-    if (!sourceEl || !amtEl) return;
-    const newDate   = dateEl ? dateEl.value : todayISO();
-    const newSource = sourceEl.value.trim();
-    const newAmt    = Number(amtEl.value || 0);
-    if (!newSource || !newAmt) return;
-    const item = state.income.find(x => x.id === id);
-    if (item) { item.date = newDate; item.source = newSource; item.amount = newAmt; }
-    const li = document.querySelector(`.fin-item[data-id="${id}"]`);
-    if (li) {
-      const timeDiv  = li.querySelector('.time-col');  if (timeDiv)  timeDiv.textContent  = fmtDate(newDate);
-      const titleDiv = li.querySelector('.item-title'); if (titleDiv) titleDiv.textContent = newSource;
-      const amtDiv   = li.querySelector('.item-amt');  if (amtDiv)   amtDiv.textContent   = '+' + fmtMoney(newAmt);
-    }
-    document.getElementById('edit-inc-' + id)?.classList.remove('open');
-    dbCall(() => sb.from('income_entries').update({ date: newDate, source: newSource, amount: newAmt }).eq('id', id));
+  main.querySelectorAll('[data-modal-add="income"]').forEach(btn => btn.addEventListener('click', () => {
+    showModal({
+      title: 'Log Income',
+      fields: [
+        { id: 'source', label: 'Source', type: 'text',   value: '', placeholder: 'e.g. Client A' },
+        { id: 'amount', label: 'Amount', type: 'number', value: '', placeholder: '0' },
+        { id: 'date',   label: 'Date',   type: 'date',   value: todayISO() }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ source, amount, date }) => {
+        const src = source.trim();
+        const amt = Number(amount);
+        if (!src || !amt) return;
+        const { data } = await dbCall(() => sb.from('income_entries').insert({ user_id: currentUser.id, date: date || todayISO(), source: src, amount: amt }).select().single());
+        if (data) { state.income.unshift({ id: data.id, date: data.date, source: src, amount: amt }); render(); }
+      }
+    });
   }));
+
+  // ---- SPENDING ----
+  const _spendCats = ['Food', 'Transport', 'Shopping', 'Other'];
 
   main.querySelectorAll('[data-del-spend]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delSpend;
@@ -1635,43 +1544,51 @@ function bindMainEvents() {
     dbCall(() => sb.from('spending_entries').delete().eq('id', id));
   }));
 
-  // spending edit — open/save
   main.querySelectorAll('[data-edit-spend]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const id = el.dataset.editSpend;
-    const form = document.getElementById('edit-spend-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
-  }));
-
-  main.querySelectorAll('[data-save-spend]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.saveSpend;
-    const catEl  = document.getElementById('f-es-cat-'    + id);
-    const amtEl  = document.getElementById('f-es-amount-' + id);
-    const noteEl = document.getElementById('f-es-note-'   + id);
-    const timeEl = document.getElementById('f-es-time-'   + id);
-    if (!amtEl) return;
-    const newCat  = catEl  ? catEl.value             : 'Other';
-    const newAmt  = Number(amtEl.value || 0);
-    const newNote = noteEl ? noteEl.value.trim()      : '';
-    const newTime = timeEl ? timeEl.value             : '';
-    if (!newAmt) return;
     const item = state.spending.find(x => x.id === id);
-    if (item) { item.cat = newCat; item.amount = newAmt; item.note = newNote; item.time = newTime; }
-    const li = document.querySelector(`.fin-item[data-id="${id}"]`);
-    if (li) {
-      const titleDiv = li.querySelector('.item-title'); if (titleDiv) titleDiv.textContent = newNote || newCat;
-      const subDiv   = li.querySelector('.item-sub');   if (subDiv)   subDiv.textContent   = newCat;
-      const amtDiv   = li.querySelector('.item-amt');   if (amtDiv)   amtDiv.textContent   = '−' + fmtMoney(newAmt);
-      const timeDiv  = li.querySelector('.time-col');   if (timeDiv && newTime) timeDiv.textContent = newTime;
-    }
-    document.getElementById('edit-spend-' + id)?.classList.remove('open');
-    dbCall(() => sb.from('spending_entries').update({ category: newCat, amount: newAmt, note: newNote, time: newTime }).eq('id', id));
+    if (!item) return;
+    showModal({
+      title: 'Edit Spending',
+      fields: [
+        { id: 'cat',    label: 'Category', type: 'select', value: item.cat,     options: _spendCats.map(c => ({ value: c, label: c })) },
+        { id: 'amount', label: 'Amount',   type: 'number', value: item.amount },
+        { id: 'note',   label: 'Note',     type: 'text',   value: item.note || '', placeholder: 'What was it?' }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ cat, amount, note }) => {
+        const amt = Number(amount);
+        if (!amt) return;
+        item.cat = cat; item.amount = amt; item.note = note.trim();
+        render();
+        dbCall(() => sb.from('spending_entries').update({ category: cat, amount: amt, note: note.trim(), time: item.time }).eq('id', id));
+      }
+    });
   }));
 
-  // debt delete + edit
+  main.querySelectorAll('[data-modal-add="spend"]').forEach(btn => btn.addEventListener('click', () => {
+    showModal({
+      title: 'Log Spending',
+      fields: [
+        { id: 'cat',    label: 'Category', type: 'select', value: 'Food',  options: _spendCats.map(c => ({ value: c, label: c })) },
+        { id: 'amount', label: 'Amount',   type: 'number', value: '',      placeholder: '0' },
+        { id: 'note',   label: 'Note',     type: 'text',   value: '',      placeholder: 'What was it?' }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ cat, amount, note }) => {
+        const amt = Number(amount);
+        if (!amt) return;
+        const t = new Date();
+        const time = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+        const date = todayISO();
+        const { data } = await dbCall(() => sb.from('spending_entries').insert({ user_id: currentUser.id, date, time, category: cat, note: note.trim(), amount: amt }).select().single());
+        if (data) { state.spending.unshift({ id: data.id, date, time, cat, note: note.trim(), amount: amt }); render(); }
+      }
+    });
+  }));
+
+  // ---- DEBTS ----
   main.querySelectorAll('[data-del-debt]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delDebt;
     state.debts = state.debts.filter(d => d.id !== id);
@@ -1682,32 +1599,44 @@ function bindMainEvents() {
   main.querySelectorAll('[data-edit-debt]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const id = el.dataset.editDebt;
-    const form = document.getElementById('edit-debt-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
+    const item = state.debts.find(d => d.id === id);
+    if (!item) return;
+    showModal({
+      title: 'Edit Debt',
+      fields: [
+        { id: 'creditor', label: 'Creditor', type: 'text',   value: item.creditor },
+        { id: 'amount',   label: 'Amount',   type: 'number', value: item.amount },
+        { id: 'due',      label: 'Due date', type: 'date',   value: item.due || '' }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ creditor, amount, due }) => {
+        const cred = creditor.trim();
+        const amt = Number(amount);
+        if (!cred || !amt) return;
+        item.creditor = cred; item.amount = amt; item.due = due;
+        render();
+        dbCall(() => sb.from('debts').update({ creditor: cred, amount: amt, due_date: due }).eq('id', id));
+      }
+    });
   }));
 
-  main.querySelectorAll('[data-save-debt]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.saveDebt;
-    const creditorEl = document.getElementById('f-ed-creditor-' + id);
-    const amtEl      = document.getElementById('f-ed-amount-'   + id);
-    const dueEl      = document.getElementById('f-ed-due-'      + id);
-    if (!creditorEl || !amtEl) return;
-    const newCreditor = creditorEl.value.trim();
-    const newAmt      = Number(amtEl.value || 0);
-    const newDue      = dueEl ? dueEl.value : '';
-    if (!newCreditor || !newAmt) return;
-    const item = state.debts.find(d => d.id === id);
-    if (item) { item.creditor = newCreditor; item.amount = newAmt; item.due = newDue; }
-    const li = document.querySelector(`.fin-item[data-id="${id}"]`);
-    if (li) {
-      const titleDiv = li.querySelector('.item-title'); if (titleDiv) titleDiv.textContent = newCreditor;
-      const amtDiv   = li.querySelector('.item-amt');   if (amtDiv)   amtDiv.textContent   = fmtMoney(newAmt);
-    }
-    document.getElementById('edit-debt-' + id)?.classList.remove('open');
-    dbCall(() => sb.from('debts').update({ creditor: newCreditor, amount: newAmt, due_date: newDue }).eq('id', id));
+  main.querySelectorAll('[data-modal-add="debt"]').forEach(btn => btn.addEventListener('click', () => {
+    showModal({
+      title: 'Add Debt',
+      fields: [
+        { id: 'creditor', label: 'Creditor', type: 'text',   value: '', placeholder: 'Who do you owe?' },
+        { id: 'amount',   label: 'Amount',   type: 'number', value: '', placeholder: '0' },
+        { id: 'due',      label: 'Due date', type: 'date',   value: todayISO() }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ creditor, amount, due }) => {
+        const cred = creditor.trim();
+        const amt = Number(amount);
+        if (!cred || !amt) return;
+        const { data } = await dbCall(() => sb.from('debts').insert({ user_id: currentUser.id, creditor: cred, amount: amt, due_date: due, paid: false }).select().single());
+        if (data) { state.debts.push({ id: data.id, creditor: cred, amount: amt, due, paid: false }); render(); }
+      }
+    });
   }));
 
   main.querySelectorAll('[data-pay-debt]').forEach(el => el.addEventListener('click', () => {
@@ -1717,46 +1646,6 @@ function bindMainEvents() {
     render();
     dbCall(() => sb.from('debts').update({ paid: true }).eq('id', d.id));
   }));
-
-  // forms — open / cancel
-  main.querySelectorAll('[data-open-form]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeAllForms();
-    document.getElementById(el.dataset.openForm)?.classList.add('open');
-    setTimeout(() => document.getElementById(el.dataset.openForm)?.querySelector('input,select,textarea')?.focus(), 60);
-  }));
-  const addSched = main.querySelector('#add-sched-btn');
-  if (addSched) addSched.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeAllForms();
-    document.getElementById('add-sched-form').classList.add('open');
-    setTimeout(() => document.getElementById('f-sched-title')?.focus(), 60);
-  });
-
-  // alarm toggle show/hide + sync time
-  const alarmToggle = main.querySelector('#f-sched-alarm');
-  const alarmTimeRow = main.querySelector('#alarm-time-row');
-  if (alarmToggle && alarmTimeRow) {
-    alarmToggle.addEventListener('change', () => {
-      alarmTimeRow.classList.toggle('visible', alarmToggle.checked);
-      if (alarmToggle.checked) {
-        const t = main.querySelector('#f-sched-time').value;
-        if (t) main.querySelector('#f-sched-alarm-time').value = t;
-      }
-    });
-    main.querySelector('#f-sched-time')?.addEventListener('change', () => {
-      if (alarmToggle.checked) {
-        main.querySelector('#f-sched-alarm-time').value = main.querySelector('#f-sched-time').value;
-      }
-    });
-  }
-  main.querySelectorAll('[data-cancel]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    document.getElementById(el.dataset.cancel)?.classList.remove('open');
-  }));
-
-  // form saves
-  bindFormSaves();
 
 
   // ---- NOTES ----
@@ -1936,86 +1825,7 @@ function bindMainEvents() {
 }
 
 function bindFormSaves() {
-  // schedule
-  const schedSave = main.querySelector('#f-sched-save');
-  if (schedSave) schedSave.addEventListener('click', async () => {
-    const time = main.querySelector('#f-sched-time').value || '09:00';
-    const title = main.querySelector('#f-sched-title').value.trim();
-    const sub = main.querySelector('#f-sched-sub').value.trim();
-    if (!title) return;
-    const day = state.selectedDay || todayISO();
-    const alarmOn = main.querySelector('#f-sched-alarm')?.checked;
-    const alarm_time = alarmOn ? (main.querySelector('#f-sched-alarm-time')?.value || time) : null;
-    const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title, note: sub, alarm_time }).select().single());
-    if (data) {
-      if (!state.schedule[day]) state.schedule[day] = [];
-      state.schedule[day].push({ id: data.id, time, title, sub, alarm_time });
-      state.schedule[day].sort((a,b) => a.time.localeCompare(b.time));
-      render();
-    }
-  });
-
-  // goals
-  main.querySelectorAll('[data-goal-save]').forEach(btn => btn.addEventListener('click', async () => {
-    const k = btn.dataset.goalSave;
-    const input = main.querySelector(`[data-goal-input="${k}"]`);
-    const text = input?.value.trim();
-    if (!text) return;
-    const type = k === 'dos' ? 'do' : 'dont';
-    const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text }).select().single());
-    if (data) { state.goals[k].push({ id: data.id, text }); render(); }
-  }));
-
-  // add new project
-  const newProj = main.querySelector('#f-proj-save');
-  if (newProj) newProj.addEventListener('click', async () => {
-    const name     = main.querySelector('#f-proj-name')?.value.trim();
-    const status   = main.querySelector('#f-proj-status')?.value || 'active';
-    const deadline = main.querySelector('#f-proj-deadline')?.value || null;
-    if (!name) { main.querySelector('#f-proj-name')?.focus(); return; }
-    const now = new Date().toISOString();
-    const { data } = await dbCall(() => sb.from('projects').insert({ user_id: currentUser.id, name, status, deadline: deadline || null, updated_at: now }).select().single());
-    if (data) {
-      state.projects.push({ id: data.id, name, status, deadline: data.deadline, tasks: [] });
-      render();
-    }
-  });
-
-  // income
-  const inc = main.querySelector('#f-inc-save');
-  if (inc) inc.addEventListener('click', async () => {
-    const source = main.querySelector('#f-inc-source').value.trim();
-    const amount = Number(main.querySelector('#f-inc-amount').value || 0);
-    const date = main.querySelector('#f-inc-date').value || todayISO();
-    if (!source || !amount) return;
-    const { data } = await dbCall(() => sb.from('income_entries').insert({ user_id: currentUser.id, date, source, amount }).select().single());
-    if (data) { state.income.unshift({ id: data.id, date, source, amount }); render(); }
-  });
-
-  // spending
-  const sp = main.querySelector('#f-sp-save');
-  if (sp) sp.addEventListener('click', async () => {
-    const cat = main.querySelector('#f-sp-cat').value;
-    const amount = Number(main.querySelector('#f-sp-amount').value || 0);
-    const note = main.querySelector('#f-sp-note').value.trim();
-    if (!amount) return;
-    const t = new Date();
-    const time = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
-    const date = todayISO();
-    const { data } = await dbCall(() => sb.from('spending_entries').insert({ user_id: currentUser.id, date, time, category: cat, note, amount }).select().single());
-    if (data) { state.spending.unshift({ id: data.id, date, time, cat, note, amount }); render(); }
-  });
-
-  // debt
-  const db = main.querySelector('#f-debt-save');
-  if (db) db.addEventListener('click', async () => {
-    const creditor = main.querySelector('#f-debt-creditor').value.trim();
-    const amount = Number(main.querySelector('#f-debt-amount').value || 0);
-    const due = main.querySelector('#f-debt-due').value || todayISO();
-    if (!creditor || !amount) return;
-    const { data } = await dbCall(() => sb.from('debts').insert({ user_id: currentUser.id, creditor, amount, due_date: due, paid: false }).select().single());
-    if (data) { state.debts.push({ id: data.id, creditor, amount, due, paid: false }); render(); }
-  });
+  // All form saves are now handled by showModal() onSave callbacks
 }
 
 function pulse(el) {
@@ -2137,5 +1947,15 @@ window.parent.postMessage({ type: '__edit_mode_available' }, '*');
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js');
+  });
+}
+
+// Notes mobile: adjust editor height when keyboard appears
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    const editor = document.querySelector('.note-content');
+    if (editor) {
+      editor.style.minHeight = (window.visualViewport.height - 200) + 'px';
+    }
   });
 }
