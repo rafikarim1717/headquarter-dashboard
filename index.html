@@ -167,6 +167,37 @@
 <!-- Tooltip for collapsed sidebar -->
 <div id="nav-tooltip"></div>
 
+<!-- General purpose modal -->
+<div id="hq-modal-overlay" class="hq-modal-overlay">
+  <div class="hq-modal-card">
+    <div class="hq-modal-header">
+      <div class="hq-modal-title"></div>
+      <button class="hq-modal-close" id="hq-modal-close">&#x2715;</button>
+    </div>
+    <div class="hq-modal-body"></div>
+    <div class="hq-modal-footer">
+      <button class="btn hq-modal-cancel">Cancel</button>
+      <button class="btn primary hq-modal-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div id="hq-confirm-overlay" class="hq-modal-overlay">
+  <div class="hq-modal-card hq-confirm-card">
+    <div class="hq-modal-header">
+      <div class="hq-modal-title hq-confirm-title"></div>
+    </div>
+    <p class="hq-confirm-msg"></p>
+    <div class="hq-modal-footer">
+      <button class="btn hq-confirm-cancel">Cancel</button>
+      <button class="btn hq-confirm-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<canvas id="noise-canvas" aria-hidden="true"></canvas>
+
 <script src="js/app.js"></script>
 <script src="js/navigation.js"></script>
 <script src="js/supabase.js"></script>

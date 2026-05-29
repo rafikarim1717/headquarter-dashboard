@@ -74,8 +74,102 @@ let state = {
   notesSort: 'newest',
   notesFilter: 'all',
   notesDisplay: 'grid',
-  commitPreviewTab: 'weekly'
+  commitPreviewTab: 'weekly',
+  incomePage: 1,
+  spendingFilter: 'daily',
+  spendingPickedDate: null,
+  spendingPage: 1,
+  debtsPage: 1,
+  incomeFilter: 'month',
+  incomePickedDate: null
 };
+
+/* =========================================================
+   AMBIENT MUSIC
+========================================================= */
+const AMBIENT_STREAMS = [
+  'https://streams.ilovemusic.de/iloveradio17.mp3',
+  'https://usa9.fastcast4u.com/proxy/jamz?mp=/1',
+  'https://lofi.stream.laut.fm/lofi'
+];
+const ambientPlayer = { audio: null, isPlaying: false };
+
+function updateMusicBtn(playing) {
+  const btn = document.getElementById('music-toggle');
+  const eq  = document.getElementById('eq-bars');
+  if (btn) btn.classList.toggle('playing', playing);
+  if (eq)  eq.style.display = playing ? 'inline-flex' : 'none';
+}
+
+function tryAmbientStream(idx) {
+  if (idx >= AMBIENT_STREAMS.length) {
+    showToast('No stream available right now');
+    ambientPlayer.isPlaying = false;
+    updateMusicBtn(false);
+    return;
+  }
+  if (ambientPlayer.audio) { ambientPlayer.audio.pause(); ambientPlayer.audio = null; }
+  const audio = new Audio(AMBIENT_STREAMS[idx]);
+  audio.crossOrigin = 'anonymous';
+  audio.volume = 0.4;
+  ambientPlayer.audio = audio;
+  audio.addEventListener('error', () => tryAmbientStream(idx + 1), { once: true });
+  audio.play()
+    .then(() => { ambientPlayer.isPlaying = true; updateMusicBtn(true); })
+    .catch(() => tryAmbientStream(idx + 1));
+}
+
+function toggleAmbientMusic() {
+  if (ambientPlayer.isPlaying) {
+    ambientPlayer.audio?.pause();
+    ambientPlayer.isPlaying = false;
+    updateMusicBtn(false);
+  } else if (ambientPlayer.audio) {
+    ambientPlayer.audio.play()
+      .then(() => { ambientPlayer.isPlaying = true; updateMusicBtn(true); })
+      .catch(() => { ambientPlayer.audio = null; tryAmbientStream(0); });
+  } else {
+    tryAmbientStream(0);
+  }
+}
+
+/* =========================================================
+   MODAL SYSTEM
+========================================================= */
+function showModal({ title, fieldsHtml, saveLabel = 'Save', onSave, onShown }) {
+  const overlay = document.getElementById('hq-modal-overlay');
+  if (!overlay) return;
+  overlay.querySelector('.hq-modal-title').textContent = title;
+  const body = overlay.querySelector('.hq-modal-body');
+  body.innerHTML = fieldsHtml;
+  const saveBtn = overlay.querySelector('.hq-modal-save');
+  saveBtn.textContent = saveLabel;
+  saveBtn.onclick = () => onSave(body);
+  overlay.classList.add('open');
+  setTimeout(() => {
+    const first = body.querySelector('input:not([type=checkbox]):not([type=date]):not([type=time]), select');
+    if (first) first.focus();
+    if (onShown) onShown(body);
+  }, 60);
+}
+function hideModal() {
+  document.getElementById('hq-modal-overlay')?.classList.remove('open');
+}
+function showConfirmModal({ title, message, confirmLabel = 'Delete', onConfirm, danger = true }) {
+  const overlay = document.getElementById('hq-confirm-overlay');
+  if (!overlay) return;
+  overlay.querySelector('.hq-confirm-title').textContent = title;
+  overlay.querySelector('.hq-confirm-msg').textContent = message;
+  const btn = overlay.querySelector('.hq-confirm-btn');
+  btn.textContent = confirmLabel;
+  btn.style.background = danger ? '#c0392b' : 'var(--accent)';
+  btn.style.color = danger ? '#fff' : '#111';
+  btn.onclick = () => { hideConfirmModal(); onConfirm(); };
+  overlay.classList.add('open');
+}
+function hideConfirmModal() {
+  document.getElementById('hq-confirm-overlay')?.classList.remove('open');
+}
 
 /* =========================================================
    SAMPLE DATA (inserted on first login)
@@ -242,6 +336,7 @@ function topbar() {
     `<button class="mobile-pill${state.activeTab === p.tab ? ' active' : ''}" data-go="${p.tab}">${p.label}</button>`
   ).join('');
   const signOutSvg = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/></svg>`;
+  const musicNoteSvg = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9l10.5-3m0 6c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3zM9 15c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3z"/></svg>`;
   return `
     <header class="topbar">
       <div class="greet">
@@ -250,10 +345,28 @@ function topbar() {
       </div>
       <div class="right">
         <button class="mobile-signout-btn" id="topbar-logout-btn" aria-label="Sign out">${signOutSvg}</button>
+        <button class="icon-btn music-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-toggle" title="Ambient music" aria-label="Ambient music">${musicNoteSvg}<span class="eq-bars" id="eq-bars" style="${ambientPlayer.isPlaying ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span></button>
         <button class="icon-btn" id="open-tweaks" title="Tweaks" aria-label="Tweaks">&#x2699;&#xFE0E;</button>
       </div>
     </header>
     <div class="mobile-sub-nav">${pillsHtml}</div>`;
+}
+
+/* ---- shared SVG icons ---- */
+const ICON_PENCIL  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125"/></svg>`;
+const ICON_TRASH   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>`;
+const ICON_CHECK   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.75l6 6 9-13.5"/></svg>`;
+const ICON_XCIRCLE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+const ICON_CHEV_L  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>`;
+const ICON_CHEV_R  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>`;
+
+function paginationHtml(page, total, prevAttr, nextAttr) {
+  if (total <= 1) return '';
+  return `<div class="pagination">
+      <button class="page-btn" ${page <= 1 ? 'disabled' : ''} data-${prevAttr}>${ICON_CHEV_L}</button>
+      <span class="page-indicator">${page} / ${total}</span>
+      <button class="page-btn" ${page >= total ? 'disabled' : ''} data-${nextAttr}>${ICON_CHEV_R}</button>
+    </div>`;
 }
 
 /* ---- LIFE: HOME ---- */
@@ -268,7 +381,7 @@ function renderLifeHome() {
     <div class="card" style="animation-delay:0ms">
       <div class="section-title" style="margin-top:0">Daily score</div>
       <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
-        <div style="font-size:48px;font-weight:var(--num-weight,200);color:var(--accent);font-variant-numeric:tabular-nums;line-height:1">${score}</div>
+        <div id="today-score-val" style="font-size:48px;font-weight:var(--num-weight,200);color:var(--accent);font-variant-numeric:tabular-nums;line-height:1">${score}</div>
         <div style="font-size:16px;color:var(--text-faint)">/100</div>
       </div>
     </div>`;
@@ -285,10 +398,10 @@ function renderLifeHome() {
           : allGoals.map(g => {
               const isChecked = getTodayLog(g.id)?.checked || false;
               const isDo = (state.goals.dos || []).some(d => d.id === g.id);
-              return `<li class="list-item" style="padding:8px 0;gap:10px">
+              return `<li class="list-item" style="padding:8px 0;gap:10px;min-height:44px">
+                <span class="check ${isChecked ? 'checked' : ''}" data-toggle-today-goal="${g.id}" style="flex-shrink:0"></span>
                 <span class="commit-type-pill ${isDo ? 'do' : 'dont'}">${isDo ? 'DO' : 'DONT'}</span>
-                <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1">${escapeHtml(g.text)}</span>
-                <span style="color:${isChecked ? 'var(--good)' : 'var(--text-faint)'};font-size:14px">${isChecked ? '✓' : '○'}</span>
+                <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1" id="today-commit-text-${g.id}">${escapeHtml(g.text)}</span>
               </li>`;
             }).join('')}
       </ul>
@@ -350,7 +463,6 @@ function renderLifeHome() {
     ${topbar()}
     ${scoreBlock}
     ${layout === 'hero' ? hero : stacked}
-    ${pillsBlock}
   `;
 }
 
@@ -454,29 +566,6 @@ function renderSchedule() {
           </li>`).join('') || `<li class="list-item"><div class="item-sub">No events. Add one below.</div></li>`}
       </ul>
       <button class="add-btn" id="add-sched-btn" style="margin-top:14px"><span class="plus">+</span> Add event</button>
-      <div class="inline-form" id="add-sched-form">
-        <div class="inner">
-          <div class="form-row">
-            <div class="field"><label>Time</label><input type="time" id="f-sched-time" value="09:00"/></div>
-            <div class="field"><label>Title</label><input type="text" id="f-sched-title" placeholder="e.g. Deep work"/></div>
-          </div>
-          <div class="field"><label>Note</label><input type="text" id="f-sched-sub" placeholder="optional"/></div>
-          <div class="alarm-row">
-            <span class="alarm-label">Set alarm</span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="f-sched-alarm">
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-          <div class="alarm-time-row" id="alarm-time-row">
-            <div class="field"><label>Alarm time</label><input type="time" id="f-sched-alarm-time" value="09:00"/></div>
-          </div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="add-sched-form">Cancel</button>
-            <button class="btn primary" id="f-sched-save">Add</button>
-          </div>
-        </div>
-      </div>
     </div>
   `;
 }
@@ -565,16 +654,7 @@ function renderCommitments() {
             </li>`;
           }).join('')}
         </ul>
-        <button class="add-btn" data-open-form="add-goal-${key}" style="margin-top:14px"><span class="plus">+</span> Add</button>
-        <div class="inline-form" id="add-goal-${key}">
-          <div class="inner">
-            <div class="field"><label>${title.slice(0, -1)}</label><input type="text" data-goal-input="${key}" placeholder="${key === 'dos' ? 'e.g. Drink 2L water' : 'e.g. No phone in bed'}"/></div>
-            <div class="form-actions">
-              <button class="btn" data-cancel="add-goal-${key}">Cancel</button>
-              <button class="btn primary" data-goal-save="${key}">Add</button>
-            </div>
-          </div>
-        </div>
+        <button class="add-btn" data-add-goal="${key}" style="margin-top:14px"><span class="plus">+</span> Add</button>
       </div>`;
   }
 
@@ -749,17 +829,7 @@ function renderProjectCard(p, i) {
               </li>
             `).join('')}
           </ul>
-          <button class="add-btn" data-open-form="add-proj-task-${p.id}" style="margin-top:10px"><span class="plus">+</span> Add task</button>
-          <div class="inline-form" id="add-proj-task-${p.id}">
-            <div class="inner">
-              <div class="field"><label>Task</label><input type="text" id="f-pt-text-${p.id}" placeholder="What needs to be done?"/></div>
-              <div class="field"><label>Description</label><textarea id="f-pt-desc-${p.id}" rows="2" placeholder="Description (optional)"></textarea></div>
-              <div class="form-actions">
-                <button class="btn" data-cancel="add-proj-task-${p.id}">Cancel</button>
-                <button class="btn primary" data-save-proj-task-new="${p.id}">Add</button>
-              </div>
-            </div>
-          </div>
+          <button class="add-btn" data-add-proj-task="${p.id}" style="margin-top:10px"><span class="plus">+</span> Add task</button>
         </div>
       ` : ''}
     </div>`;
@@ -775,29 +845,12 @@ function renderProjects() {
     ${topbar()}
     <div class="projects-header">
       <h1 class="page-title" style="margin:0">Projects</h1>
-      <button class="add-btn-inline" data-open-form="add-project-form">+ New Project</button>
+      <button class="add-btn-inline" id="add-project-btn">+ New Project</button>
     </div>
     <div class="pills" style="margin: 14px 0 18px">
       ${['all','active','on_hold','done'].map(f =>
         `<button class="pill${filter===f?' active':''}" data-proj-filter="${f}">${filterLabels[f]}</button>`
       ).join('')}
-    </div>
-    <div class="inline-form" id="add-project-form">
-      <div class="inner">
-        <div class="field"><label>Project name</label><input type="text" id="f-proj-name" placeholder="e.g. Client Website"/></div>
-        <div class="form-row">
-          <div class="field"><label>Status</label><select id="f-proj-status">
-            <option value="active">Active</option>
-            <option value="on_hold">On Hold</option>
-            <option value="done">Done</option>
-          </select></div>
-          <div class="field"><label>Deadline (optional)</label><input type="date" id="f-proj-deadline"/></div>
-        </div>
-        <div class="form-actions">
-          <button class="btn" data-cancel="add-project-form">Cancel</button>
-          <button class="btn primary" id="f-proj-save">Add</button>
-        </div>
-      </div>
     </div>
     ${filtered.length === 0
       ? `<div style="color:var(--text-faint);font-size:13px;padding:20px 0">No projects${filter!=='all'?' with this status':''}.</div>`
@@ -1029,29 +1082,70 @@ function renderFinanceOverview() {
 
 /* ---- FINANCE: INCOME ---- */
 function renderIncome() {
-  const total = thisMonthIncome();
-  const items = state.income.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const pfx = window.__HQ_TWEAKS.currencyPrefix||'$';
+  const today      = todayISO();
+  const ym         = ymLocal(new Date());
+  const yy         = today.slice(0, 4);
+  const filter     = state.incomeFilter || 'month';
+  const pickedDate = state.incomePickedDate || null;
+  const pfx        = window.__HQ_TWEAKS.currencyPrefix || '$';
+
+  let filteredIncome;
+  if (pickedDate) {
+    filteredIncome = state.income.filter(i => i.date === pickedDate);
+  } else if (filter === 'month') {
+    filteredIncome = state.income.filter(i => (i.date || '').startsWith(ym));
+  } else if (filter === 'year') {
+    filteredIncome = state.income.filter(i => (i.date || '').startsWith(yy));
+  } else {
+    filteredIncome = state.income.slice();
+  }
+
+  const total = filteredIncome.reduce((s, i) => s + Number(i.amount || 0), 0);
+  const count = filteredIncome.length;
+  const avg   = count ? Math.round(total / count) : 0;
+  const cardLabel = pickedDate
+    ? `On ${fmtDate(pickedDate)}`
+    : ({ month: 'This Month', year: 'This Year', all: 'All Time' }[filter]);
+
+  const items      = filteredIncome.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const PAGE_SIZE  = 7;
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  state.incomePage = Math.min(state.incomePage || 1, totalPages);
+  const page       = state.incomePage;
+  const pageItems  = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return `
     ${topbar()}
     <h1 class="page-title">Income</h1>
     <div class="card" style="animation-delay:0ms">
-      <div class="section-title" style="margin-top:0">This month</div>
+      <div class="section-title" style="margin-top:0">${cardLabel}</div>
       <div class="num" style="font-size:42px; font-weight:300; letter-spacing:-0.02em;" data-target="${total}" data-prefix="${pfx}">${fmtMoney(0)}</div>
-      <div class="sub" style="color:var(--text-faint); margin-top:6px;">${state.income.length} entries · avg ${fmtMoney(state.income.length?Math.round(total/state.income.length):0)}</div>
+      <div class="sub" style="color:var(--text-faint); margin-top:6px;">${count} entr${count === 1 ? 'y' : 'ies'} · avg ${fmtMoney(avg)}</div>
+      <div class="spend-filters">
+        <div class="spend-filter-tabs">
+          ${['month','year','all'].map(f =>
+            `<button class="pill${!pickedDate && filter === f ? ' active' : ''}" data-income-filter="${f}">${{month:'This Month',year:'This Year',all:'All Time'}[f]}</button>`
+          ).join('')}
+        </div>
+        <div class="spend-date-wrap">
+          <span class="spend-date-label">Jump to date</span>
+          <input type="date" id="income-date-input" class="spend-date-input" value="${pickedDate || ''}"/>
+          ${pickedDate ? `<button id="income-date-clear" class="spend-date-clear" title="Clear">×</button>` : ''}
+        </div>
+      </div>
     </div>
     <div class="card" style="margin-top:16px; animation-delay:60ms">
       <div class="section-title" style="margin-top:0">Log</div>
       <ul class="list">
-        ${items.map(i => `
+        ${pageItems.map(i => `
           <li class="fin-item" data-id="${i.id}">
             <div class="list-item row-wrap">
               <div class="time-col">${fmtDate(i.date)}</div>
               <div class="item-main"><div class="item-title">${escapeHtml(i.source)}</div></div>
               <div class="item-amt">+${fmtMoney(i.amount)}</div>
               <div class="fin-acts">
-                <button class="fin-edit-btn" data-edit-income="${i.id}">Edit</button>
-                <button class="fin-del-btn" data-del-income="${i.id}">Delete</button>
+                <button class="fin-edit-btn" data-edit-income="${i.id}" title="Edit">${ICON_PENCIL}</button>
+                <button class="fin-del-btn" data-del-income="${i.id}" title="Delete">${ICON_TRASH}</button>
               </div>
             </div>
             <div class="inline-form" id="edit-inc-${i.id}">
@@ -1067,22 +1161,10 @@ function renderIncome() {
                 </div>
               </div>
             </div>
-          </li>`).join('') || `<li class="list-item"><div class="item-sub">No income yet.</div></li>`}
+          </li>`).join('') || `<li class="list-item"><div class="item-sub">No entries for this period.</div></li>`}
       </ul>
-      <button class="add-btn" data-open-form="add-income" style="margin-top:14px"><span class="plus">+</span> Log income</button>
-      <div class="inline-form" id="add-income">
-        <div class="inner">
-          <div class="field"><label>Source</label><input type="text" id="f-inc-source" placeholder="e.g. Client A"/></div>
-          <div class="form-row">
-            <div class="field"><label>Amount</label><input type="number" id="f-inc-amount" placeholder="0"/></div>
-            <div class="field"><label>Date</label><input type="date" id="f-inc-date" value="${todayISO()}"/></div>
-          </div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="add-income">Cancel</button>
-            <button class="btn primary" id="f-inc-save">Add</button>
-          </div>
-        </div>
-      </div>
+      ${paginationHtml(page, totalPages, 'income-prev', 'income-next')}
+      <button class="add-btn" id="add-income-btn" style="margin-top:14px"><span class="plus">+</span> Log income</button>
     </div>
   `;
 }
@@ -1090,38 +1172,79 @@ function renderIncome() {
 /* ---- FINANCE: SPENDING ---- */
 function renderSpending() {
   const today = todayISO();
-  const todays = state.spending.filter(s => s.date === today);
-  const total = todays.reduce((s,x) => s+Number(x.amount||0), 0);
+  const filter = state.spendingFilter || 'daily';
+  const pickedDate = state.spendingPickedDate || null;
   const cats = ['Food','Transport','Shopping','Other'];
-  const byCat = Object.fromEntries(cats.map(c => [c, todays.filter(s=>s.cat===c).reduce((s,x)=>s+Number(x.amount||0),0)]));
-  const recent = state.spending.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   const pfx = window.__HQ_TWEAKS.currencyPrefix||'$';
+
+  // filtered set for stats + recent log
+  let filteredSpending;
+  if (pickedDate) {
+    filteredSpending = state.spending.filter(s => s.date === pickedDate);
+  } else if (filter === 'daily') {
+    filteredSpending = state.spending.filter(s => s.date === today);
+  } else if (filter === 'weekly') {
+    const now = new Date(); const dow = now.getDay();
+    const mon = new Date(now); mon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1)); mon.setHours(0,0,0,0);
+    const monISO = isoLocal(mon);
+    filteredSpending = state.spending.filter(s => s.date >= monISO && s.date <= today);
+  } else {
+    const firstISO = today.slice(0,7) + '-01';
+    filteredSpending = state.spending.filter(s => s.date >= firstISO && s.date <= today);
+  }
+
+  const total = filteredSpending.reduce((s,x) => s+Number(x.amount||0), 0);
+  const byCat = Object.fromEntries(cats.map(c => [c, filteredSpending.filter(s=>s.cat===c).reduce((s,x)=>s+Number(x.amount||0),0)]));
+  const totalLabel = pickedDate
+    ? `Total on ${fmtDate(pickedDate)}`
+    : ({daily:"Today's total", weekly:"This week's total", monthly:"This month's total"}[filter]);
+
+  const recent = filteredSpending.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
+  const PAGE_SIZE = 7;
+  const totalPages = Math.max(1, Math.ceil(recent.length / PAGE_SIZE));
+  state.spendingPage = Math.min(state.spendingPage || 1, totalPages);
+  const page = state.spendingPage;
+  const pageItems = recent.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
 
   return `
     ${topbar()}
     <h1 class="page-title">Spending</h1>
     <div class="card" style="animation-delay:0ms">
-      <div class="section-title" style="margin-top:0">Today</div>
+      <div class="section-title" style="margin-top:0">${totalLabel}</div>
       <div class="num" style="font-size:42px; font-weight:300; letter-spacing:-0.02em;" data-target="${total}" data-prefix="${pfx}">${fmtMoney(0)}</div>
       <div class="pills" style="margin-top:16px">
         ${cats.map(c => `<span class="pill cat">${c}<span class="amt">${fmtMoney(byCat[c])}</span></span>`).join('')}
+      </div>
+      <div class="spend-filters">
+        <div class="spend-filter-tabs">
+          ${['daily','weekly','monthly'].map(f => `<button class="pill${!pickedDate && filter===f?' active':''}" data-spend-filter="${f}">${{daily:'Daily',weekly:'Weekly',monthly:'Monthly'}[f]}</button>`).join('')}
+        </div>
+        <div class="spend-date-wrap">
+          <span class="spend-date-label">Jump to date</span>
+          <input type="date" id="spend-date-input" class="spend-date-input" value="${pickedDate||''}"/>
+          ${pickedDate ? `<button id="spend-date-clear" class="spend-date-clear" title="Clear">×</button>` : ''}
+        </div>
       </div>
     </div>
     <div class="card" style="margin-top:16px; animation-delay:80ms">
       <div class="section-title" style="margin-top:0">Recent</div>
       <ul class="list">
-        ${recent.map(s => `
+        ${pageItems.map(s => `
           <li class="fin-item" data-id="${s.id}">
-            <div class="list-item row-wrap">
-              <div class="time-col">${s.date===today?s.time:fmtDate(s.date)}</div>
-              <div class="item-main">
-                <div class="item-title">${escapeHtml(s.note || s.cat)}</div>
-                <div class="item-sub">${s.cat}</div>
+            <div class="spend-row">
+              <div class="spend-row-content">
+                <div class="spend-row-top">
+                  <span class="spend-cat-pill">${escapeHtml(s.cat)}</span>
+                  <span class="spend-note">${escapeHtml((s.note||s.cat).slice(0,40))}</span>
+                </div>
+                <div class="spend-row-bottom">
+                  <span class="spend-meta">${s.date===today?s.time:fmtDate(s.date)}</span>
+                  <span class="spend-amt">−${fmtMoney(s.amount)}</span>
+                </div>
               </div>
-              <div class="item-amt">−${fmtMoney(s.amount)}</div>
               <div class="fin-acts">
-                <button class="fin-edit-btn" data-edit-spend="${s.id}">Edit</button>
-                <button class="fin-del-btn" data-del-spend="${s.id}">Delete</button>
+                <button class="fin-edit-btn" data-edit-spend="${s.id}" title="Edit">${ICON_PENCIL}</button>
+                <button class="fin-del-btn" data-del-spend="${s.id}" title="Delete">${ICON_TRASH}</button>
               </div>
             </div>
             <div class="inline-form" id="edit-spend-${s.id}">
@@ -1140,22 +1263,10 @@ function renderSpending() {
                 </div>
               </div>
             </div>
-          </li>`).join('')}
+          </li>`).join('') || `<li class="list-item"><div class="item-sub">No entries for this period.</div></li>`}
       </ul>
-      <button class="add-btn" data-open-form="add-spend" style="margin-top:14px"><span class="plus">+</span> Log spend</button>
-      <div class="inline-form" id="add-spend">
-        <div class="inner">
-          <div class="form-row">
-            <div class="field"><label>Category</label><select id="f-sp-cat">${cats.map(c=>`<option>${c}</option>`).join('')}</select></div>
-            <div class="field"><label>Amount</label><input type="number" id="f-sp-amount" placeholder="0"/></div>
-          </div>
-          <div class="field"><label>Note</label><input type="text" id="f-sp-note" placeholder="What was it?"/></div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="add-spend">Cancel</button>
-            <button class="btn primary" id="f-sp-save">Add</button>
-          </div>
-        </div>
-      </div>
+      ${paginationHtml(page, totalPages, 'spend-prev', 'spend-next')}
+      <button class="add-btn" id="add-spend-btn" style="margin-top:14px"><span class="plus">+</span> Log spend</button>
     </div>
   `;
 }
@@ -1164,6 +1275,11 @@ function renderSpending() {
 function renderDebts() {
   const sorted = state.debts.slice().sort((a,b)=>(a.paid?1:0)-(b.paid?1:0)||(a.due||'').localeCompare(b.due||''));
   const pfx = window.__HQ_TWEAKS.currencyPrefix||'$';
+  const PAGE_SIZE = 7;
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  state.debtsPage = Math.min(state.debtsPage || 1, totalPages);
+  const page = state.debtsPage;
+  const pageItems = sorted.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
   return `
     ${topbar()}
     <h1 class="page-title">Debts</h1>
@@ -1175,27 +1291,25 @@ function renderDebts() {
     <div class="card" style="margin-top:16px; animation-delay:60ms">
       <div class="section-title" style="margin-top:0">All debts</div>
       <ul class="list">
-        ${sorted.map(d => {
+        ${pageItems.map(d => {
           const days = daysUntil(d.due);
           const soon = !d.paid && days <= 7 && days >= 0;
           const overdue = !d.paid && days < 0;
           const dueLabel = d.paid ? `Paid` : (overdue ? `Overdue · ${fmtDate(d.due)}` : (days===0?`Due today`:`Due in ${days}d · ${fmtDate(d.due)}`));
           return `
           <li class="fin-item" data-id="${d.id}">
-            <div class="debt-row-info">
-              <div class="item-main">
-                <div class="item-title">${escapeHtml(d.creditor)}</div>
-                <div class="debt-due ${soon||overdue?'soon':''}">${dueLabel}</div>
+            <div class="debt-card-inner">
+              <div class="debt-creditor">${escapeHtml(d.creditor)}</div>
+              <div class="debt-amount-large">${fmtMoney(d.amount)}</div>
+              <div class="debt-due ${soon||overdue?'soon':''}">${dueLabel}</div>
+              <div class="debt-card-acts">
+                ${d.paid
+                  ? `<span class="debt-status paid" style="margin-right:auto">Paid</span>
+                     <button class="fin-edit-btn" data-unpay-debt="${d.id}" title="Mark as unpaid">${ICON_XCIRCLE}</button>`
+                  : `<button class="fin-edit-btn" data-pay-debt="${d.id}" title="Mark as paid" style="color:var(--good);margin-right:auto">${ICON_CHECK}</button>`}
+                <button class="fin-edit-btn" data-edit-debt="${d.id}" title="Edit">${ICON_PENCIL}</button>
+                <button class="fin-del-btn" data-del-debt="${d.id}" title="Delete">${ICON_TRASH}</button>
               </div>
-              <div class="item-amt">${fmtMoney(d.amount)}</div>
-            </div>
-            <div class="debt-row-acts">
-              ${d.paid
-                ? `<span class="debt-status paid">Paid</span>`
-                : `<button class="btn" data-pay-debt="${d.id}" style="padding:6px 10px;font-size:11px;">Mark paid</button>`}
-              <div class="spacer"></div>
-              <button class="fin-edit-btn" data-edit-debt="${d.id}">Edit</button>
-              <button class="fin-del-btn" data-del-debt="${d.id}">Delete</button>
             </div>
             <div class="inline-form" id="edit-debt-${d.id}">
               <div class="inner">
@@ -1211,22 +1325,10 @@ function renderDebts() {
               </div>
             </div>
           </li>`;
-        }).join('')}
+        }).join('') || `<li class="list-item"><div class="item-sub">No debts recorded.</div></li>`}
       </ul>
-      <button class="add-btn" data-open-form="add-debt" style="margin-top:14px"><span class="plus">+</span> Add debt</button>
-      <div class="inline-form" id="add-debt">
-        <div class="inner">
-          <div class="field"><label>Creditor</label><input type="text" id="f-debt-creditor" placeholder="Who do you owe?"/></div>
-          <div class="form-row">
-            <div class="field"><label>Amount</label><input type="number" id="f-debt-amount" placeholder="0"/></div>
-            <div class="field"><label>Due date</label><input type="date" id="f-debt-due" value="${todayISO()}"/></div>
-          </div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="add-debt">Cancel</button>
-            <button class="btn primary" id="f-debt-save">Add</button>
-          </div>
-        </div>
-      </div>
+      ${paginationHtml(page, totalPages, 'debts-prev', 'debts-next')}
+      <button class="add-btn" id="add-debt-btn" style="margin-top:14px"><span class="plus">+</span> Add debt</button>
     </div>
   `;
 }
@@ -1277,6 +1379,8 @@ function bindMainEvents() {
   if (ot) ot.addEventListener('click', toggleTweaks);
   const tlb = main.querySelector('#topbar-logout-btn');
   if (tlb) tlb.addEventListener('click', signOut);
+  const mt = main.querySelector('#music-toggle');
+  if (mt) mt.addEventListener('click', toggleAmbientMusic);
 
   // navigation pills
   main.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => setActiveTab(el.dataset.go)));
@@ -1334,10 +1438,17 @@ function bindMainEvents() {
   // project delete
   main.querySelectorAll('[data-del-proj]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delProj;
-    state.projects = state.projects.filter(p => p.id !== id);
-    state.expandedProjectIds = state.expandedProjectIds.filter(eid => eid !== id);
-    render();
-    dbCall(() => sb.from('projects').delete().eq('id', id));
+    const proj = state.projects.find(p => p.id === id);
+    showConfirmModal({
+      title: 'Delete Project?',
+      message: `This will permanently delete "${proj?.name || 'this project'}" and all its tasks. This cannot be undone.`,
+      onConfirm: () => {
+        state.projects = state.projects.filter(p => p.id !== id);
+        state.expandedProjectIds = state.expandedProjectIds.filter(eid => eid !== id);
+        render();
+        dbCall(() => sb.from('projects').delete().eq('id', id));
+      }
+    });
   }));
 
   // project edit open
@@ -1381,11 +1492,17 @@ function bindMainEvents() {
   // project task delete
   main.querySelectorAll('[data-del-proj-task]').forEach(el => el.addEventListener('click', () => {
     const [projId, taskId] = el.dataset.delProjTask.split('|');
-    const proj = state.projects.find(p => p.id === projId);
-    if (!proj) return;
-    proj.tasks = proj.tasks.filter(t => t.id !== taskId);
-    render();
-    dbCall(() => sb.from('project_tasks').delete().eq('id', taskId));
+    showConfirmModal({
+      title: 'Delete Task?',
+      message: 'Remove this task from the project?',
+      onConfirm: () => {
+        const proj = state.projects.find(p => p.id === projId);
+        if (!proj) return;
+        proj.tasks = proj.tasks.filter(t => t.id !== taskId);
+        render();
+        dbCall(() => sb.from('project_tasks').delete().eq('id', taskId));
+      }
+    });
   }));
 
   // project task edit open
@@ -1415,23 +1532,6 @@ function bindMainEvents() {
     }
     render();
     dbCall(() => sb.from('project_tasks').update({ text: newText, description: newDesc || null }).eq('id', taskId));
-  }));
-
-  // project add task (per-project inline form)
-  main.querySelectorAll('[data-save-proj-task-new]').forEach(btn => btn.addEventListener('click', async () => {
-    const projId = btn.dataset.saveProjTaskNew;
-    const textEl = main.querySelector(`#f-pt-text-${projId}`);
-    const descEl = main.querySelector(`#f-pt-desc-${projId}`);
-    const text = textEl ? textEl.value.trim() : '';
-    const desc = descEl ? descEl.value.trim() : '';
-    if (!text) { textEl?.focus(); return; }
-    const proj = state.projects.find(p => p.id === projId);
-    if (!proj) return;
-    const { data } = await dbCall(() => sb.from('project_tasks').insert({ user_id: currentUser.id, project_id: projId, text, description: desc || null, checked: false }).select().single());
-    if (data) {
-      proj.tasks.push({ id: data.id, text, description: desc, checked: false });
-      render();
-    }
   }));
 
   // commitments preview tab switch
@@ -1468,9 +1568,16 @@ function bindMainEvents() {
   main.querySelectorAll('[data-del-sched]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delSched;
     const day = state.selectedDay;
-    state.schedule[day] = (state.schedule[day]||[]).filter(s => s.id !== id);
-    render();
-    dbCall(() => sb.from('schedule_events').delete().eq('id', id));
+    const ev = (state.schedule[day] || []).find(s => s.id === id);
+    showConfirmModal({
+      title: 'Delete Event?',
+      message: `Remove "${ev?.title || 'this event'}" from your schedule?`,
+      onConfirm: () => {
+        state.schedule[day] = (state.schedule[day] || []).filter(s => s.id !== id);
+        render();
+        dbCall(() => sb.from('schedule_events').delete().eq('id', id));
+      }
+    });
   }));
 
   // schedule edit handlers
@@ -1555,9 +1662,15 @@ function bindMainEvents() {
 
   main.querySelectorAll('[data-del-goal]').forEach(el => el.addEventListener('click', () => {
     const [k, id] = el.dataset.delGoal.split('|');
-    state.goals[k] = state.goals[k].filter(x => x.id !== id);
-    render();
-    dbCall(() => sb.from('goals').delete().eq('id', id));
+    showConfirmModal({
+      title: 'Delete Commitment?',
+      message: 'Remove this from your commitments?',
+      onConfirm: () => {
+        state.goals[k] = state.goals[k].filter(x => x.id !== id);
+        render();
+        dbCall(() => sb.from('goals').delete().eq('id', id));
+      }
+    });
   }));
 
   main.querySelectorAll('[data-edit-goal]').forEach(el => el.addEventListener('click', (e) => {
@@ -1590,9 +1703,15 @@ function bindMainEvents() {
 
   main.querySelectorAll('[data-del-income]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delIncome;
-    state.income = state.income.filter(x => x.id !== id);
-    render();
-    dbCall(() => sb.from('income_entries').delete().eq('id', id));
+    showConfirmModal({
+      title: 'Delete Income Entry?',
+      message: 'Remove this income record?',
+      onConfirm: () => {
+        state.income = state.income.filter(x => x.id !== id);
+        render();
+        dbCall(() => sb.from('income_entries').delete().eq('id', id));
+      }
+    });
   }));
 
   // income edit — open/save
@@ -1630,9 +1749,15 @@ function bindMainEvents() {
 
   main.querySelectorAll('[data-del-spend]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delSpend;
-    state.spending = state.spending.filter(x => x.id !== id);
-    render();
-    dbCall(() => sb.from('spending_entries').delete().eq('id', id));
+    showConfirmModal({
+      title: 'Delete Spending Entry?',
+      message: 'Remove this spending record?',
+      onConfirm: () => {
+        state.spending = state.spending.filter(x => x.id !== id);
+        render();
+        dbCall(() => sb.from('spending_entries').delete().eq('id', id));
+      }
+    });
   }));
 
   // spending edit — open/save
@@ -1662,10 +1787,10 @@ function bindMainEvents() {
     if (item) { item.cat = newCat; item.amount = newAmt; item.note = newNote; item.time = newTime; }
     const li = document.querySelector(`.fin-item[data-id="${id}"]`);
     if (li) {
-      const titleDiv = li.querySelector('.item-title'); if (titleDiv) titleDiv.textContent = newNote || newCat;
-      const subDiv   = li.querySelector('.item-sub');   if (subDiv)   subDiv.textContent   = newCat;
-      const amtDiv   = li.querySelector('.item-amt');   if (amtDiv)   amtDiv.textContent   = '−' + fmtMoney(newAmt);
-      const timeDiv  = li.querySelector('.time-col');   if (timeDiv && newTime) timeDiv.textContent = newTime;
+      const noteDiv = li.querySelector('.spend-note');     if (noteDiv) noteDiv.textContent = newNote || newCat;
+      const catDiv  = li.querySelector('.spend-cat-pill'); if (catDiv)  catDiv.textContent  = newCat;
+      const amtDiv  = li.querySelector('.spend-amt');      if (amtDiv)  amtDiv.textContent  = '−' + fmtMoney(newAmt);
+      const metaDiv = li.querySelector('.spend-meta');     if (metaDiv && newTime) metaDiv.textContent = newTime;
     }
     document.getElementById('edit-spend-' + id)?.classList.remove('open');
     dbCall(() => sb.from('spending_entries').update({ category: newCat, amount: newAmt, note: newNote, time: newTime }).eq('id', id));
@@ -1674,9 +1799,16 @@ function bindMainEvents() {
   // debt delete + edit
   main.querySelectorAll('[data-del-debt]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delDebt;
-    state.debts = state.debts.filter(d => d.id !== id);
-    render();
-    dbCall(() => sb.from('debts').delete().eq('id', id));
+    const d = state.debts.find(x => x.id === id);
+    showConfirmModal({
+      title: 'Delete Debt?',
+      message: `Remove "${d?.creditor || 'this debt'}" from your debts?`,
+      onConfirm: () => {
+        state.debts = state.debts.filter(x => x.id !== id);
+        render();
+        dbCall(() => sb.from('debts').delete().eq('id', id));
+      }
+    });
   }));
 
   main.querySelectorAll('[data-edit-debt]').forEach(el => el.addEventListener('click', (e) => {
@@ -1703,8 +1835,8 @@ function bindMainEvents() {
     if (item) { item.creditor = newCreditor; item.amount = newAmt; item.due = newDue; }
     const li = document.querySelector(`.fin-item[data-id="${id}"]`);
     if (li) {
-      const titleDiv = li.querySelector('.item-title'); if (titleDiv) titleDiv.textContent = newCreditor;
-      const amtDiv   = li.querySelector('.item-amt');   if (amtDiv)   amtDiv.textContent   = fmtMoney(newAmt);
+      const creditorDiv = li.querySelector('.debt-creditor');     if (creditorDiv) creditorDiv.textContent = newCreditor;
+      const amtDiv      = li.querySelector('.debt-amount-large'); if (amtDiv)      amtDiv.textContent      = fmtMoney(newAmt);
     }
     document.getElementById('edit-debt-' + id)?.classList.remove('open');
     dbCall(() => sb.from('debts').update({ creditor: newCreditor, amount: newAmt, due_date: newDue }).eq('id', id));
@@ -1718,42 +1850,309 @@ function bindMainEvents() {
     dbCall(() => sb.from('debts').update({ paid: true }).eq('id', d.id));
   }));
 
-  // forms — open / cancel
-  main.querySelectorAll('[data-open-form]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeAllForms();
-    document.getElementById(el.dataset.openForm)?.classList.add('open');
-    setTimeout(() => document.getElementById(el.dataset.openForm)?.querySelector('input,select,textarea')?.focus(), 60);
-  }));
-  const addSched = main.querySelector('#add-sched-btn');
-  if (addSched) addSched.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeAllForms();
-    document.getElementById('add-sched-form').classList.add('open');
-    setTimeout(() => document.getElementById('f-sched-title')?.focus(), 60);
-  });
+  // income pagination
+  main.querySelectorAll('[data-income-prev]').forEach(el => el.addEventListener('click', () => { state.incomePage = Math.max(1, state.incomePage - 1); render(); }));
+  main.querySelectorAll('[data-income-next]').forEach(el => el.addEventListener('click', () => { state.incomePage++; render(); }));
 
-  // alarm toggle show/hide + sync time
-  const alarmToggle = main.querySelector('#f-sched-alarm');
-  const alarmTimeRow = main.querySelector('#alarm-time-row');
-  if (alarmToggle && alarmTimeRow) {
-    alarmToggle.addEventListener('change', () => {
-      alarmTimeRow.classList.toggle('visible', alarmToggle.checked);
-      if (alarmToggle.checked) {
-        const t = main.querySelector('#f-sched-time').value;
-        if (t) main.querySelector('#f-sched-alarm-time').value = t;
-      }
-    });
-    main.querySelector('#f-sched-time')?.addEventListener('change', () => {
-      if (alarmToggle.checked) {
-        main.querySelector('#f-sched-alarm-time').value = main.querySelector('#f-sched-time').value;
-      }
+  // spending filter tabs
+  main.querySelectorAll('[data-spend-filter]').forEach(el => el.addEventListener('click', () => {
+    state.spendingFilter = el.dataset.spendFilter;
+    state.spendingPickedDate = null;
+    state.spendingPage = 1;
+    render();
+  }));
+
+  // spending date picker
+  const spendDateInput = main.querySelector('#spend-date-input');
+  if (spendDateInput) {
+    spendDateInput.addEventListener('change', () => {
+      state.spendingPickedDate = spendDateInput.value || null;
+      state.spendingPage = 1;
+      render();
     });
   }
+  const spendDateClear = main.querySelector('#spend-date-clear');
+  if (spendDateClear) {
+    spendDateClear.addEventListener('click', () => {
+      state.spendingPickedDate = null;
+      state.spendingPage = 1;
+      render();
+    });
+  }
+
+  // spending pagination
+  main.querySelectorAll('[data-spend-prev]').forEach(el => el.addEventListener('click', () => { state.spendingPage = Math.max(1, state.spendingPage - 1); render(); }));
+  main.querySelectorAll('[data-spend-next]').forEach(el => el.addEventListener('click', () => { state.spendingPage++; render(); }));
+
+  // debts pagination
+  main.querySelectorAll('[data-debts-prev]').forEach(el => el.addEventListener('click', () => { state.debtsPage = Math.max(1, state.debtsPage - 1); render(); }));
+  main.querySelectorAll('[data-debts-next]').forEach(el => el.addEventListener('click', () => { state.debtsPage++; render(); }));
+
+  // debt unpay
+  main.querySelectorAll('[data-unpay-debt]').forEach(el => el.addEventListener('click', () => {
+    const d = state.debts.find(x => x.id === el.dataset.unpayDebt);
+    if (!d) return;
+    d.paid = false;
+    render();
+    dbCall(() => sb.from('debts').update({ paid: false }).eq('id', d.id));
+  }));
+
+  // today page — toggle commitment
+  main.querySelectorAll('[data-toggle-today-goal]').forEach(el => el.addEventListener('click', async () => {
+    const id = el.dataset.toggleTodayGoal;
+    const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+    const g = allGoals.find(x => x.id === id);
+    if (!g || !currentUser) return;
+    const today = todayISO();
+    const existingLog = getTodayLog(id);
+    const newChecked = existingLog ? !existingLog.checked : true;
+    if (existingLog) {
+      existingLog.checked = newChecked;
+    } else {
+      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked });
+    }
+    el.classList.toggle('checked', newChecked);
+    pulse(el);
+    const textEl = document.getElementById('today-commit-text-' + id);
+    if (textEl) textEl.classList.toggle('done', newChecked);
+    const scoreEl = document.getElementById('today-score-val');
+    if (scoreEl) scoreEl.textContent = computeDailyScore();
+    const { data } = await dbCall(() => sb.from('goal_logs').upsert(
+      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked },
+      { onConflict: 'goal_id,date' }
+    ).select().single());
+    if (data) {
+      const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
+      if (localLog && !localLog.id) localLog.id = data.id;
+    }
+  }));
+
+  // forms — open / cancel (edit forms still use data-open-form via their own handlers)
   main.querySelectorAll('[data-cancel]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     document.getElementById(el.dataset.cancel)?.classList.remove('open');
   }));
+
+  // ---- ADD BUTTON MODALS ----
+  // schedule add
+  const addSched = main.querySelector('#add-sched-btn');
+  if (addSched) addSched.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showModal({
+      title: 'Add Event',
+      fieldsHtml: `
+        <div class="form-row">
+          <div class="field"><label>Time</label><input type="time" id="m-sched-time" value="09:00"/></div>
+          <div class="field"><label>Title</label><input type="text" id="m-sched-title" placeholder="e.g. Deep work"/></div>
+        </div>
+        <div class="field"><label>Note</label><input type="text" id="m-sched-sub" placeholder="optional"/></div>
+        <div class="alarm-row">
+          <span class="alarm-label">Set alarm</span>
+          <label class="toggle-switch"><input type="checkbox" id="m-sched-alarm"><span class="toggle-track"></span></label>
+        </div>
+        <div class="alarm-time-row" id="m-alarm-time-row">
+          <div class="field"><label>Alarm time</label><input type="time" id="m-sched-alarm-time" value="09:00"/></div>
+        </div>`,
+      saveLabel: 'Add',
+      onSave: async (body) => {
+        const time  = body.querySelector('#m-sched-time')?.value || '09:00';
+        const title = body.querySelector('#m-sched-title')?.value.trim();
+        const sub   = body.querySelector('#m-sched-sub')?.value.trim() || '';
+        if (!title) return;
+        const alarmOn    = body.querySelector('#m-sched-alarm')?.checked;
+        const alarm_time = alarmOn ? (body.querySelector('#m-sched-alarm-time')?.value || time) : null;
+        hideModal();
+        const day = state.selectedDay || todayISO();
+        const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title, note: sub, alarm_time }).select().single());
+        if (data) {
+          if (!state.schedule[day]) state.schedule[day] = [];
+          state.schedule[day].push({ id: data.id, time, title, sub, alarm_time });
+          state.schedule[day].sort((a, b) => a.time.localeCompare(b.time));
+          render();
+        }
+      },
+      onShown: (body) => {
+        const toggle = body.querySelector('#m-sched-alarm');
+        const row    = body.querySelector('#m-alarm-time-row');
+        if (toggle && row) {
+          toggle.addEventListener('change', () => {
+            row.classList.toggle('visible', toggle.checked);
+            if (toggle.checked) { const v = body.querySelector('#m-sched-time')?.value; const ai = body.querySelector('#m-sched-alarm-time'); if (v && ai) ai.value = v; }
+          });
+          body.querySelector('#m-sched-time')?.addEventListener('change', () => {
+            if (toggle.checked) { const ai = body.querySelector('#m-sched-alarm-time'); if (ai) ai.value = body.querySelector('#m-sched-time').value; }
+          });
+        }
+      }
+    });
+  });
+
+  // commitments add
+  main.querySelectorAll('[data-add-goal]').forEach(el => el.addEventListener('click', () => {
+    const k = el.dataset.addGoal;
+    showModal({
+      title: k === 'dos' ? "Add Do" : "Add Don't",
+      fieldsHtml: `<div class="field"><label>${k === 'dos' ? "Do" : "Don't"}</label><input type="text" id="m-goal-text" placeholder="${k === 'dos' ? 'e.g. Drink 2L water' : 'e.g. No phone in bed'}"/></div>`,
+      saveLabel: 'Add',
+      onSave: async (body) => {
+        const text = body.querySelector('#m-goal-text')?.value.trim();
+        if (!text) return;
+        hideModal();
+        const type = k === 'dos' ? 'do' : 'dont';
+        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text }).select().single());
+        if (data) { state.goals[k].push({ id: data.id, text }); render(); }
+      }
+    });
+  }));
+
+  // project add
+  const addProjBtn = main.querySelector('#add-project-btn');
+  if (addProjBtn) addProjBtn.addEventListener('click', () => {
+    showModal({
+      title: 'New Project',
+      fieldsHtml: `
+        <div class="field"><label>Project name</label><input type="text" id="m-proj-name" placeholder="e.g. Client Website"/></div>
+        <div class="form-row">
+          <div class="field"><label>Status</label><select id="m-proj-status">
+            <option value="active">Active</option><option value="on_hold">On Hold</option><option value="done">Done</option>
+          </select></div>
+          <div class="field"><label>Deadline (optional)</label><input type="date" id="m-proj-deadline"/></div>
+        </div>`,
+      saveLabel: 'Add',
+      onSave: async (body) => {
+        const name     = body.querySelector('#m-proj-name')?.value.trim();
+        const status   = body.querySelector('#m-proj-status')?.value || 'active';
+        const deadline = body.querySelector('#m-proj-deadline')?.value || null;
+        if (!name) return;
+        hideModal();
+        const now = new Date().toISOString();
+        const { data } = await dbCall(() => sb.from('projects').insert({ user_id: currentUser.id, name, status, deadline: deadline || null, updated_at: now }).select().single());
+        if (data) { state.projects.push({ id: data.id, name, status, deadline: data.deadline, tasks: [] }); render(); }
+      }
+    });
+  });
+
+  // project task add
+  main.querySelectorAll('[data-add-proj-task]').forEach(el => el.addEventListener('click', () => {
+    const projId = el.dataset.addProjTask;
+    showModal({
+      title: 'Add Task',
+      fieldsHtml: `
+        <div class="field"><label>Task</label><input type="text" id="m-pt-text" placeholder="What needs to be done?"/></div>
+        <div class="field"><label>Description</label><textarea id="m-pt-desc" rows="2" placeholder="Description (optional)"></textarea></div>`,
+      saveLabel: 'Add',
+      onSave: async (body) => {
+        const text = body.querySelector('#m-pt-text')?.value.trim();
+        const desc = body.querySelector('#m-pt-desc')?.value.trim() || '';
+        if (!text) return;
+        hideModal();
+        const proj = state.projects.find(p => p.id === projId);
+        if (!proj) return;
+        const { data } = await dbCall(() => sb.from('project_tasks').insert({ user_id: currentUser.id, project_id: projId, text, description: desc || null, checked: false }).select().single());
+        if (data) { proj.tasks.push({ id: data.id, text, description: desc, checked: false }); render(); }
+      }
+    });
+  }));
+
+  // income add
+  const addIncBtn = main.querySelector('#add-income-btn');
+  if (addIncBtn) addIncBtn.addEventListener('click', () => {
+    showModal({
+      title: 'Log Income',
+      fieldsHtml: `
+        <div class="field"><label>Source</label><input type="text" id="m-inc-source" placeholder="e.g. Client A"/></div>
+        <div class="form-row">
+          <div class="field"><label>Amount</label><input type="number" id="m-inc-amount" placeholder="0"/></div>
+          <div class="field"><label>Date</label><input type="date" id="m-inc-date" value="${todayISO()}"/></div>
+        </div>`,
+      saveLabel: 'Add',
+      onSave: async (body) => {
+        const source = body.querySelector('#m-inc-source')?.value.trim();
+        const amount = Number(body.querySelector('#m-inc-amount')?.value || 0);
+        const date   = body.querySelector('#m-inc-date')?.value || todayISO();
+        if (!source || !amount) return;
+        hideModal();
+        const { data } = await dbCall(() => sb.from('income_entries').insert({ user_id: currentUser.id, date, source, amount }).select().single());
+        if (data) { state.income.unshift({ id: data.id, date, source, amount }); state.incomePage = 1; render(); }
+      }
+    });
+  });
+
+  // spending add
+  const addSpendBtn = main.querySelector('#add-spend-btn');
+  if (addSpendBtn) addSpendBtn.addEventListener('click', () => {
+    const cats = ['Food','Transport','Shopping','Other'];
+    showModal({
+      title: 'Log Spend',
+      fieldsHtml: `
+        <div class="form-row">
+          <div class="field"><label>Category</label><select id="m-sp-cat">${cats.map(c => `<option>${c}</option>`).join('')}</select></div>
+          <div class="field"><label>Amount</label><input type="number" id="m-sp-amount" placeholder="0"/></div>
+        </div>
+        <div class="field"><label>Note</label><input type="text" id="m-sp-note" placeholder="What was it?"/></div>`,
+      saveLabel: 'Add',
+      onSave: async (body) => {
+        const cat    = body.querySelector('#m-sp-cat')?.value || 'Other';
+        const amount = Number(body.querySelector('#m-sp-amount')?.value || 0);
+        const note   = body.querySelector('#m-sp-note')?.value.trim() || '';
+        if (!amount) return;
+        hideModal();
+        const t = new Date();
+        const time = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+        const date = todayISO();
+        const { data } = await dbCall(() => sb.from('spending_entries').insert({ user_id: currentUser.id, date, time, category: cat, note, amount }).select().single());
+        if (data) { state.spending.unshift({ id: data.id, date, time, cat, note, amount }); state.spendingPage = 1; render(); }
+      }
+    });
+  });
+
+  // debt add
+  const addDebtBtn = main.querySelector('#add-debt-btn');
+  if (addDebtBtn) addDebtBtn.addEventListener('click', () => {
+    showModal({
+      title: 'Add Debt',
+      fieldsHtml: `
+        <div class="field"><label>Creditor</label><input type="text" id="m-debt-creditor" placeholder="Who do you owe?"/></div>
+        <div class="form-row">
+          <div class="field"><label>Amount</label><input type="number" id="m-debt-amount" placeholder="0"/></div>
+          <div class="field"><label>Due date</label><input type="date" id="m-debt-due" value="${todayISO()}"/></div>
+        </div>`,
+      saveLabel: 'Add',
+      onSave: async (body) => {
+        const creditor = body.querySelector('#m-debt-creditor')?.value.trim();
+        const amount   = Number(body.querySelector('#m-debt-amount')?.value || 0);
+        const due      = body.querySelector('#m-debt-due')?.value || todayISO();
+        if (!creditor || !amount) return;
+        hideModal();
+        const { data } = await dbCall(() => sb.from('debts').insert({ user_id: currentUser.id, creditor, amount, due_date: due, paid: false }).select().single());
+        if (data) { state.debts.push({ id: data.id, creditor, amount, due, paid: false }); state.debtsPage = 1; render(); }
+      }
+    });
+  });
+
+  // income filter + date picker
+  main.querySelectorAll('[data-income-filter]').forEach(el => el.addEventListener('click', () => {
+    state.incomeFilter = el.dataset.incomeFilter;
+    state.incomePickedDate = null;
+    state.incomePage = 1;
+    render();
+  }));
+  const incomeDateInput = main.querySelector('#income-date-input');
+  if (incomeDateInput) {
+    incomeDateInput.addEventListener('change', () => {
+      state.incomePickedDate = incomeDateInput.value || null;
+      state.incomePage = 1;
+      render();
+    });
+  }
+  const incomeDateClear = main.querySelector('#income-date-clear');
+  if (incomeDateClear) {
+    incomeDateClear.addEventListener('click', () => {
+      state.incomePickedDate = null;
+      state.incomePage = 1;
+      render();
+    });
+  }
 
   // form saves
   bindFormSaves();
@@ -1764,14 +2163,23 @@ function bindMainEvents() {
   main.querySelectorAll('[data-del-note-card]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const id = el.dataset.delNoteCard;
-    const card = el.closest('.note-card');
-    if (!card) return;
-    state.notes = state.notes.filter(n => n.id !== id);
-    if (state.activeNoteId === id) state.activeNoteId = null;
-    card.style.transition = 'opacity 200ms ease';
-    card.style.opacity = '0';
-    setTimeout(() => card.remove(), 200);
-    dbCall(() => sb.from('notes').delete().eq('id', id));
+    const note = state.notes.find(n => n.id === id);
+    const noteTitle = note?.title || 'Untitled';
+    showConfirmModal({
+      title: 'Delete Note?',
+      message: `This will permanently delete "${noteTitle}". This cannot be undone.`,
+      onConfirm: () => {
+        const card = main.querySelector(`.note-card[data-open-note="${id}"]`);
+        state.notes = state.notes.filter(n => n.id !== id);
+        if (state.activeNoteId === id) state.activeNoteId = null;
+        if (card) {
+          card.style.transition = 'opacity 200ms ease';
+          card.style.opacity = '0';
+          setTimeout(() => card.remove(), 200);
+        }
+        dbCall(() => sb.from('notes').delete().eq('id', id));
+      }
+    });
   }));
 
   // list view: relative timestamp refresh
@@ -1856,10 +2264,18 @@ function bindMainEvents() {
   const noteDelBtn = main.querySelector('#note-del-btn');
   if (noteDelBtn) noteDelBtn.addEventListener('click', () => {
     const id = state.activeNoteId;
-    state.notes = state.notes.filter(n => n.id !== id);
-    state.activeNoteId = null;
-    render();
-    dbCall(() => sb.from('notes').delete().eq('id', id));
+    const note = state.notes.find(n => n.id === id);
+    const noteTitle = note?.title || 'Untitled';
+    showConfirmModal({
+      title: 'Delete Note?',
+      message: `This will permanently delete "${noteTitle}". This cannot be undone.`,
+      onConfirm: () => {
+        state.notes = state.notes.filter(n => n.id !== id);
+        state.activeNoteId = null;
+        render();
+        dbCall(() => sb.from('notes').delete().eq('id', id));
+      }
+    });
   });
 
   // editor: autosave (title + content, debounced 1000ms)
@@ -1936,86 +2352,7 @@ function bindMainEvents() {
 }
 
 function bindFormSaves() {
-  // schedule
-  const schedSave = main.querySelector('#f-sched-save');
-  if (schedSave) schedSave.addEventListener('click', async () => {
-    const time = main.querySelector('#f-sched-time').value || '09:00';
-    const title = main.querySelector('#f-sched-title').value.trim();
-    const sub = main.querySelector('#f-sched-sub').value.trim();
-    if (!title) return;
-    const day = state.selectedDay || todayISO();
-    const alarmOn = main.querySelector('#f-sched-alarm')?.checked;
-    const alarm_time = alarmOn ? (main.querySelector('#f-sched-alarm-time')?.value || time) : null;
-    const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title, note: sub, alarm_time }).select().single());
-    if (data) {
-      if (!state.schedule[day]) state.schedule[day] = [];
-      state.schedule[day].push({ id: data.id, time, title, sub, alarm_time });
-      state.schedule[day].sort((a,b) => a.time.localeCompare(b.time));
-      render();
-    }
-  });
-
-  // goals
-  main.querySelectorAll('[data-goal-save]').forEach(btn => btn.addEventListener('click', async () => {
-    const k = btn.dataset.goalSave;
-    const input = main.querySelector(`[data-goal-input="${k}"]`);
-    const text = input?.value.trim();
-    if (!text) return;
-    const type = k === 'dos' ? 'do' : 'dont';
-    const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text }).select().single());
-    if (data) { state.goals[k].push({ id: data.id, text }); render(); }
-  }));
-
-  // add new project
-  const newProj = main.querySelector('#f-proj-save');
-  if (newProj) newProj.addEventListener('click', async () => {
-    const name     = main.querySelector('#f-proj-name')?.value.trim();
-    const status   = main.querySelector('#f-proj-status')?.value || 'active';
-    const deadline = main.querySelector('#f-proj-deadline')?.value || null;
-    if (!name) { main.querySelector('#f-proj-name')?.focus(); return; }
-    const now = new Date().toISOString();
-    const { data } = await dbCall(() => sb.from('projects').insert({ user_id: currentUser.id, name, status, deadline: deadline || null, updated_at: now }).select().single());
-    if (data) {
-      state.projects.push({ id: data.id, name, status, deadline: data.deadline, tasks: [] });
-      render();
-    }
-  });
-
-  // income
-  const inc = main.querySelector('#f-inc-save');
-  if (inc) inc.addEventListener('click', async () => {
-    const source = main.querySelector('#f-inc-source').value.trim();
-    const amount = Number(main.querySelector('#f-inc-amount').value || 0);
-    const date = main.querySelector('#f-inc-date').value || todayISO();
-    if (!source || !amount) return;
-    const { data } = await dbCall(() => sb.from('income_entries').insert({ user_id: currentUser.id, date, source, amount }).select().single());
-    if (data) { state.income.unshift({ id: data.id, date, source, amount }); render(); }
-  });
-
-  // spending
-  const sp = main.querySelector('#f-sp-save');
-  if (sp) sp.addEventListener('click', async () => {
-    const cat = main.querySelector('#f-sp-cat').value;
-    const amount = Number(main.querySelector('#f-sp-amount').value || 0);
-    const note = main.querySelector('#f-sp-note').value.trim();
-    if (!amount) return;
-    const t = new Date();
-    const time = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
-    const date = todayISO();
-    const { data } = await dbCall(() => sb.from('spending_entries').insert({ user_id: currentUser.id, date, time, category: cat, note, amount }).select().single());
-    if (data) { state.spending.unshift({ id: data.id, date, time, cat, note, amount }); render(); }
-  });
-
-  // debt
-  const db = main.querySelector('#f-debt-save');
-  if (db) db.addEventListener('click', async () => {
-    const creditor = main.querySelector('#f-debt-creditor').value.trim();
-    const amount = Number(main.querySelector('#f-debt-amount').value || 0);
-    const due = main.querySelector('#f-debt-due').value || todayISO();
-    if (!creditor || !amount) return;
-    const { data } = await dbCall(() => sb.from('debts').insert({ user_id: currentUser.id, creditor, amount, due_date: due, paid: false }).select().single());
-    if (data) { state.debts.push({ id: data.id, creditor, amount, due, paid: false }); render(); }
-  });
+  // add forms moved to showModal() — nothing to bind here
 }
 
 function pulse(el) {
@@ -2139,3 +2476,63 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
   });
 }
+
+/* =========================================================
+   GLOBAL MODAL EVENT LISTENERS
+========================================================= */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  hideModal();
+  hideConfirmModal();
+});
+document.getElementById('hq-modal-overlay')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) hideModal();
+});
+document.getElementById('hq-confirm-overlay')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) hideConfirmModal();
+});
+document.getElementById('hq-modal-close')?.addEventListener('click', hideModal);
+document.querySelector('.hq-modal-cancel')?.addEventListener('click', hideModal);
+document.querySelector('.hq-confirm-cancel')?.addEventListener('click', hideConfirmModal);
+
+/* =========================================================
+   NOISE / GRAIN BACKGROUND
+========================================================= */
+(function () {
+  const canvas = document.getElementById('noise-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let lastTime = 0;
+  const FRAME_MS = 83; // ~12 fps
+  let w = 0, h = 0;
+
+  function resize() {
+    w = canvas.width  = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+  }
+
+  function generateNoise() {
+    const img = ctx.createImageData(w, h);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.random() * 255 | 0;
+      d[i] = d[i + 1] = d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function loop(t) {
+    if (t - lastTime >= FRAME_MS) {
+      generateNoise();
+      lastTime = t;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  generateNoise();
+  requestAnimationFrame(loop);
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 150));
+})();
