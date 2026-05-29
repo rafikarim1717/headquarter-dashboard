@@ -969,6 +969,17 @@
   .proj-expand-btn:hover { color: var(--text-dim); }
   .proj-tasks { margin-top: 4px; }
   .proj-tasks .inline-form.open { max-height: 280px; }
+  .proj-desc {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
+    max-width: 100%;
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-top: 10px;
+  }
   .proj-progress { margin-top: 12px; }
   .proj-progress-meta {
     display: flex; justify-content: space-between;
@@ -1042,6 +1053,67 @@
   .commit-tab-btn:hover { color: var(--text); border-color: var(--border-strong); }
   .commit-tab-btn.active {
     background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600;
+  }
+
+  /* ============ MODAL ============ */
+  #modal-container .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    animation: modal-fade-in 150ms ease forwards;
+  }
+  #modal-container .modal-card {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 16px;
+    padding: 24px;
+    width: min(480px, 92vw);
+    max-height: 85vh;
+    overflow-y: auto;
+    animation: modal-scale-in 200ms ease-out forwards;
+  }
+  @keyframes modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes modal-scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+  #modal-container .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 16px; border-bottom: 1px solid #2a2a2a; margin-bottom: 20px;
+  }
+  #modal-container .modal-title { font-size: 16px; font-weight: 500; color: #ffffff; }
+  #modal-container .modal-x {
+    font-size: 22px; color: #666; background: none; border: none;
+    cursor: pointer; line-height: 1; padding: 2px 6px;
+  }
+  #modal-container .modal-x:hover { color: #999; }
+  #modal-container .modal-fields { display: flex; flex-direction: column; gap: 16px; }
+  #modal-container .modal-field { display: flex; flex-direction: column; gap: 6px; }
+  #modal-container .modal-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #888; font-weight: 500;
+  }
+  #modal-container input[type="text"],
+  #modal-container input[type="number"],
+  #modal-container input[type="date"],
+  #modal-container input[type="time"],
+  #modal-container select,
+  #modal-container textarea {
+    width: 100%; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; background: #121212; color: var(--text);
+    font-size: 13px; font-family: inherit; outline: none;
+  }
+  #modal-container input:focus,
+  #modal-container select:focus,
+  #modal-container textarea:focus { border-color: var(--accent); }
+  #modal-container textarea { resize: none; line-height: 1.45; }
+  #modal-container .modal-footer {
+    margin-top: 20px; padding-top: 16px; border-top: 1px solid #2a2a2a;
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+
+  /* ============ NOTES — mobile fixes ============ */
+  @media (max-width: 768px) {
+    .notes-grid { grid-template-columns: 1fr; }
+    .note-content { min-height: calc(100vh - 280px); padding-bottom: 120px; overflow-y: auto; }
   }
 
   /* today page — commitment type pills */

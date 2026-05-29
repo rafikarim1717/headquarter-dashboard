@@ -216,6 +216,7 @@ function defaultState() {
     projects: [
       {
         name: 'Client Website',
+        description: '',
         status: 'active',
         deadline: dayKey(14),
         tasks: [
@@ -226,6 +227,7 @@ function defaultState() {
       },
       {
         name: 'Personal Development',
+        description: '',
         status: 'active',
         deadline: null,
         tasks: [
@@ -235,6 +237,7 @@ function defaultState() {
       },
       {
         name: 'Side Business',
+        description: '',
         status: 'on_hold',
         deadline: null,
         tasks: [
@@ -377,13 +380,19 @@ function renderLifeHome() {
   const showPills = String(window.__HQ_TWEAKS.showQuickPills) === 'true' || window.__HQ_TWEAKS.showQuickPills === true;
 
   const score = computeDailyScore();
+  const _allGoalsHome = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const _totalGoalsHome = _allGoalsHome.length;
+  const scoreColor = score >= 70 ? 'var(--accent)' : score >= 40 ? '#c8a850' : 'var(--danger)';
   const scoreBlock = `
     <div class="card" style="animation-delay:0ms">
       <div class="section-title" style="margin-top:0">Daily score</div>
-      <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
-        <div id="today-score-val" style="font-size:48px;font-weight:var(--num-weight,200);color:var(--accent);font-variant-numeric:tabular-nums;line-height:1">${score}</div>
-        <div style="font-size:16px;color:var(--text-faint)">/100</div>
-      </div>
+      ${_totalGoalsHome === 0
+        ? `<div style="font-size:13px;color:var(--text-faint);margin-top:12px">Add commitments to start tracking</div>`
+        : `<div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
+            <div class="num" data-target="${score}" style="font-size:48px;font-weight:var(--num-weight,200);color:${scoreColor};font-variant-numeric:tabular-nums;line-height:1">0</div>
+            <div style="font-size:16px;color:var(--text-faint)">/100</div>
+          </div>`
+      }
     </div>`;
 
   const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
@@ -540,29 +549,6 @@ function renderSchedule() {
                 <button class="sched-del-btn" data-del-sched="${s.id}">Delete</button>
               </div>
             </div>
-            <div class="inline-form" id="edit-sched-${s.id}">
-              <div class="inner">
-                <div class="form-row">
-                  <div class="field"><label>Time</label><input type="time" id="f-edit-time-${s.id}" value="${s.time}"/></div>
-                  <div class="field"><label>Title</label><input type="text" id="f-edit-title-${s.id}" value="${escapeHtml(s.title)}"/></div>
-                </div>
-                <div class="field"><label>Note</label><input type="text" id="f-edit-sub-${s.id}" value="${escapeHtml(s.sub||'')}"/></div>
-                <div class="alarm-row">
-                  <span class="alarm-label">Set alarm</span>
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="f-edit-alarm-${s.id}" ${s.alarm_time ? 'checked' : ''}>
-                    <span class="toggle-track"></span>
-                  </label>
-                </div>
-                <div class="alarm-time-row ${s.alarm_time ? 'visible' : ''}" id="edit-alarm-time-row-${s.id}">
-                  <div class="field"><label>Alarm time</label><input type="time" id="f-edit-alarm-time-${s.id}" value="${s.alarm_time || s.time}"/></div>
-                </div>
-                <div class="form-actions">
-                  <button class="btn" data-edit-cancel="${s.id}">Cancel</button>
-                  <button class="btn primary" data-edit-save="${s.id}">Save</button>
-                </div>
-              </div>
-            </div>
           </li>`).join('') || `<li class="list-item"><div class="item-sub">No events. Add one below.</div></li>`}
       </ul>
       <button class="add-btn" id="add-sched-btn" style="margin-top:14px"><span class="plus">+</span> Add event</button>
@@ -602,14 +588,11 @@ function getCurrentWeekDays() {
   return days;
 }
 function computeDailyScore() {
-  const today = todayISO();
   const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
   const totalGoals = allGoals.length;
-  const checkedToday = totalGoals ? allGoals.filter(g => getTodayLog(g.id)?.checked).length : 0;
-  const commitScore = totalGoals ? Math.round((checkedToday / totalGoals) * 55) : 55;
-  const schedScore  = (state.schedule[today] || []).length > 0 ? 15 : 0;
-  const finScore    = state.spending.filter(s => s.date === today).length === 0 ? 30 : 15;
-  return commitScore + schedScore + finScore;
+  if (!totalGoals) return 0;
+  const checkedToday = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
+  return Math.round((checkedToday / totalGoals) * 100);
 }
 
 function renderCommitments() {
@@ -642,19 +625,10 @@ function renderCommitments() {
                   <button class="fin-del-btn" data-del-goal="${key}|${i.id}">Delete</button>
                 </div>
               </div>
-              <div class="inline-form" id="edit-goal-${i.id}">
-                <div class="inner">
-                  <div class="field"><label>Edit</label><input type="text" id="f-goal-${i.id}" value="${escapeHtml(i.text)}" placeholder="..."/></div>
-                  <div class="form-actions">
-                    <button class="btn" data-cancel="edit-goal-${i.id}">Cancel</button>
-                    <button class="btn primary" data-save-goal="${key}|${i.id}">Save</button>
-                  </div>
-                </div>
-              </div>
             </li>`;
           }).join('')}
         </ul>
-        <button class="add-btn" data-add-goal="${key}" style="margin-top:14px"><span class="plus">+</span> Add</button>
+        <button class="add-btn" data-modal-add="goal-${key}" style="margin-top:14px"><span class="plus">+</span> Add</button>
       </div>`;
   }
 
@@ -770,6 +744,7 @@ function renderProjectCard(p, i) {
           <button class="fin-del-btn" data-del-proj="${p.id}" title="Delete">&#x00D7;</button>
         </div>
       </div>
+      ${p.description ? `<div class="proj-desc">${escapeHtml(p.description.length > 120 ? p.description.slice(0, 120) + '...' : p.description)}</div>` : ''}
       ${totalTasks > 0 ? `
         <div class="proj-progress">
           <div class="proj-progress-meta">
@@ -779,23 +754,6 @@ function renderProjectCard(p, i) {
           <div class="progress"><div class="bar" style="width:${pct}%"></div></div>
         </div>
       ` : ''}
-      <div class="inline-form" id="edit-proj-${p.id}">
-        <div class="inner">
-          <div class="field"><label>Project name</label><input type="text" id="f-ep-name-${p.id}" value="${escapeHtml(p.name)}"/></div>
-          <div class="form-row">
-            <div class="field"><label>Status</label><select id="f-ep-status-${p.id}">
-              <option value="active"  ${p.status==='active'  ?'selected':''}>Active</option>
-              <option value="on_hold" ${p.status==='on_hold' ?'selected':''}>On Hold</option>
-              <option value="done"    ${p.status==='done'    ?'selected':''}>Done</option>
-            </select></div>
-            <div class="field"><label>Deadline</label><input type="date" id="f-ep-deadline-${p.id}" value="${p.deadline||''}"/></div>
-          </div>
-          <div class="form-actions">
-            <button class="btn" data-cancel="edit-proj-${p.id}">Cancel</button>
-            <button class="btn primary" data-save-proj="${p.id}">Save</button>
-          </div>
-        </div>
-      </div>
       <button class="proj-expand-btn" data-toggle-proj-expand="${p.id}">
         <span>${isExpanded?'▼':'▶'}</span>
         <span>${isExpanded?'Hide tasks':'Show tasks'}</span>
@@ -816,20 +774,10 @@ function renderProjectCard(p, i) {
                     <button class="fin-del-btn" data-del-proj-task="${p.id}|${t.id}">&#x00D7;</button>
                   </div>
                 </div>
-                <div class="inline-form" id="edit-proj-task-${t.id}">
-                  <div class="inner">
-                    <div class="field"><label>Task</label><input type="text" id="f-ept-text-${t.id}" value="${escapeHtml(t.text)}"/></div>
-                    <div class="field"><label>Description</label><textarea id="f-ept-desc-${t.id}" rows="2" placeholder="Description (optional)">${escapeHtml(t.description||'')}</textarea></div>
-                    <div class="form-actions">
-                      <button class="btn" data-cancel="edit-proj-task-${t.id}">Cancel</button>
-                      <button class="btn primary" data-save-proj-task="${p.id}|${t.id}">Save</button>
-                    </div>
-                  </div>
-                </div>
               </li>
             `).join('')}
           </ul>
-          <button class="add-btn" data-add-proj-task="${p.id}" style="margin-top:10px"><span class="plus">+</span> Add task</button>
+          <button class="add-btn" data-modal-add="proj-task" data-proj-id="${p.id}" style="margin-top:10px"><span class="plus">+</span> Add task</button>
         </div>
       ` : ''}
     </div>`;
@@ -845,7 +793,7 @@ function renderProjects() {
     ${topbar()}
     <div class="projects-header">
       <h1 class="page-title" style="margin:0">Projects</h1>
-      <button class="add-btn-inline" id="add-project-btn">+ New Project</button>
+      <button class="add-btn-inline" data-modal-add="project">+ New Project</button>
     </div>
     <div class="pills" style="margin: 14px 0 18px">
       ${['all','active','on_hold','done'].map(f =>
@@ -1148,23 +1096,9 @@ function renderIncome() {
                 <button class="fin-del-btn" data-del-income="${i.id}" title="Delete">${ICON_TRASH}</button>
               </div>
             </div>
-            <div class="inline-form" id="edit-inc-${i.id}">
-              <div class="inner">
-                <div class="form-row">
-                  <div class="field"><label>Date</label><input type="date" id="f-ei-date-${i.id}" value="${i.date}"/></div>
-                  <div class="field"><label>Source</label><input type="text" id="f-ei-source-${i.id}" value="${escapeHtml(i.source)}"/></div>
-                </div>
-                <div class="field"><label>Amount</label><input type="number" id="f-ei-amount-${i.id}" value="${i.amount}"/></div>
-                <div class="form-actions">
-                  <button class="btn" data-cancel="edit-inc-${i.id}">Cancel</button>
-                  <button class="btn primary" data-save-inc="${i.id}">Save</button>
-                </div>
-              </div>
-            </div>
-          </li>`).join('') || `<li class="list-item"><div class="item-sub">No entries for this period.</div></li>`}
+          </li>`).join('') || `<li class="list-item"><div class="item-sub">No income yet.</div></li>`}
       </ul>
-      ${paginationHtml(page, totalPages, 'income-prev', 'income-next')}
-      <button class="add-btn" id="add-income-btn" style="margin-top:14px"><span class="plus">+</span> Log income</button>
+      <button class="add-btn" data-modal-add="income" style="margin-top:14px"><span class="plus">+</span> Log income</button>
     </div>
   `;
 }
@@ -1247,26 +1181,9 @@ function renderSpending() {
                 <button class="fin-del-btn" data-del-spend="${s.id}" title="Delete">${ICON_TRASH}</button>
               </div>
             </div>
-            <div class="inline-form" id="edit-spend-${s.id}">
-              <div class="inner">
-                <div class="form-row">
-                  <div class="field"><label>Category</label><select id="f-es-cat-${s.id}">${cats.map(c=>`<option ${c===s.cat?'selected':''}>${c}</option>`).join('')}</select></div>
-                  <div class="field"><label>Amount</label><input type="number" id="f-es-amount-${s.id}" value="${s.amount}"/></div>
-                </div>
-                <div class="form-row">
-                  <div class="field"><label>Note</label><input type="text" id="f-es-note-${s.id}" value="${escapeHtml(s.note||'')}"/></div>
-                  <div class="field"><label>Time</label><input type="time" id="f-es-time-${s.id}" value="${s.time||''}"/></div>
-                </div>
-                <div class="form-actions">
-                  <button class="btn" data-cancel="edit-spend-${s.id}">Cancel</button>
-                  <button class="btn primary" data-save-spend="${s.id}">Save</button>
-                </div>
-              </div>
-            </div>
-          </li>`).join('') || `<li class="list-item"><div class="item-sub">No entries for this period.</div></li>`}
+          </li>`).join('')}
       </ul>
-      ${paginationHtml(page, totalPages, 'spend-prev', 'spend-next')}
-      <button class="add-btn" id="add-spend-btn" style="margin-top:14px"><span class="plus">+</span> Log spend</button>
+      <button class="add-btn" data-modal-add="spend" style="margin-top:14px"><span class="plus">+</span> Log spend</button>
     </div>
   `;
 }
@@ -1298,37 +1215,25 @@ function renderDebts() {
           const dueLabel = d.paid ? `Paid` : (overdue ? `Overdue · ${fmtDate(d.due)}` : (days===0?`Due today`:`Due in ${days}d · ${fmtDate(d.due)}`));
           return `
           <li class="fin-item" data-id="${d.id}">
-            <div class="debt-card-inner">
-              <div class="debt-creditor">${escapeHtml(d.creditor)}</div>
-              <div class="debt-amount-large">${fmtMoney(d.amount)}</div>
-              <div class="debt-due ${soon||overdue?'soon':''}">${dueLabel}</div>
-              <div class="debt-card-acts">
-                ${d.paid
-                  ? `<span class="debt-status paid" style="margin-right:auto">Paid</span>
-                     <button class="fin-edit-btn" data-unpay-debt="${d.id}" title="Mark as unpaid">${ICON_XCIRCLE}</button>`
-                  : `<button class="fin-edit-btn" data-pay-debt="${d.id}" title="Mark as paid" style="color:var(--good);margin-right:auto">${ICON_CHECK}</button>`}
-                <button class="fin-edit-btn" data-edit-debt="${d.id}" title="Edit">${ICON_PENCIL}</button>
-                <button class="fin-del-btn" data-del-debt="${d.id}" title="Delete">${ICON_TRASH}</button>
+            <div class="debt-row-info">
+              <div class="item-main">
+                <div class="item-title">${escapeHtml(d.creditor)}</div>
+                <div class="debt-due ${soon||overdue?'soon':''}">${dueLabel}</div>
               </div>
+              <div class="item-amt">${fmtMoney(d.amount)}</div>
             </div>
-            <div class="inline-form" id="edit-debt-${d.id}">
-              <div class="inner">
-                <div class="field"><label>Creditor</label><input type="text" id="f-ed-creditor-${d.id}" value="${escapeHtml(d.creditor)}"/></div>
-                <div class="form-row">
-                  <div class="field"><label>Amount</label><input type="number" id="f-ed-amount-${d.id}" value="${d.amount}"/></div>
-                  <div class="field"><label>Due date</label><input type="date" id="f-ed-due-${d.id}" value="${d.due}"/></div>
-                </div>
-                <div class="form-actions">
-                  <button class="btn" data-cancel="edit-debt-${d.id}">Cancel</button>
-                  <button class="btn primary" data-save-debt="${d.id}">Save</button>
-                </div>
-              </div>
+            <div class="debt-row-acts">
+              ${d.paid
+                ? `<span class="debt-status paid">Paid</span>`
+                : `<button class="btn" data-pay-debt="${d.id}" style="padding:6px 10px;font-size:11px;">Mark paid</button>`}
+              <div class="spacer"></div>
+              <button class="fin-edit-btn" data-edit-debt="${d.id}">Edit</button>
+              <button class="fin-del-btn" data-del-debt="${d.id}">Delete</button>
             </div>
           </li>`;
         }).join('') || `<li class="list-item"><div class="item-sub">No debts recorded.</div></li>`}
       </ul>
-      ${paginationHtml(page, totalPages, 'debts-prev', 'debts-next')}
-      <button class="add-btn" id="add-debt-btn" style="margin-top:14px"><span class="plus">+</span> Add debt</button>
+      <button class="add-btn" data-modal-add="debt" style="margin-top:14px"><span class="plus">+</span> Add debt</button>
     </div>
   `;
 }
@@ -1358,6 +1263,98 @@ function animateBars() {
     b.style.height = '0%';
     requestAnimationFrame(() => requestAnimationFrame(() => { b.style.height = h; }));
   });
+}
+
+/* =========================================================
+   MODAL SYSTEM
+========================================================= */
+function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
+  let container = document.getElementById('modal-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'modal-container';
+    document.body.appendChild(container);
+  }
+
+  function renderField(f) {
+    const lbl = `<div class="modal-label">${escapeHtml(f.label)}</div>`;
+    let input;
+    if (f.type === 'select') {
+      const opts = (f.options || []).map(o => {
+        const val = typeof o === 'object' ? o.value : o;
+        const lab = typeof o === 'object' ? o.label : o;
+        return `<option value="${escapeHtml(String(val))}"${String(val) === String(f.value) ? ' selected' : ''}>${escapeHtml(lab)}</option>`;
+      }).join('');
+      input = `<select id="modal-f-${f.id}">${opts}</select>`;
+    } else if (f.type === 'textarea') {
+      input = `<textarea id="modal-f-${f.id}" rows="3" placeholder="${escapeHtml(f.placeholder||'')}">${escapeHtml(f.value||'')}</textarea>`;
+    } else if (f.type === 'toggle') {
+      input = `<label class="toggle-switch"><input type="checkbox" id="modal-f-${f.id}"${f.value ? ' checked' : ''}><span class="toggle-track"></span></label>`;
+    } else {
+      input = `<input type="${f.type||'text'}" id="modal-f-${f.id}" value="${escapeHtml(String(f.value??''))}" placeholder="${escapeHtml(f.placeholder||'')}"/>`;
+    }
+    return `<div class="modal-field" data-field-id="${f.id}">${lbl}${input}</div>`;
+  }
+
+  container.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-card" id="modal-card">
+        <div class="modal-header">
+          <span class="modal-title">${escapeHtml(title)}</span>
+          <button class="modal-x" id="modal-x">&#xD7;</button>
+        </div>
+        <div class="modal-fields" id="modal-fields">
+          ${fields.map(renderField).join('')}
+        </div>
+        <div class="modal-footer">
+          <button class="btn" id="modal-cancel">Cancel</button>
+          <button class="btn primary" id="modal-save">${escapeHtml(saveLabel)}</button>
+        </div>
+      </div>
+    </div>`;
+
+  // Wire up toggle → show/hide controlled fields
+  fields.forEach(f => {
+    if (f.type !== 'toggle' || !f.controls) return;
+    const toggleEl = document.getElementById('modal-f-' + f.id);
+    const controlled = container.querySelector(`[data-field-id="${f.controls}"]`);
+    if (!toggleEl || !controlled) return;
+    controlled.style.display = toggleEl.checked ? '' : 'none';
+    toggleEl.addEventListener('change', () => {
+      controlled.style.display = toggleEl.checked ? '' : 'none';
+    });
+  });
+
+  function closeModal() {
+    container.innerHTML = '';
+    document.removeEventListener('keydown', escHandler);
+    if (onClose) onClose();
+  }
+  function escHandler(e) { if (e.key === 'Escape') closeModal(); }
+  document.addEventListener('keydown', escHandler);
+
+  document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target.id === 'modal-overlay') closeModal(); });
+  document.getElementById('modal-x').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const values = {};
+    fields.forEach(f => {
+      const el = document.getElementById('modal-f-' + f.id);
+      if (!el) return;
+      if (f.type === 'toggle') values[f.id] = el.checked;
+      else if (f.type === 'number') values[f.id] = Number(el.value || 0);
+      else values[f.id] = el.value;
+    });
+    closeModal();
+    if (onSave) onSave(values);
+  });
+
+  // Focus first text input
+  setTimeout(() => {
+    const first = container.querySelector('input:not([type="checkbox"]), select, textarea');
+    if (first) first.focus();
+  }, 50);
 }
 
 /* =========================================================
@@ -1451,34 +1448,6 @@ function bindMainEvents() {
     });
   }));
 
-  // project edit open
-  main.querySelectorAll('[data-edit-proj]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const id = el.dataset.editProj;
-    const form = document.getElementById('edit-proj-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
-  }));
-
-  // project edit save
-  main.querySelectorAll('[data-save-proj]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.saveProj;
-    const nameEl     = document.getElementById('f-ep-name-'     + id);
-    const statusEl   = document.getElementById('f-ep-status-'   + id);
-    const deadlineEl = document.getElementById('f-ep-deadline-' + id);
-    if (!nameEl) return;
-    const newName     = nameEl.value.trim();
-    if (!newName) { nameEl.focus(); return; }
-    const newStatus   = statusEl   ? statusEl.value             : 'active';
-    const newDeadline = deadlineEl ? (deadlineEl.value || null) : null;
-    const proj = state.projects.find(p => p.id === id);
-    if (proj) { proj.name = newName; proj.status = newStatus; proj.deadline = newDeadline; }
-    render();
-    dbCall(() => sb.from('projects').update({ name: newName, status: newStatus, deadline: newDeadline, updated_at: new Date().toISOString() }).eq('id', id));
-  }));
-
   // project toggle done/reopen
   main.querySelectorAll('[data-toggle-proj-done]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.toggleProjDone;
@@ -1503,35 +1472,6 @@ function bindMainEvents() {
         dbCall(() => sb.from('project_tasks').delete().eq('id', taskId));
       }
     });
-  }));
-
-  // project task edit open
-  main.querySelectorAll('[data-edit-proj-task]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const [, taskId] = el.dataset.editProjTask.split('|');
-    const form = document.getElementById('edit-proj-task-' + taskId);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
-  }));
-
-  // project task edit save
-  main.querySelectorAll('[data-save-proj-task]').forEach(el => el.addEventListener('click', async () => {
-    const [projId, taskId] = el.dataset.saveProjTask.split('|');
-    const textEl = document.getElementById('f-ept-text-' + taskId);
-    const descEl = document.getElementById('f-ept-desc-' + taskId);
-    if (!textEl) return;
-    const newText = textEl.value.trim();
-    if (!newText) { textEl.focus(); return; }
-    const newDesc = descEl ? descEl.value.trim() : '';
-    const proj = state.projects.find(p => p.id === projId);
-    if (proj) {
-      const task = proj.tasks.find(t => t.id === taskId);
-      if (task) { task.text = newText; task.description = newDesc; }
-    }
-    render();
-    dbCall(() => sb.from('project_tasks').update({ text: newText, description: newDesc || null }).eq('id', taskId));
   }));
 
   // commitments preview tab switch
@@ -1564,7 +1504,7 @@ function bindMainEvents() {
     }
   }));
 
-  // delete handlers
+  // ---- SCHEDULE ----
   main.querySelectorAll('[data-del-sched]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delSched;
     const day = state.selectedDay;
@@ -1580,86 +1520,63 @@ function bindMainEvents() {
     });
   }));
 
-  // schedule edit handlers
   main.querySelectorAll('[data-edit-sched]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const id = el.dataset.editSched;
-    const form = document.getElementById('edit-sched-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
-  }));
-
-  main.querySelectorAll('[data-edit-cancel]').forEach(el => el.addEventListener('click', () => {
-    const id = el.dataset.editCancel;
-    const form = document.getElementById('edit-sched-' + id);
-    if (form) form.classList.remove('open');
-  }));
-
-  main.querySelectorAll('[data-edit-save]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.editSave;
-    const timeEl  = document.getElementById('f-edit-time-'  + id);
-    const titleEl = document.getElementById('f-edit-title-' + id);
-    const subEl   = document.getElementById('f-edit-sub-'   + id);
-    const alarmEl = document.getElementById('f-edit-alarm-' + id);
-    const alarmTimeEl = document.getElementById('f-edit-alarm-time-' + id);
-    if (!timeEl || !titleEl) return;
-    const newTime  = timeEl.value.trim();
-    const newTitle = titleEl.value.trim();
-    if (!newTitle) { titleEl.focus(); return; }
-    const newSub       = subEl ? subEl.value.trim() : '';
-    const alarmEnabled = alarmEl ? alarmEl.checked : false;
-    const newAlarmTime = (alarmEnabled && alarmTimeEl) ? alarmTimeEl.value : null;
-
     const day = state.selectedDay;
-    const arr = state.schedule[day] || [];
-    const idx = arr.findIndex(s => s.id === id);
-    if (idx === -1) return;
-    arr[idx] = { ...arr[idx], time: newTime, title: newTitle, sub: newSub, alarm_time: newAlarmTime };
-
-    // update DOM in-place
-    const li = document.querySelector(`.sched-item[data-id="${id}"]`);
-    if (li) {
-      const titleDiv = li.querySelector('.item-title');
-      if (titleDiv) titleDiv.innerHTML = escapeHtml(newTitle) + (newAlarmTime ? `<span class="alarm-tag">⏰ ${newAlarmTime}</span>` : '');
-      const subDiv = li.querySelector('.item-sub');
-      if (newSub) {
-        if (subDiv) subDiv.textContent = newSub;
-        else {
-          const mainDiv = li.querySelector('.item-main');
-          if (mainDiv) { const d = document.createElement('div'); d.className = 'item-sub'; d.textContent = newSub; mainDiv.appendChild(d); }
-        }
-      } else if (subDiv) subDiv.remove();
-      const timeDiv = li.querySelector('.time-col');
-      if (timeDiv) timeDiv.textContent = newTime;
-    }
-
-    const form = document.getElementById('edit-sched-' + id);
-    if (form) form.classList.remove('open');
-
-    dbCall(() => sb.from('schedule_events').update({
-      time: newTime, title: newTitle, note: newSub, alarm_time: newAlarmTime
-    }).eq('id', id));
+    const s = (state.schedule[day] || []).find(ev => ev.id === id);
+    if (!s) return;
+    showModal({
+      title: 'Edit Event',
+      fields: [
+        { id: 'time',       label: 'Time',       type: 'time',   value: s.time },
+        { id: 'title',      label: 'Title',      type: 'text',   value: s.title },
+        { id: 'note',       label: 'Note',       type: 'text',   value: s.sub || '', placeholder: 'optional' },
+        { id: 'alarm',      label: 'Set alarm',  type: 'toggle', value: !!s.alarm_time, controls: 'alarm_time' },
+        { id: 'alarm_time', label: 'Alarm time', type: 'time',   value: s.alarm_time || s.time }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ time, title, note, alarm, alarm_time }) => {
+        if (!title.trim()) return;
+        const newAlarmTime = alarm ? (alarm_time || time) : null;
+        const arr = state.schedule[day] || [];
+        const idx = arr.findIndex(ev => ev.id === id);
+        if (idx !== -1) arr[idx] = { ...arr[idx], time, title: title.trim(), sub: note.trim(), alarm_time: newAlarmTime };
+        render();
+        dbCall(() => sb.from('schedule_events').update({ time, title: title.trim(), note: note.trim(), alarm_time: newAlarmTime }).eq('id', id));
+      }
+    });
   }));
 
-  // alarm toggle in edit forms
-  main.querySelectorAll('.sched-item [id^="f-edit-alarm-"]').forEach(toggle => {
-    const id = toggle.id.replace('f-edit-alarm-', '');
-    const timeRow = document.getElementById('edit-alarm-time-row-' + id);
-    const alarmTimeInput = document.getElementById('f-edit-alarm-time-' + id);
-    const timeInput = document.getElementById('f-edit-time-' + id);
-    if (!timeRow) return;
-    toggle.addEventListener('change', () => {
-      if (toggle.checked) {
-        timeRow.classList.add('visible');
-        if (alarmTimeInput && timeInput && !alarmTimeInput.value) alarmTimeInput.value = timeInput.value;
-      } else {
-        timeRow.classList.remove('visible');
+  const addSched = main.querySelector('#add-sched-btn');
+  if (addSched) addSched.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const day = state.selectedDay || todayISO();
+    showModal({
+      title: 'Add Event',
+      fields: [
+        { id: 'time',       label: 'Time',       type: 'time',   value: '09:00' },
+        { id: 'title',      label: 'Title',      type: 'text',   value: '', placeholder: 'e.g. Deep work' },
+        { id: 'note',       label: 'Note',       type: 'text',   value: '', placeholder: 'optional' },
+        { id: 'alarm',      label: 'Set alarm',  type: 'toggle', value: false, controls: 'alarm_time' },
+        { id: 'alarm_time', label: 'Alarm time', type: 'time',   value: '09:00' }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ time, title, note, alarm, alarm_time }) => {
+        if (!title.trim()) return;
+        const alarm_time_val = alarm ? (alarm_time || time) : null;
+        const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title: title.trim(), note: note.trim(), alarm_time: alarm_time_val }).select().single());
+        if (data) {
+          if (!state.schedule[day]) state.schedule[day] = [];
+          state.schedule[day].push({ id: data.id, time, title: title.trim(), sub: note.trim(), alarm_time: alarm_time_val });
+          state.schedule[day].sort((a, b) => a.time.localeCompare(b.time));
+          render();
+        }
       }
     });
   });
 
+  // ---- COMMITMENTS ----
   main.querySelectorAll('[data-del-goal]').forEach(el => el.addEventListener('click', () => {
     const [k, id] = el.dataset.delGoal.split('|');
     showConfirmModal({
@@ -1675,32 +1592,131 @@ function bindMainEvents() {
 
   main.querySelectorAll('[data-edit-goal]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
-    const [, id] = el.dataset.editGoal.split('|');
-    const form = document.getElementById('edit-goal-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) {
-      form.classList.add('open');
-      setTimeout(() => form.querySelector('input')?.focus(), 60);
-    }
+    const [k, id] = el.dataset.editGoal.split('|');
+    const g = (state.goals[k] || []).find(x => x.id === id);
+    if (!g) return;
+    showModal({
+      title: 'Edit Commitment',
+      fields: [{ id: 'text', label: k === 'dos' ? "Do" : "Don't", type: 'text', value: g.text, placeholder: '...' }],
+      saveLabel: 'Save',
+      onSave: ({ text }) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        g.text = trimmed;
+        const textEl = document.querySelector(`[data-goal-text="${id}"]`);
+        if (textEl) textEl.textContent = trimmed;
+        dbCall(() => sb.from('goals').update({ text: trimmed }).eq('id', id));
+      }
+    });
   }));
 
-  main.querySelectorAll('[data-save-goal]').forEach(el => el.addEventListener('click', async () => {
-    const [k, id] = el.dataset.saveGoal.split('|');
-    const input = document.getElementById('f-goal-' + id);
-    if (!input) return;
-    const newText = input.value.trim();
-    if (!newText) { input.focus(); return; }
-    const g = state.goals[k].find(x => x.id === id);
-    if (g) g.text = newText;
-    const textEl = document.querySelector(`[data-goal-text="${id}"]`);
-    if (textEl) textEl.textContent = newText;
-    document.getElementById('edit-goal-' + id)?.classList.remove('open');
-    dbCall(() => sb.from('goals').update({ text: newText }).eq('id', id));
+  main.querySelectorAll('[data-modal-add^="goal-"]').forEach(btn => btn.addEventListener('click', () => {
+    const key = btn.dataset.modalAdd.replace('goal-', '');
+    const isDo = key === 'dos';
+    showModal({
+      title: isDo ? 'Add Do' : "Add Don't",
+      fields: [{ id: 'text', label: isDo ? 'Do' : "Don't", type: 'text', value: '', placeholder: isDo ? 'e.g. Drink 2L water' : 'e.g. No phone in bed' }],
+      saveLabel: 'Add',
+      onSave: async ({ text }) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const type = isDo ? 'do' : 'dont';
+        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text: trimmed }).select().single());
+        if (data) { state.goals[key].push({ id: data.id, text: trimmed }); render(); }
+      }
+    });
   }));
 
+  // ---- PROJECTS ----
+  main.querySelectorAll('[data-modal-add="project"]').forEach(btn => btn.addEventListener('click', () => {
+    showModal({
+      title: 'New Project',
+      fields: [
+        { id: 'name',        label: 'Project name',        type: 'text',     value: '', placeholder: 'e.g. Client Website' },
+        { id: 'description', label: 'Description',         type: 'textarea', value: '', placeholder: 'Optional project description' },
+        { id: 'status',      label: 'Status',              type: 'select',   value: 'active', options: [{ value: 'active', label: 'Active' }, { value: 'on_hold', label: 'On Hold' }, { value: 'done', label: 'Done' }] },
+        { id: 'deadline',    label: 'Deadline (optional)', type: 'date',     value: '' }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ name, description, status, deadline }) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        const now = new Date().toISOString();
+        const { data } = await dbCall(() => sb.from('projects').insert({ user_id: currentUser.id, name: trimmed, description: description.trim() || null, status, deadline: deadline || null, updated_at: now }).select().single());
+        if (data) { state.projects.push({ id: data.id, name: trimmed, description: description.trim(), status, deadline: data.deadline, tasks: [] }); render(); }
+      }
+    });
+  }));
 
+  main.querySelectorAll('[data-edit-proj]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const id = el.dataset.editProj;
+    const proj = state.projects.find(p => p.id === id);
+    if (!proj) return;
+    showModal({
+      title: 'Edit Project',
+      fields: [
+        { id: 'name',        label: 'Project name', type: 'text',     value: proj.name },
+        { id: 'description', label: 'Description',  type: 'textarea', value: proj.description || '', placeholder: 'Optional project description' },
+        { id: 'status',      label: 'Status',       type: 'select',   value: proj.status, options: [{ value: 'active', label: 'Active' }, { value: 'on_hold', label: 'On Hold' }, { value: 'done', label: 'Done' }] },
+        { id: 'deadline',    label: 'Deadline',     type: 'date',     value: proj.deadline || '' }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ name, description, status, deadline }) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        proj.name = trimmed; proj.description = description.trim(); proj.status = status; proj.deadline = deadline || null;
+        render();
+        dbCall(() => sb.from('projects').update({ name: trimmed, description: description.trim() || null, status, deadline: deadline || null, updated_at: new Date().toISOString() }).eq('id', id));
+      }
+    });
+  }));
+
+  main.querySelectorAll('[data-modal-add="proj-task"]').forEach(btn => btn.addEventListener('click', () => {
+    const projId = btn.dataset.projId;
+    showModal({
+      title: 'Add Task',
+      fields: [
+        { id: 'text',        label: 'Task',        type: 'text',     value: '', placeholder: 'What needs to be done?' },
+        { id: 'description', label: 'Description', type: 'textarea', value: '', placeholder: 'Description (optional)' }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ text, description }) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const proj = state.projects.find(p => p.id === projId);
+        if (!proj) return;
+        const { data } = await dbCall(() => sb.from('project_tasks').insert({ user_id: currentUser.id, project_id: projId, text: trimmed, description: description.trim() || null, checked: false }).select().single());
+        if (data) { proj.tasks.push({ id: data.id, text: trimmed, description: description.trim(), checked: false }); render(); }
+      }
+    });
+  }));
+
+  main.querySelectorAll('[data-edit-proj-task]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const [projId, taskId] = el.dataset.editProjTask.split('|');
+    const proj = state.projects.find(p => p.id === projId);
+    if (!proj) return;
+    const task = proj.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    showModal({
+      title: 'Edit Task',
+      fields: [
+        { id: 'text',        label: 'Task',        type: 'text',     value: task.text },
+        { id: 'description', label: 'Description', type: 'textarea', value: task.description || '', placeholder: 'Description (optional)' }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ text, description }) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        task.text = trimmed; task.description = description.trim();
+        render();
+        dbCall(() => sb.from('project_tasks').update({ text: trimmed, description: description.trim() || null }).eq('id', taskId));
+      }
+    });
+  }));
+
+  // ---- INCOME ----
   main.querySelectorAll('[data-del-income]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delIncome;
     showConfirmModal({
@@ -1714,38 +1730,51 @@ function bindMainEvents() {
     });
   }));
 
-  // income edit — open/save
   main.querySelectorAll('[data-edit-income]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const id = el.dataset.editIncome;
-    const form = document.getElementById('edit-inc-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
+    const item = state.income.find(x => x.id === id);
+    if (!item) return;
+    showModal({
+      title: 'Edit Income',
+      fields: [
+        { id: 'source', label: 'Source', type: 'text',   value: item.source },
+        { id: 'amount', label: 'Amount', type: 'number', value: item.amount },
+        { id: 'date',   label: 'Date',   type: 'date',   value: item.date }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ source, amount, date }) => {
+        const src = source.trim();
+        const amt = Number(amount);
+        if (!src || !amt) return;
+        item.source = src; item.amount = amt; item.date = date;
+        render();
+        dbCall(() => sb.from('income_entries').update({ source: src, amount: amt, date }).eq('id', id));
+      }
+    });
   }));
 
-  main.querySelectorAll('[data-save-inc]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.saveInc;
-    const dateEl   = document.getElementById('f-ei-date-'   + id);
-    const sourceEl = document.getElementById('f-ei-source-' + id);
-    const amtEl    = document.getElementById('f-ei-amount-' + id);
-    if (!sourceEl || !amtEl) return;
-    const newDate   = dateEl ? dateEl.value : todayISO();
-    const newSource = sourceEl.value.trim();
-    const newAmt    = Number(amtEl.value || 0);
-    if (!newSource || !newAmt) return;
-    const item = state.income.find(x => x.id === id);
-    if (item) { item.date = newDate; item.source = newSource; item.amount = newAmt; }
-    const li = document.querySelector(`.fin-item[data-id="${id}"]`);
-    if (li) {
-      const timeDiv  = li.querySelector('.time-col');  if (timeDiv)  timeDiv.textContent  = fmtDate(newDate);
-      const titleDiv = li.querySelector('.item-title'); if (titleDiv) titleDiv.textContent = newSource;
-      const amtDiv   = li.querySelector('.item-amt');  if (amtDiv)   amtDiv.textContent   = '+' + fmtMoney(newAmt);
-    }
-    document.getElementById('edit-inc-' + id)?.classList.remove('open');
-    dbCall(() => sb.from('income_entries').update({ date: newDate, source: newSource, amount: newAmt }).eq('id', id));
+  main.querySelectorAll('[data-modal-add="income"]').forEach(btn => btn.addEventListener('click', () => {
+    showModal({
+      title: 'Log Income',
+      fields: [
+        { id: 'source', label: 'Source', type: 'text',   value: '', placeholder: 'e.g. Client A' },
+        { id: 'amount', label: 'Amount', type: 'number', value: '', placeholder: '0' },
+        { id: 'date',   label: 'Date',   type: 'date',   value: todayISO() }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ source, amount, date }) => {
+        const src = source.trim();
+        const amt = Number(amount);
+        if (!src || !amt) return;
+        const { data } = await dbCall(() => sb.from('income_entries').insert({ user_id: currentUser.id, date: date || todayISO(), source: src, amount: amt }).select().single());
+        if (data) { state.income.unshift({ id: data.id, date: data.date, source: src, amount: amt }); render(); }
+      }
+    });
   }));
+
+  // ---- SPENDING ----
+  const _spendCats = ['Food', 'Transport', 'Shopping', 'Other'];
 
   main.querySelectorAll('[data-del-spend]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delSpend;
@@ -1760,43 +1789,51 @@ function bindMainEvents() {
     });
   }));
 
-  // spending edit — open/save
   main.querySelectorAll('[data-edit-spend]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const id = el.dataset.editSpend;
-    const form = document.getElementById('edit-spend-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
-  }));
-
-  main.querySelectorAll('[data-save-spend]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.saveSpend;
-    const catEl  = document.getElementById('f-es-cat-'    + id);
-    const amtEl  = document.getElementById('f-es-amount-' + id);
-    const noteEl = document.getElementById('f-es-note-'   + id);
-    const timeEl = document.getElementById('f-es-time-'   + id);
-    if (!amtEl) return;
-    const newCat  = catEl  ? catEl.value             : 'Other';
-    const newAmt  = Number(amtEl.value || 0);
-    const newNote = noteEl ? noteEl.value.trim()      : '';
-    const newTime = timeEl ? timeEl.value             : '';
-    if (!newAmt) return;
     const item = state.spending.find(x => x.id === id);
-    if (item) { item.cat = newCat; item.amount = newAmt; item.note = newNote; item.time = newTime; }
-    const li = document.querySelector(`.fin-item[data-id="${id}"]`);
-    if (li) {
-      const noteDiv = li.querySelector('.spend-note');     if (noteDiv) noteDiv.textContent = newNote || newCat;
-      const catDiv  = li.querySelector('.spend-cat-pill'); if (catDiv)  catDiv.textContent  = newCat;
-      const amtDiv  = li.querySelector('.spend-amt');      if (amtDiv)  amtDiv.textContent  = '−' + fmtMoney(newAmt);
-      const metaDiv = li.querySelector('.spend-meta');     if (metaDiv && newTime) metaDiv.textContent = newTime;
-    }
-    document.getElementById('edit-spend-' + id)?.classList.remove('open');
-    dbCall(() => sb.from('spending_entries').update({ category: newCat, amount: newAmt, note: newNote, time: newTime }).eq('id', id));
+    if (!item) return;
+    showModal({
+      title: 'Edit Spending',
+      fields: [
+        { id: 'cat',    label: 'Category', type: 'select', value: item.cat,     options: _spendCats.map(c => ({ value: c, label: c })) },
+        { id: 'amount', label: 'Amount',   type: 'number', value: item.amount },
+        { id: 'note',   label: 'Note',     type: 'text',   value: item.note || '', placeholder: 'What was it?' }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ cat, amount, note }) => {
+        const amt = Number(amount);
+        if (!amt) return;
+        item.cat = cat; item.amount = amt; item.note = note.trim();
+        render();
+        dbCall(() => sb.from('spending_entries').update({ category: cat, amount: amt, note: note.trim(), time: item.time }).eq('id', id));
+      }
+    });
   }));
 
-  // debt delete + edit
+  main.querySelectorAll('[data-modal-add="spend"]').forEach(btn => btn.addEventListener('click', () => {
+    showModal({
+      title: 'Log Spending',
+      fields: [
+        { id: 'cat',    label: 'Category', type: 'select', value: 'Food',  options: _spendCats.map(c => ({ value: c, label: c })) },
+        { id: 'amount', label: 'Amount',   type: 'number', value: '',      placeholder: '0' },
+        { id: 'note',   label: 'Note',     type: 'text',   value: '',      placeholder: 'What was it?' }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ cat, amount, note }) => {
+        const amt = Number(amount);
+        if (!amt) return;
+        const t = new Date();
+        const time = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+        const date = todayISO();
+        const { data } = await dbCall(() => sb.from('spending_entries').insert({ user_id: currentUser.id, date, time, category: cat, note: note.trim(), amount: amt }).select().single());
+        if (data) { state.spending.unshift({ id: data.id, date, time, cat, note: note.trim(), amount: amt }); render(); }
+      }
+    });
+  }));
+
+  // ---- DEBTS ----
   main.querySelectorAll('[data-del-debt]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delDebt;
     const d = state.debts.find(x => x.id === id);
@@ -1814,32 +1851,44 @@ function bindMainEvents() {
   main.querySelectorAll('[data-edit-debt]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const id = el.dataset.editDebt;
-    const form = document.getElementById('edit-debt-' + id);
-    if (!form) return;
-    const isOpen = form.classList.contains('open');
-    closeAllForms();
-    if (!isOpen) form.classList.add('open');
+    const item = state.debts.find(d => d.id === id);
+    if (!item) return;
+    showModal({
+      title: 'Edit Debt',
+      fields: [
+        { id: 'creditor', label: 'Creditor', type: 'text',   value: item.creditor },
+        { id: 'amount',   label: 'Amount',   type: 'number', value: item.amount },
+        { id: 'due',      label: 'Due date', type: 'date',   value: item.due || '' }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ creditor, amount, due }) => {
+        const cred = creditor.trim();
+        const amt = Number(amount);
+        if (!cred || !amt) return;
+        item.creditor = cred; item.amount = amt; item.due = due;
+        render();
+        dbCall(() => sb.from('debts').update({ creditor: cred, amount: amt, due_date: due }).eq('id', id));
+      }
+    });
   }));
 
-  main.querySelectorAll('[data-save-debt]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.saveDebt;
-    const creditorEl = document.getElementById('f-ed-creditor-' + id);
-    const amtEl      = document.getElementById('f-ed-amount-'   + id);
-    const dueEl      = document.getElementById('f-ed-due-'      + id);
-    if (!creditorEl || !amtEl) return;
-    const newCreditor = creditorEl.value.trim();
-    const newAmt      = Number(amtEl.value || 0);
-    const newDue      = dueEl ? dueEl.value : '';
-    if (!newCreditor || !newAmt) return;
-    const item = state.debts.find(d => d.id === id);
-    if (item) { item.creditor = newCreditor; item.amount = newAmt; item.due = newDue; }
-    const li = document.querySelector(`.fin-item[data-id="${id}"]`);
-    if (li) {
-      const creditorDiv = li.querySelector('.debt-creditor');     if (creditorDiv) creditorDiv.textContent = newCreditor;
-      const amtDiv      = li.querySelector('.debt-amount-large'); if (amtDiv)      amtDiv.textContent      = fmtMoney(newAmt);
-    }
-    document.getElementById('edit-debt-' + id)?.classList.remove('open');
-    dbCall(() => sb.from('debts').update({ creditor: newCreditor, amount: newAmt, due_date: newDue }).eq('id', id));
+  main.querySelectorAll('[data-modal-add="debt"]').forEach(btn => btn.addEventListener('click', () => {
+    showModal({
+      title: 'Add Debt',
+      fields: [
+        { id: 'creditor', label: 'Creditor', type: 'text',   value: '', placeholder: 'Who do you owe?' },
+        { id: 'amount',   label: 'Amount',   type: 'number', value: '', placeholder: '0' },
+        { id: 'due',      label: 'Due date', type: 'date',   value: todayISO() }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ creditor, amount, due }) => {
+        const cred = creditor.trim();
+        const amt = Number(amount);
+        if (!cred || !amt) return;
+        const { data } = await dbCall(() => sb.from('debts').insert({ user_id: currentUser.id, creditor: cred, amount: amt, due_date: due, paid: false }).select().single());
+        if (data) { state.debts.push({ id: data.id, creditor: cred, amount: amt, due, paid: false }); render(); }
+      }
+    });
   }));
 
   main.querySelectorAll('[data-pay-debt]').forEach(el => el.addEventListener('click', () => {
@@ -1849,313 +1898,6 @@ function bindMainEvents() {
     render();
     dbCall(() => sb.from('debts').update({ paid: true }).eq('id', d.id));
   }));
-
-  // income pagination
-  main.querySelectorAll('[data-income-prev]').forEach(el => el.addEventListener('click', () => { state.incomePage = Math.max(1, state.incomePage - 1); render(); }));
-  main.querySelectorAll('[data-income-next]').forEach(el => el.addEventListener('click', () => { state.incomePage++; render(); }));
-
-  // spending filter tabs
-  main.querySelectorAll('[data-spend-filter]').forEach(el => el.addEventListener('click', () => {
-    state.spendingFilter = el.dataset.spendFilter;
-    state.spendingPickedDate = null;
-    state.spendingPage = 1;
-    render();
-  }));
-
-  // spending date picker
-  const spendDateInput = main.querySelector('#spend-date-input');
-  if (spendDateInput) {
-    spendDateInput.addEventListener('change', () => {
-      state.spendingPickedDate = spendDateInput.value || null;
-      state.spendingPage = 1;
-      render();
-    });
-  }
-  const spendDateClear = main.querySelector('#spend-date-clear');
-  if (spendDateClear) {
-    spendDateClear.addEventListener('click', () => {
-      state.spendingPickedDate = null;
-      state.spendingPage = 1;
-      render();
-    });
-  }
-
-  // spending pagination
-  main.querySelectorAll('[data-spend-prev]').forEach(el => el.addEventListener('click', () => { state.spendingPage = Math.max(1, state.spendingPage - 1); render(); }));
-  main.querySelectorAll('[data-spend-next]').forEach(el => el.addEventListener('click', () => { state.spendingPage++; render(); }));
-
-  // debts pagination
-  main.querySelectorAll('[data-debts-prev]').forEach(el => el.addEventListener('click', () => { state.debtsPage = Math.max(1, state.debtsPage - 1); render(); }));
-  main.querySelectorAll('[data-debts-next]').forEach(el => el.addEventListener('click', () => { state.debtsPage++; render(); }));
-
-  // debt unpay
-  main.querySelectorAll('[data-unpay-debt]').forEach(el => el.addEventListener('click', () => {
-    const d = state.debts.find(x => x.id === el.dataset.unpayDebt);
-    if (!d) return;
-    d.paid = false;
-    render();
-    dbCall(() => sb.from('debts').update({ paid: false }).eq('id', d.id));
-  }));
-
-  // today page — toggle commitment
-  main.querySelectorAll('[data-toggle-today-goal]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.toggleTodayGoal;
-    const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
-    const g = allGoals.find(x => x.id === id);
-    if (!g || !currentUser) return;
-    const today = todayISO();
-    const existingLog = getTodayLog(id);
-    const newChecked = existingLog ? !existingLog.checked : true;
-    if (existingLog) {
-      existingLog.checked = newChecked;
-    } else {
-      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked });
-    }
-    el.classList.toggle('checked', newChecked);
-    pulse(el);
-    const textEl = document.getElementById('today-commit-text-' + id);
-    if (textEl) textEl.classList.toggle('done', newChecked);
-    const scoreEl = document.getElementById('today-score-val');
-    if (scoreEl) scoreEl.textContent = computeDailyScore();
-    const { data } = await dbCall(() => sb.from('goal_logs').upsert(
-      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked },
-      { onConflict: 'goal_id,date' }
-    ).select().single());
-    if (data) {
-      const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
-      if (localLog && !localLog.id) localLog.id = data.id;
-    }
-  }));
-
-  // forms — open / cancel (edit forms still use data-open-form via their own handlers)
-  main.querySelectorAll('[data-cancel]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    document.getElementById(el.dataset.cancel)?.classList.remove('open');
-  }));
-
-  // ---- ADD BUTTON MODALS ----
-  // schedule add
-  const addSched = main.querySelector('#add-sched-btn');
-  if (addSched) addSched.addEventListener('click', (e) => {
-    e.stopPropagation();
-    showModal({
-      title: 'Add Event',
-      fieldsHtml: `
-        <div class="form-row">
-          <div class="field"><label>Time</label><input type="time" id="m-sched-time" value="09:00"/></div>
-          <div class="field"><label>Title</label><input type="text" id="m-sched-title" placeholder="e.g. Deep work"/></div>
-        </div>
-        <div class="field"><label>Note</label><input type="text" id="m-sched-sub" placeholder="optional"/></div>
-        <div class="alarm-row">
-          <span class="alarm-label">Set alarm</span>
-          <label class="toggle-switch"><input type="checkbox" id="m-sched-alarm"><span class="toggle-track"></span></label>
-        </div>
-        <div class="alarm-time-row" id="m-alarm-time-row">
-          <div class="field"><label>Alarm time</label><input type="time" id="m-sched-alarm-time" value="09:00"/></div>
-        </div>`,
-      saveLabel: 'Add',
-      onSave: async (body) => {
-        const time  = body.querySelector('#m-sched-time')?.value || '09:00';
-        const title = body.querySelector('#m-sched-title')?.value.trim();
-        const sub   = body.querySelector('#m-sched-sub')?.value.trim() || '';
-        if (!title) return;
-        const alarmOn    = body.querySelector('#m-sched-alarm')?.checked;
-        const alarm_time = alarmOn ? (body.querySelector('#m-sched-alarm-time')?.value || time) : null;
-        hideModal();
-        const day = state.selectedDay || todayISO();
-        const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title, note: sub, alarm_time }).select().single());
-        if (data) {
-          if (!state.schedule[day]) state.schedule[day] = [];
-          state.schedule[day].push({ id: data.id, time, title, sub, alarm_time });
-          state.schedule[day].sort((a, b) => a.time.localeCompare(b.time));
-          render();
-        }
-      },
-      onShown: (body) => {
-        const toggle = body.querySelector('#m-sched-alarm');
-        const row    = body.querySelector('#m-alarm-time-row');
-        if (toggle && row) {
-          toggle.addEventListener('change', () => {
-            row.classList.toggle('visible', toggle.checked);
-            if (toggle.checked) { const v = body.querySelector('#m-sched-time')?.value; const ai = body.querySelector('#m-sched-alarm-time'); if (v && ai) ai.value = v; }
-          });
-          body.querySelector('#m-sched-time')?.addEventListener('change', () => {
-            if (toggle.checked) { const ai = body.querySelector('#m-sched-alarm-time'); if (ai) ai.value = body.querySelector('#m-sched-time').value; }
-          });
-        }
-      }
-    });
-  });
-
-  // commitments add
-  main.querySelectorAll('[data-add-goal]').forEach(el => el.addEventListener('click', () => {
-    const k = el.dataset.addGoal;
-    showModal({
-      title: k === 'dos' ? "Add Do" : "Add Don't",
-      fieldsHtml: `<div class="field"><label>${k === 'dos' ? "Do" : "Don't"}</label><input type="text" id="m-goal-text" placeholder="${k === 'dos' ? 'e.g. Drink 2L water' : 'e.g. No phone in bed'}"/></div>`,
-      saveLabel: 'Add',
-      onSave: async (body) => {
-        const text = body.querySelector('#m-goal-text')?.value.trim();
-        if (!text) return;
-        hideModal();
-        const type = k === 'dos' ? 'do' : 'dont';
-        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text }).select().single());
-        if (data) { state.goals[k].push({ id: data.id, text }); render(); }
-      }
-    });
-  }));
-
-  // project add
-  const addProjBtn = main.querySelector('#add-project-btn');
-  if (addProjBtn) addProjBtn.addEventListener('click', () => {
-    showModal({
-      title: 'New Project',
-      fieldsHtml: `
-        <div class="field"><label>Project name</label><input type="text" id="m-proj-name" placeholder="e.g. Client Website"/></div>
-        <div class="form-row">
-          <div class="field"><label>Status</label><select id="m-proj-status">
-            <option value="active">Active</option><option value="on_hold">On Hold</option><option value="done">Done</option>
-          </select></div>
-          <div class="field"><label>Deadline (optional)</label><input type="date" id="m-proj-deadline"/></div>
-        </div>`,
-      saveLabel: 'Add',
-      onSave: async (body) => {
-        const name     = body.querySelector('#m-proj-name')?.value.trim();
-        const status   = body.querySelector('#m-proj-status')?.value || 'active';
-        const deadline = body.querySelector('#m-proj-deadline')?.value || null;
-        if (!name) return;
-        hideModal();
-        const now = new Date().toISOString();
-        const { data } = await dbCall(() => sb.from('projects').insert({ user_id: currentUser.id, name, status, deadline: deadline || null, updated_at: now }).select().single());
-        if (data) { state.projects.push({ id: data.id, name, status, deadline: data.deadline, tasks: [] }); render(); }
-      }
-    });
-  });
-
-  // project task add
-  main.querySelectorAll('[data-add-proj-task]').forEach(el => el.addEventListener('click', () => {
-    const projId = el.dataset.addProjTask;
-    showModal({
-      title: 'Add Task',
-      fieldsHtml: `
-        <div class="field"><label>Task</label><input type="text" id="m-pt-text" placeholder="What needs to be done?"/></div>
-        <div class="field"><label>Description</label><textarea id="m-pt-desc" rows="2" placeholder="Description (optional)"></textarea></div>`,
-      saveLabel: 'Add',
-      onSave: async (body) => {
-        const text = body.querySelector('#m-pt-text')?.value.trim();
-        const desc = body.querySelector('#m-pt-desc')?.value.trim() || '';
-        if (!text) return;
-        hideModal();
-        const proj = state.projects.find(p => p.id === projId);
-        if (!proj) return;
-        const { data } = await dbCall(() => sb.from('project_tasks').insert({ user_id: currentUser.id, project_id: projId, text, description: desc || null, checked: false }).select().single());
-        if (data) { proj.tasks.push({ id: data.id, text, description: desc, checked: false }); render(); }
-      }
-    });
-  }));
-
-  // income add
-  const addIncBtn = main.querySelector('#add-income-btn');
-  if (addIncBtn) addIncBtn.addEventListener('click', () => {
-    showModal({
-      title: 'Log Income',
-      fieldsHtml: `
-        <div class="field"><label>Source</label><input type="text" id="m-inc-source" placeholder="e.g. Client A"/></div>
-        <div class="form-row">
-          <div class="field"><label>Amount</label><input type="number" id="m-inc-amount" placeholder="0"/></div>
-          <div class="field"><label>Date</label><input type="date" id="m-inc-date" value="${todayISO()}"/></div>
-        </div>`,
-      saveLabel: 'Add',
-      onSave: async (body) => {
-        const source = body.querySelector('#m-inc-source')?.value.trim();
-        const amount = Number(body.querySelector('#m-inc-amount')?.value || 0);
-        const date   = body.querySelector('#m-inc-date')?.value || todayISO();
-        if (!source || !amount) return;
-        hideModal();
-        const { data } = await dbCall(() => sb.from('income_entries').insert({ user_id: currentUser.id, date, source, amount }).select().single());
-        if (data) { state.income.unshift({ id: data.id, date, source, amount }); state.incomePage = 1; render(); }
-      }
-    });
-  });
-
-  // spending add
-  const addSpendBtn = main.querySelector('#add-spend-btn');
-  if (addSpendBtn) addSpendBtn.addEventListener('click', () => {
-    const cats = ['Food','Transport','Shopping','Other'];
-    showModal({
-      title: 'Log Spend',
-      fieldsHtml: `
-        <div class="form-row">
-          <div class="field"><label>Category</label><select id="m-sp-cat">${cats.map(c => `<option>${c}</option>`).join('')}</select></div>
-          <div class="field"><label>Amount</label><input type="number" id="m-sp-amount" placeholder="0"/></div>
-        </div>
-        <div class="field"><label>Note</label><input type="text" id="m-sp-note" placeholder="What was it?"/></div>`,
-      saveLabel: 'Add',
-      onSave: async (body) => {
-        const cat    = body.querySelector('#m-sp-cat')?.value || 'Other';
-        const amount = Number(body.querySelector('#m-sp-amount')?.value || 0);
-        const note   = body.querySelector('#m-sp-note')?.value.trim() || '';
-        if (!amount) return;
-        hideModal();
-        const t = new Date();
-        const time = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
-        const date = todayISO();
-        const { data } = await dbCall(() => sb.from('spending_entries').insert({ user_id: currentUser.id, date, time, category: cat, note, amount }).select().single());
-        if (data) { state.spending.unshift({ id: data.id, date, time, cat, note, amount }); state.spendingPage = 1; render(); }
-      }
-    });
-  });
-
-  // debt add
-  const addDebtBtn = main.querySelector('#add-debt-btn');
-  if (addDebtBtn) addDebtBtn.addEventListener('click', () => {
-    showModal({
-      title: 'Add Debt',
-      fieldsHtml: `
-        <div class="field"><label>Creditor</label><input type="text" id="m-debt-creditor" placeholder="Who do you owe?"/></div>
-        <div class="form-row">
-          <div class="field"><label>Amount</label><input type="number" id="m-debt-amount" placeholder="0"/></div>
-          <div class="field"><label>Due date</label><input type="date" id="m-debt-due" value="${todayISO()}"/></div>
-        </div>`,
-      saveLabel: 'Add',
-      onSave: async (body) => {
-        const creditor = body.querySelector('#m-debt-creditor')?.value.trim();
-        const amount   = Number(body.querySelector('#m-debt-amount')?.value || 0);
-        const due      = body.querySelector('#m-debt-due')?.value || todayISO();
-        if (!creditor || !amount) return;
-        hideModal();
-        const { data } = await dbCall(() => sb.from('debts').insert({ user_id: currentUser.id, creditor, amount, due_date: due, paid: false }).select().single());
-        if (data) { state.debts.push({ id: data.id, creditor, amount, due, paid: false }); state.debtsPage = 1; render(); }
-      }
-    });
-  });
-
-  // income filter + date picker
-  main.querySelectorAll('[data-income-filter]').forEach(el => el.addEventListener('click', () => {
-    state.incomeFilter = el.dataset.incomeFilter;
-    state.incomePickedDate = null;
-    state.incomePage = 1;
-    render();
-  }));
-  const incomeDateInput = main.querySelector('#income-date-input');
-  if (incomeDateInput) {
-    incomeDateInput.addEventListener('change', () => {
-      state.incomePickedDate = incomeDateInput.value || null;
-      state.incomePage = 1;
-      render();
-    });
-  }
-  const incomeDateClear = main.querySelector('#income-date-clear');
-  if (incomeDateClear) {
-    incomeDateClear.addEventListener('click', () => {
-      state.incomePickedDate = null;
-      state.incomePage = 1;
-      render();
-    });
-  }
-
-  // form saves
-  bindFormSaves();
 
 
   // ---- NOTES ----
@@ -2352,7 +2094,7 @@ function bindMainEvents() {
 }
 
 function bindFormSaves() {
-  // add forms moved to showModal() — nothing to bind here
+  // All form saves are now handled by showModal() onSave callbacks
 }
 
 function pulse(el) {
@@ -2477,62 +2219,12 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-/* =========================================================
-   GLOBAL MODAL EVENT LISTENERS
-========================================================= */
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  hideModal();
-  hideConfirmModal();
-});
-document.getElementById('hq-modal-overlay')?.addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) hideModal();
-});
-document.getElementById('hq-confirm-overlay')?.addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) hideConfirmModal();
-});
-document.getElementById('hq-modal-close')?.addEventListener('click', hideModal);
-document.querySelector('.hq-modal-cancel')?.addEventListener('click', hideModal);
-document.querySelector('.hq-confirm-cancel')?.addEventListener('click', hideConfirmModal);
-
-/* =========================================================
-   NOISE / GRAIN BACKGROUND
-========================================================= */
-(function () {
-  const canvas = document.getElementById('noise-canvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  let lastTime = 0;
-  const FRAME_MS = 83; // ~12 fps
-  let w = 0, h = 0;
-
-  function resize() {
-    w = canvas.width  = window.innerWidth;
-    h = canvas.height = window.innerHeight;
-  }
-
-  function generateNoise() {
-    const img = ctx.createImageData(w, h);
-    const d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const v = Math.random() * 255 | 0;
-      d[i] = d[i + 1] = d[i + 2] = v;
-      d[i + 3] = 255;
+// Notes mobile: adjust editor height when keyboard appears
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    const editor = document.querySelector('.note-content');
+    if (editor) {
+      editor.style.minHeight = (window.visualViewport.height - 200) + 'px';
     }
-    ctx.putImageData(img, 0, 0);
-  }
-
-  function loop(t) {
-    if (t - lastTime >= FRAME_MS) {
-      generateNoise();
-      lastTime = t;
-    }
-    requestAnimationFrame(loop);
-  }
-
-  resize();
-  generateNoise();
-  requestAnimationFrame(loop);
-  window.addEventListener('resize', resize);
-  window.addEventListener('orientationchange', () => setTimeout(resize, 150));
-})();
+  });
+}

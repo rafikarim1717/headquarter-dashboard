@@ -81,6 +81,7 @@ async function loadFromSupabase(userId) {
     return {
       id: p.id,
       name: p.name,
+      description: p.description || '',
       status: p.status,
       deadline: p.deadline,
       tasks: tasks.map(t => ({ id: t.id, text: t.text, description: t.description || '', checked: t.checked }))
@@ -168,7 +169,7 @@ async function seedSampleData(userId) {
 
   // Projects
   const now = new Date().toISOString();
-  const projectRows = def.projects.map(p => ({ user_id: userId, name: p.name, status: p.status, deadline: p.deadline || null, updated_at: now }));
+  const projectRows = def.projects.map(p => ({ user_id: userId, name: p.name, description: p.description || null, status: p.status, deadline: p.deadline || null, updated_at: now }));
   const { data: projData } = await sb.from('projects').insert(projectRows).select();
   const projTaskRows = [];
   (projData || []).forEach((p, i) => {
@@ -183,6 +184,7 @@ async function seedSampleData(userId) {
     return {
       id: p.id,
       name: p.name,
+      description: p.description || '',
       status: p.status,
       deadline: p.deadline,
       tasks: tasks.map(t => ({ id: t.id, text: t.text, description: t.description || '', checked: t.checked }))
@@ -215,6 +217,7 @@ function displayNameFromUser(user) {
 }
 
 function showLogin() {
+  document.getElementById('app-loading').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('app').style.display = 'none';
   document.getElementById('bottom-nav').style.display = 'none';
