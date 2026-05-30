@@ -88,17 +88,24 @@ let state = {
    AMBIENT MUSIC
 ========================================================= */
 const AMBIENT_STREAMS = [
-  'https://streams.ilovemusic.de/iloveradio17.mp3',
-  'https://usa9.fastcast4u.com/proxy/jamz?mp=/1',
-  'https://lofi.stream.laut.fm/lofi'
+  { url: 'https://streams.ilovemusic.de/iloveradio17.mp3', name: 'iLove Radio' },
+  { url: 'https://usa9.fastcast4u.com/proxy/jamz?mp=/1',  name: 'Jamz Radio'  },
+  { url: 'https://lofi.stream.laut.fm/lofi',               name: 'Lo-Fi Radio' }
 ];
-const ambientPlayer = { audio: null, isPlaying: false };
+const ambientPlayer = { audio: null, isPlaying: false, currentIdx: 0 };
 
 function updateMusicBtn(playing) {
-  const btn = document.getElementById('music-toggle');
-  const eq  = document.getElementById('eq-bars');
-  if (btn) btn.classList.toggle('playing', playing);
-  if (eq)  eq.style.display = playing ? 'inline-flex' : 'none';
+  const btn      = document.getElementById('music-toggle');
+  const eq       = document.getElementById('eq-bars');
+  const noteIcon = document.getElementById('music-note-icon');
+  const label    = document.getElementById('music-label');
+  if (btn)      btn.classList.toggle('playing', playing);
+  if (eq)       eq.style.display = playing ? 'inline-flex' : 'none';
+  if (noteIcon) noteIcon.style.display = playing ? 'none' : '';
+  if (label) {
+    label.textContent = playing ? AMBIENT_STREAMS[ambientPlayer.currentIdx].name : '';
+    label.classList.toggle('playing', playing);
+  }
 }
 
 function tryAmbientStream(idx) {
@@ -109,10 +116,11 @@ function tryAmbientStream(idx) {
     return;
   }
   if (ambientPlayer.audio) { ambientPlayer.audio.pause(); ambientPlayer.audio = null; }
-  const audio = new Audio(AMBIENT_STREAMS[idx]);
+  const audio = new Audio(AMBIENT_STREAMS[idx].url);
   audio.crossOrigin = 'anonymous';
   audio.volume = 0.4;
   ambientPlayer.audio = audio;
+  ambientPlayer.currentIdx = idx;
   audio.addEventListener('error', () => tryAmbientStream(idx + 1), { once: true });
   audio.play()
     .then(() => { ambientPlayer.isPlaying = true; updateMusicBtn(true); })
@@ -160,11 +168,20 @@ function showConfirmModal({ title, message, confirmLabel = 'Delete', onConfirm, 
   if (!overlay) return;
   overlay.querySelector('.hq-confirm-title').textContent = title;
   overlay.querySelector('.hq-confirm-msg').textContent = message;
-  const btn = overlay.querySelector('.hq-confirm-btn');
+  const btn       = overlay.querySelector('.hq-confirm-btn');
+  const cancelBtn = overlay.querySelector('.hq-confirm-cancel');
   btn.textContent = confirmLabel;
   btn.style.background = danger ? '#c0392b' : 'var(--accent)';
   btn.style.color = danger ? '#fff' : '#111';
-  btn.onclick = () => { hideConfirmModal(); onConfirm(); };
+
+  function close() { hideConfirmModal(); document.removeEventListener('keydown', escHandler); }
+  function escHandler(e) { if (e.key === 'Escape') close(); }
+
+  btn.onclick       = () => { close(); onConfirm(); };
+  cancelBtn.onclick = (e) => { e.stopPropagation(); close(); };
+  overlay.onclick   = (e) => { if (e.target === overlay) close(); };
+  document.addEventListener('keydown', escHandler);
+
   overlay.classList.add('open');
 }
 function hideConfirmModal() {
@@ -348,7 +365,7 @@ function topbar() {
       </div>
       <div class="right">
         <button class="mobile-signout-btn" id="topbar-logout-btn" aria-label="Sign out">${signOutSvg}</button>
-        <button class="icon-btn music-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-toggle" title="Ambient music" aria-label="Ambient music">${musicNoteSvg}<span class="eq-bars" id="eq-bars" style="${ambientPlayer.isPlaying ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span></button>
+        <span id="music-label" class="${ambientPlayer.isPlaying ? 'playing' : ''}">${ambientPlayer.isPlaying ? AMBIENT_STREAMS[ambientPlayer.currentIdx].name : ''}</span><button class="icon-btn music-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-toggle" title="Ambient music" aria-label="Ambient music"><span id="music-note-icon" style="${ambientPlayer.isPlaying ? 'display:none' : ''}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${ambientPlayer.isPlaying ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span></button>
         <button class="icon-btn" id="open-tweaks" title="Tweaks" aria-label="Tweaks">&#x2699;&#xFE0E;</button>
       </div>
     </header>
@@ -422,7 +439,7 @@ function renderLifeHome() {
   const projTotal = firstActive ? firstActive.tasks.length : 0;
   const projPct   = projTotal ? Math.round(projDone / projTotal * 100) : 0;
   const projectsBlock = (delay) => `
-    <div class="card" style="animation-delay:${delay}ms">
+    <div class="card" style="animation-delay:${delay}ms;cursor:pointer" data-go="life:projects">
       <div class="section-title" style="margin-top:0">Active project</div>
       ${firstActive ? `
         <div style="font-size:${layout === 'hero' ? '18px' : '15px'};font-weight:500;line-height:1.35">${escapeHtml(firstActive.name)}</div>
@@ -876,7 +893,7 @@ function renderNotesList() {
     <div class="${isGrid ? 'notes-grid' : 'notes-list-view'}">
       ${notes.map(n => {
         const preview = stripHtml(n.content);
-        const previewText = preview.length > 120 ? preview.slice(0, 120) + '...' : preview;
+        const previewText = preview.length > 100 ? preview.slice(0, 100) + '...' : preview;
         return `
         <div class="note-card" data-open-note="${n.id}">
           <button class="note-card-del" data-del-note-card="${n.id}" aria-label="Delete note">&#x00D7;</button>
@@ -899,7 +916,6 @@ function renderNoteEditor() {
       <button class="note-back-btn" id="note-back-btn">←</button>
       <div class="note-editor-meta">
         <span class="note-saved-lbl" id="note-saved-lbl">Saved</span>
-        <button class="note-del-btn" id="note-del-btn">Delete</button>
       </div>
     </div>
     <input class="note-title-input" id="note-title" type="text"
@@ -1087,13 +1103,19 @@ function renderIncome() {
       <ul class="list">
         ${pageItems.map(i => `
           <li class="fin-item" data-id="${i.id}">
-            <div class="list-item row-wrap">
-              <div class="time-col">${fmtDate(i.date)}</div>
-              <div class="item-main"><div class="item-title">${escapeHtml(i.source)}</div></div>
-              <div class="item-amt">+${fmtMoney(i.amount)}</div>
-              <div class="fin-acts">
-                <button class="fin-edit-btn" data-edit-income="${i.id}" title="Edit">${ICON_PENCIL}</button>
-                <button class="fin-del-btn" data-del-income="${i.id}" title="Delete">${ICON_TRASH}</button>
+            <div class="fin-row">
+              <div class="fin-row-left">
+                <div class="fin-row-line1">
+                  <span class="fin-row-title">${escapeHtml(i.source)}</span>
+                </div>
+                <div class="fin-row-time">${fmtDate(i.date)}</div>
+              </div>
+              <div class="fin-row-right">
+                <div class="fin-acts">
+                  <button class="fin-edit-btn" data-edit-income="${i.id}" title="Edit">${ICON_PENCIL}</button>
+                  <button class="fin-del-btn" data-del-income="${i.id}" title="Delete">${ICON_TRASH}</button>
+                </div>
+                <div class="fin-row-amt income">+${fmtMoney(i.amount)}</div>
               </div>
             </div>
           </li>`).join('') || `<li class="list-item"><div class="item-sub">No income yet.</div></li>`}
@@ -1165,20 +1187,20 @@ function renderSpending() {
       <ul class="list">
         ${pageItems.map(s => `
           <li class="fin-item" data-id="${s.id}">
-            <div class="spend-row">
-              <div class="spend-row-content">
-                <div class="spend-row-top">
-                  <span class="spend-cat-pill">${escapeHtml(s.cat)}</span>
-                  <span class="spend-note">${escapeHtml((s.note||s.cat).slice(0,40))}</span>
+            <div class="fin-row">
+              <div class="fin-row-left">
+                <div class="fin-row-line1">
+                  <span class="fin-cat-pill">${escapeHtml(s.cat)}</span>
+                  <span class="fin-row-title">${escapeHtml((s.note||s.cat).slice(0,40))}</span>
                 </div>
-                <div class="spend-row-bottom">
-                  <span class="spend-meta">${s.date===today?s.time:fmtDate(s.date)}</span>
-                  <span class="spend-amt">−${fmtMoney(s.amount)}</span>
-                </div>
+                <div class="fin-row-time">${s.date===today?s.time:fmtDate(s.date)}</div>
               </div>
-              <div class="fin-acts">
-                <button class="fin-edit-btn" data-edit-spend="${s.id}" title="Edit">${ICON_PENCIL}</button>
-                <button class="fin-del-btn" data-del-spend="${s.id}" title="Delete">${ICON_TRASH}</button>
+              <div class="fin-row-right">
+                <div class="fin-acts">
+                  <button class="fin-edit-btn" data-edit-spend="${s.id}" title="Edit">${ICON_PENCIL}</button>
+                  <button class="fin-del-btn" data-del-spend="${s.id}" title="Delete">${ICON_TRASH}</button>
+                </div>
+                <div class="fin-row-amt">−${fmtMoney(s.amount)}</div>
               </div>
             </div>
           </li>`).join('')}
@@ -1215,20 +1237,23 @@ function renderDebts() {
           const dueLabel = d.paid ? `Paid` : (overdue ? `Overdue · ${fmtDate(d.due)}` : (days===0?`Due today`:`Due in ${days}d · ${fmtDate(d.due)}`));
           return `
           <li class="fin-item" data-id="${d.id}">
-            <div class="debt-row-info">
-              <div class="item-main">
-                <div class="item-title">${escapeHtml(d.creditor)}</div>
-                <div class="debt-due ${soon||overdue?'soon':''}">${dueLabel}</div>
+            <div class="fin-row">
+              <div class="fin-row-left">
+                <div class="fin-row-line1">
+                  <span class="fin-row-title">${escapeHtml(d.creditor)}</span>
+                </div>
+                <div class="debt-due ${soon||overdue?'soon':''}" style="font-size:12px;margin-top:3px">${dueLabel}</div>
               </div>
-              <div class="item-amt">${fmtMoney(d.amount)}</div>
-            </div>
-            <div class="debt-row-acts">
-              ${d.paid
-                ? `<span class="debt-status paid">Paid</span>`
-                : `<button class="btn" data-pay-debt="${d.id}" style="padding:6px 10px;font-size:11px;">Mark paid</button>`}
-              <div class="spacer"></div>
-              <button class="fin-edit-btn" data-edit-debt="${d.id}">Edit</button>
-              <button class="fin-del-btn" data-del-debt="${d.id}">Delete</button>
+              <div class="fin-row-right">
+                <div class="fin-acts">
+                  ${d.paid
+                    ? `<button class="fin-edit-btn" data-pay-debt="${d.id}" title="Mark as unpaid">${ICON_XCIRCLE}</button>`
+                    : `<button class="fin-edit-btn" data-pay-debt="${d.id}" title="Mark as paid">${ICON_CHECK}</button>`}
+                  <button class="fin-edit-btn" data-edit-debt="${d.id}" title="Edit">${ICON_PENCIL}</button>
+                  <button class="fin-del-btn" data-del-debt="${d.id}" title="Delete">${ICON_TRASH}</button>
+                </div>
+                <div class="fin-row-amt">${fmtMoney(d.amount)}</div>
+              </div>
             </div>
           </li>`;
         }).join('') || `<li class="list-item"><div class="item-sub">No debts recorded.</div></li>`}
@@ -1290,6 +1315,10 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
       input = `<textarea id="modal-f-${f.id}" rows="3" placeholder="${escapeHtml(f.placeholder||'')}">${escapeHtml(f.value||'')}</textarea>`;
     } else if (f.type === 'toggle') {
       input = `<label class="toggle-switch"><input type="checkbox" id="modal-f-${f.id}"${f.value ? ' checked' : ''}><span class="toggle-track"></span></label>`;
+    } else if (f.type === 'amount') {
+      const fmtInitial = f.value ? Number(f.value).toLocaleString('id-ID') : '';
+      const pfxInitial = fmtInitial ? (window.__HQ_TWEAKS?.currencyPrefix || 'Rp ') + fmtInitial : '';
+      input = `<input type="text" inputmode="numeric" id="modal-f-${f.id}" value="${fmtInitial}" placeholder="${escapeHtml(f.placeholder||'0')}"/><div class="amount-preview" id="preview-${f.id}">${pfxInitial}</div>`;
     } else {
       input = `<input type="${f.type||'text'}" id="modal-f-${f.id}" value="${escapeHtml(String(f.value??''))}" placeholder="${escapeHtml(f.placeholder||'')}"/>`;
     }
@@ -1325,6 +1354,22 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
     });
   });
 
+  // Wire up amount fields — live Indonesian dot formatting + preview
+  fields.forEach(f => {
+    if (f.type !== 'amount') return;
+    const inp = document.getElementById('modal-f-' + f.id);
+    const preview = document.getElementById('preview-' + f.id);
+    if (!inp) return;
+    inp.addEventListener('input', () => {
+      const raw = inp.value.replace(/\D/g, '');
+      inp.value = raw ? parseInt(raw).toLocaleString('id-ID') : '';
+      if (preview) {
+        const pfx = window.__HQ_TWEAKS?.currencyPrefix || 'Rp ';
+        preview.textContent = raw ? pfx + inp.value : '';
+      }
+    });
+  });
+
   function closeModal() {
     container.innerHTML = '';
     document.removeEventListener('keydown', escHandler);
@@ -1344,6 +1389,7 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
       if (!el) return;
       if (f.type === 'toggle') values[f.id] = el.checked;
       else if (f.type === 'number') values[f.id] = Number(el.value || 0);
+      else if (f.type === 'amount') values[f.id] = parseInt((el.value || '').replace(/\./g, '')) || 0;
       else values[f.id] = el.value;
     });
     closeModal();
@@ -1421,7 +1467,8 @@ function bindMainEvents() {
   }));
 
   // project task toggle (Today + Projects pages)
-  main.querySelectorAll('[data-toggle-proj-task]').forEach(el => el.addEventListener('click', () => {
+  main.querySelectorAll('[data-toggle-proj-task]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
     const [projId, taskId] = el.dataset.toggleProjTask.split('|');
     const proj = state.projects.find(p => p.id === projId);
     if (!proj) return;
@@ -1739,7 +1786,7 @@ function bindMainEvents() {
       title: 'Edit Income',
       fields: [
         { id: 'source', label: 'Source', type: 'text',   value: item.source },
-        { id: 'amount', label: 'Amount', type: 'number', value: item.amount },
+        { id: 'amount', label: 'Amount', type: 'amount', value: item.amount },
         { id: 'date',   label: 'Date',   type: 'date',   value: item.date }
       ],
       saveLabel: 'Save',
@@ -1759,7 +1806,7 @@ function bindMainEvents() {
       title: 'Log Income',
       fields: [
         { id: 'source', label: 'Source', type: 'text',   value: '', placeholder: 'e.g. Client A' },
-        { id: 'amount', label: 'Amount', type: 'number', value: '', placeholder: '0' },
+        { id: 'amount', label: 'Amount', type: 'amount', value: '', placeholder: '0' },
         { id: 'date',   label: 'Date',   type: 'date',   value: todayISO() }
       ],
       saveLabel: 'Add',
@@ -1798,7 +1845,7 @@ function bindMainEvents() {
       title: 'Edit Spending',
       fields: [
         { id: 'cat',    label: 'Category', type: 'select', value: item.cat,     options: _spendCats.map(c => ({ value: c, label: c })) },
-        { id: 'amount', label: 'Amount',   type: 'number', value: item.amount },
+        { id: 'amount', label: 'Amount',   type: 'amount', value: item.amount },
         { id: 'note',   label: 'Note',     type: 'text',   value: item.note || '', placeholder: 'What was it?' }
       ],
       saveLabel: 'Save',
@@ -1817,7 +1864,7 @@ function bindMainEvents() {
       title: 'Log Spending',
       fields: [
         { id: 'cat',    label: 'Category', type: 'select', value: 'Food',  options: _spendCats.map(c => ({ value: c, label: c })) },
-        { id: 'amount', label: 'Amount',   type: 'number', value: '',      placeholder: '0' },
+        { id: 'amount', label: 'Amount',   type: 'amount', value: '',      placeholder: '0' },
         { id: 'note',   label: 'Note',     type: 'text',   value: '',      placeholder: 'What was it?' }
       ],
       saveLabel: 'Add',
@@ -1857,7 +1904,7 @@ function bindMainEvents() {
       title: 'Edit Debt',
       fields: [
         { id: 'creditor', label: 'Creditor', type: 'text',   value: item.creditor },
-        { id: 'amount',   label: 'Amount',   type: 'number', value: item.amount },
+        { id: 'amount',   label: 'Amount',   type: 'amount', value: item.amount },
         { id: 'due',      label: 'Due date', type: 'date',   value: item.due || '' }
       ],
       saveLabel: 'Save',
@@ -1877,7 +1924,7 @@ function bindMainEvents() {
       title: 'Add Debt',
       fields: [
         { id: 'creditor', label: 'Creditor', type: 'text',   value: '', placeholder: 'Who do you owe?' },
-        { id: 'amount',   label: 'Amount',   type: 'number', value: '', placeholder: '0' },
+        { id: 'amount',   label: 'Amount',   type: 'amount', value: '', placeholder: '0' },
         { id: 'due',      label: 'Due date', type: 'date',   value: todayISO() }
       ],
       saveLabel: 'Add',
