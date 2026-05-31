@@ -8,6 +8,27 @@ const sb = createClient(
 );
 
 /* =========================================================
+   LOADING SCREEN — 800ms minimum, 200ms fade-out
+========================================================= */
+const _loadingStart = Date.now();
+let _loadingFaded = false;
+
+function _fadeOutLoading(cb) {
+  const el = document.getElementById('app-loading');
+  if (el.classList.contains('hidden')) { if (cb) cb(); return; }
+  const wait = _loadingFaded ? 0 : Math.max(0, 800 - (Date.now() - _loadingStart));
+  _loadingFaded = true;
+  setTimeout(() => {
+    el.style.opacity = '0';
+    setTimeout(() => {
+      el.classList.add('hidden');
+      el.style.opacity = '';
+      if (cb) cb();
+    }, 210);
+  }, wait);
+}
+
+/* =========================================================
    DB HELPER — retry once on failure
 ========================================================= */
 async function dbCall(fn) {
@@ -217,17 +238,18 @@ function displayNameFromUser(user) {
 }
 
 function showLogin() {
-  document.getElementById('app-loading').classList.add('hidden');
-  document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('app').style.display = 'none';
   document.getElementById('bottom-nav').style.display = 'none';
+  _fadeOutLoading(() => {
+    document.getElementById('login-screen').classList.remove('hidden');
+  });
 }
 
 function showApp() {
   document.getElementById('login-screen').classList.add('hidden');
-  document.getElementById('app-loading').classList.add('hidden');
   document.getElementById('app').style.display = '';
   document.getElementById('bottom-nav').style.display = '';
+  _fadeOutLoading();
 }
 
 async function handleSession(session) {
