@@ -581,6 +581,8 @@
     transition: color var(--t-fast) ease; line-height: 1;
   }
   .fin-edit-btn:hover { color: var(--accent); }
+  .debt-pay-btn--unpaid:hover { color: var(--good) !important; }
+  .debt-pay-btn--paid:hover { color: #d4a857 !important; }
   .fin-del-btn {
     color: #555; padding: 4px; cursor: pointer;
     transition: color var(--t-fast) ease; line-height: 1;
@@ -992,7 +994,8 @@
   .note-content i, .note-content em { color: var(--text-dim); }
 
   /* ---- Note tables ---- */
-  .note-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 16px 0; }
+  .table-wrapper { position: relative; margin: 16px 0; }
+  .note-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0; }
   .note-table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 0; }
   .note-table th, .note-table td { border: 1px solid #2a2a2a; padding: 8px 12px; text-align: left; min-width: 80px; vertical-align: top; outline: none; }
   .note-table th { background: #1a1a1a; color: #ffffff; font-weight: 500; font-size: 12px; letter-spacing: 0.04em; }
@@ -1007,6 +1010,27 @@
   }
   .note-table-add-row:hover { color: var(--text-dim); border-color: var(--border-strong); }
   .note-table-wrapper:hover .note-table-add-row { display: block; }
+  .note-table tbody td:last-child { position: relative; padding-right: 30px; }
+  .delete-row-btn {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #2a2a2a; border: 1px solid #3a3a3a; color: #888;
+    font-size: 11px; cursor: pointer; opacity: 0; transition: opacity 150ms;
+    display: flex; align-items: center; justify-content: center; padding: 0; z-index: 1;
+  }
+  .note-table tbody tr:hover .delete-row-btn { opacity: 1; }
+  .delete-table-btn {
+    position: absolute; top: -28px; right: 0;
+    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px;
+    color: #888; font-size: 11px; padding: 3px 8px; cursor: pointer;
+    opacity: 0; transition: opacity 150ms; white-space: nowrap;
+  }
+  .table-wrapper:hover .delete-table-btn { opacity: 1; }
+  .delete-table-btn:hover { color: #c0392b; border-color: #c0392b; }
+  @media (max-width: 767px) {
+    .delete-row-btn { opacity: 1; }
+    .delete-table-btn { opacity: 1; position: static; display: block; margin-bottom: 4px; text-align: right; }
+  }
 
   /* ============ PROJECTS ============ */
   .projects-header {

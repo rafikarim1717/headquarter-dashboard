@@ -175,7 +175,15 @@ function showConfirmModal({ title, message, confirmLabel = 'Delete', onConfirm, 
   btn.style.color = danger ? '#fff' : '#111';
 
   function close() { hideConfirmModal(); document.removeEventListener('keydown', escHandler); }
-  function escHandler(e) { if (e.key === 'Escape') close(); }
+  function escHandler(e) {
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'TEXTAREA' || tag === 'SELECT') return;
+      e.preventDefault();
+      close(); onConfirm();
+    }
+  }
 
   btn.onclick       = () => { close(); onConfirm(); };
   cancelBtn.onclick = (e) => { e.stopPropagation(); close(); };
@@ -379,6 +387,7 @@ const ICON_CHECK   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none
 const ICON_XCIRCLE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
 const ICON_CHEV_L  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>`;
 const ICON_CHEV_R  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>`;
+const ICON_UNDO    = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"/></svg>`;
 
 function paginationHtml(page, total, prevAttr, nextAttr) {
   if (total <= 1) return '';
@@ -996,30 +1005,85 @@ function buildNoteTableHTML(headers, rows) {
   return `<div class="note-table-wrapper"><table class="note-table"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></div><p><br></p>`;
 }
 
+function addDeleteRowBtn(tr, saveCallback) {
+  if (tr.querySelector('.delete-row-btn')) return;
+  const lastTd = tr.cells[tr.cells.length - 1];
+  if (!lastTd) return;
+  const btn = document.createElement('button');
+  btn.className = 'delete-row-btn';
+  btn.contentEditable = 'false';
+  btn.textContent = '×';
+  btn.title = 'Delete row';
+  btn.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const tbody = tr.closest('tbody');
+    if (!tbody) return;
+    if (tbody.querySelectorAll('tr').length <= 1) { showToast('Cannot delete the only row'); return; }
+    tr.remove();
+    if (saveCallback) saveCallback();
+  });
+  lastTd.appendChild(btn);
+}
+
 function initTableInteractions(editorEl, saveCallback) {
   editorEl.querySelectorAll('.note-table-wrapper').forEach(wrapper => {
-    if (wrapper.querySelector('.note-table-add-row')) return;
-    const btn = document.createElement('button');
-    btn.className = 'note-table-add-row';
-    btn.contentEditable = 'false';
-    btn.textContent = '+ Add row';
-    btn.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      const table = wrapper.querySelector('table');
-      if (!table) return;
-      const tbody = table.querySelector('tbody');
-      const colCount = table.rows[0]?.cells.length || 3;
-      const newRow = document.createElement('tr');
-      for (let i = 0; i < colCount; i++) {
-        const td = document.createElement('td');
-        td.contentEditable = 'true';
-        newRow.appendChild(td);
-      }
-      tbody.appendChild(newRow);
-      newRow.cells[0].focus();
-      if (saveCallback) saveCallback();
-    });
-    wrapper.appendChild(btn);
+    // Wrap in .table-wrapper if not already done
+    if (!wrapper.parentElement || !wrapper.parentElement.classList.contains('table-wrapper')) {
+      const outer = document.createElement('div');
+      outer.className = 'table-wrapper';
+      wrapper.parentNode.insertBefore(outer, wrapper);
+      outer.appendChild(wrapper);
+    }
+    const tableWrapper = wrapper.parentElement;
+
+    // Add delete-table-btn
+    if (!tableWrapper.querySelector('.delete-table-btn')) {
+      const delTableBtn = document.createElement('button');
+      delTableBtn.className = 'delete-table-btn';
+      delTableBtn.contentEditable = 'false';
+      delTableBtn.textContent = '🗑 Delete table';
+      delTableBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        showConfirmModal({
+          title: 'Delete Table?',
+          message: 'This will permanently remove the entire table from your note.',
+          confirmLabel: 'Delete',
+          danger: true,
+          onConfirm: () => { tableWrapper.remove(); if (saveCallback) saveCallback(); }
+        });
+      });
+      tableWrapper.appendChild(delTableBtn);
+    }
+
+    // Add + Add row button
+    if (!wrapper.querySelector('.note-table-add-row')) {
+      const btn = document.createElement('button');
+      btn.className = 'note-table-add-row';
+      btn.contentEditable = 'false';
+      btn.textContent = '+ Add row';
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const table = wrapper.querySelector('table');
+        if (!table) return;
+        const tbody = table.querySelector('tbody');
+        const colCount = table.rows[0]?.cells.length || 3;
+        const newRow = document.createElement('tr');
+        for (let i = 0; i < colCount; i++) {
+          const td = document.createElement('td');
+          td.contentEditable = 'true';
+          newRow.appendChild(td);
+        }
+        tbody.appendChild(newRow);
+        addDeleteRowBtn(newRow, saveCallback);
+        newRow.cells[0].focus();
+        if (saveCallback) saveCallback();
+      });
+      wrapper.appendChild(btn);
+    }
+
+    // Add delete-row-btn to existing tbody rows
+    const tbody = wrapper.querySelector('tbody');
+    if (tbody) tbody.querySelectorAll('tr').forEach(tr => addDeleteRowBtn(tr, saveCallback));
   });
 }
 
@@ -1333,8 +1397,8 @@ function renderDebts() {
               <div class="fin-row-right">
                 <div class="fin-acts">
                   ${d.paid
-                    ? `<button class="fin-edit-btn" data-pay-debt="${d.id}" title="Mark as unpaid">${ICON_XCIRCLE}</button>`
-                    : `<button class="fin-edit-btn" data-pay-debt="${d.id}" title="Mark as paid">${ICON_CHECK}</button>`}
+                    ? `<button class="fin-edit-btn debt-pay-btn debt-pay-btn--paid" data-pay-debt="${d.id}" title="Mark as unpaid">${ICON_UNDO}</button>`
+                    : `<button class="fin-edit-btn debt-pay-btn debt-pay-btn--unpaid" data-pay-debt="${d.id}" title="Mark as paid">${ICON_CHECK}</button>`}
                   <button class="fin-edit-btn" data-edit-debt="${d.id}" title="Edit">${ICON_PENCIL}</button>
                   <button class="fin-del-btn" data-del-debt="${d.id}" title="Delete">${ICON_TRASH}</button>
                 </div>
@@ -1458,11 +1522,20 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
 
   function closeModal() {
     container.innerHTML = '';
-    document.removeEventListener('keydown', escHandler);
+    document.removeEventListener('keydown', modalKeyHandler);
     if (onClose) onClose();
   }
-  function escHandler(e) { if (e.key === 'Escape') closeModal(); }
-  document.addEventListener('keydown', escHandler);
+  function modalKeyHandler(e) {
+    if (e.key === 'Escape') { closeModal(); return; }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'TEXTAREA' || tag === 'SELECT') return;
+      e.preventDefault();
+      const primaryBtn = container.querySelector('.btn.primary, [data-action="save"], [data-action="confirm"]');
+      if (primaryBtn) primaryBtn.click();
+    }
+  }
+  document.addEventListener('keydown', modalKeyHandler);
 
   document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target.id === 'modal-overlay') closeModal(); });
   document.getElementById('modal-x').addEventListener('click', closeModal);
@@ -2027,9 +2100,9 @@ function bindMainEvents() {
   main.querySelectorAll('[data-pay-debt]').forEach(el => el.addEventListener('click', () => {
     const d = state.debts.find(x => x.id === el.dataset.payDebt);
     if (!d) return;
-    d.paid = true;
+    d.paid = !d.paid;
     render();
-    dbCall(() => sb.from('debts').update({ paid: true }).eq('id', d.id));
+    dbCall(() => sb.from('debts').update({ paid: d.paid }).eq('id', d.id));
   }));
 
 
@@ -2169,6 +2242,12 @@ function bindMainEvents() {
       const contentClone = noteContentEl.cloneNode(true);
       contentClone.querySelectorAll('.hd-toggle').forEach(t => t.remove());
       contentClone.querySelectorAll('.note-table-add-row').forEach(t => t.remove());
+      contentClone.querySelectorAll('.delete-row-btn').forEach(t => t.remove());
+      contentClone.querySelectorAll('.delete-table-btn').forEach(t => t.remove());
+      contentClone.querySelectorAll('.table-wrapper').forEach(outer => {
+        const inner = outer.querySelector('.note-table-wrapper');
+        if (inner && outer.parentNode) outer.parentNode.replaceChild(inner, outer);
+      });
       n.content = contentClone.innerHTML;
       n.updated_at = new Date().toISOString();
       if (noteSavedLbl) {
@@ -2266,6 +2345,7 @@ function bindMainEvents() {
           newRow.appendChild(td);
         }
         tbody.appendChild(newRow);
+        addDeleteRowBtn(newRow, triggerNoteSave);
         newRow.cells[0].focus();
         triggerNoteSave();
       }

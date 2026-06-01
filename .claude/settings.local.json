@@ -6,7 +6,8 @@
       "Bash(Get-ChildItem \"C:\\\\Users\\\\Asus\\\\Desktop\\\\Work\\\\HQ-Dashboard\")",
       "Bash(Select-Object Name, Length)",
       "PowerShell(Get-Content *)",
-      "PowerShell(New-Item *)"
+      "PowerShell(New-Item *)",
+      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\Asus\\\\Desktop\\\\Work\\\\HQ-Dashboard\\\\js\\\\app.js\"\\).Count; \\(Get-Content \"C:\\\\Users\\\\Asus\\\\Desktop\\\\Work\\\\HQ-Dashboard\\\\css\\\\styles.css\"\\).Count)"
     ]
   }
 }
