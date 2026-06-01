@@ -991,6 +991,23 @@
   .note-content b, .note-content strong { font-weight: 600; }
   .note-content i, .note-content em { color: var(--text-dim); }
 
+  /* ---- Note tables ---- */
+  .note-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 16px 0; }
+  .note-table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 0; }
+  .note-table th, .note-table td { border: 1px solid #2a2a2a; padding: 8px 12px; text-align: left; min-width: 80px; vertical-align: top; outline: none; }
+  .note-table th { background: #1a1a1a; color: #ffffff; font-weight: 500; font-size: 12px; letter-spacing: 0.04em; }
+  .note-table td { background: transparent; color: #cccccc; }
+  .note-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .note-table-add-row {
+    display: none; width: 100%; margin-top: 4px; padding: 5px 8px;
+    font-size: 11px; color: var(--text-faint); background: transparent;
+    border: 1px dashed var(--border); border-radius: 4px; cursor: pointer;
+    transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+    text-align: left;
+  }
+  .note-table-add-row:hover { color: var(--text-dim); border-color: var(--border-strong); }
+  .note-table-wrapper:hover .note-table-add-row { display: block; }
+
   /* ============ PROJECTS ============ */
   .projects-header {
     display: flex; align-items: center; justify-content: space-between;

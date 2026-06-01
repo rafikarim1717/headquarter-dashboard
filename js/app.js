@@ -933,6 +933,8 @@ function renderNoteEditor() {
         <button class="tb-btn tb-btn-i" data-cmd="italic"              title="Italic">I</button>
         <button class="tb-btn"          data-cmd="insertUnorderedList" title="Bullet list">•</button>
       </div>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" id="tb-table-btn" title="Insert table">⊞</button>
     </div>
     <div class="note-content" id="note-content" contenteditable="true"
       data-placeholder="Start writing...">${n.content || ''}</div>
@@ -983,6 +985,90 @@ function initHeadingCollapse(editorEl) {
 
 function renderNotes() {
   return state.activeNoteId !== null ? renderNoteEditor() : renderNotesList();
+}
+
+/* ---- NOTE TABLE HELPERS ---- */
+function buildNoteTableHTML(headers, rows) {
+  const ths = headers.map(h => `<th contenteditable="true">${escapeHtml(h)}</th>`).join('');
+  const trs = rows.map(row =>
+    `<tr>${row.map(c => `<td contenteditable="true">${escapeHtml(c)}</td>`).join('')}</tr>`
+  ).join('');
+  return `<div class="note-table-wrapper"><table class="note-table"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></div><p><br></p>`;
+}
+
+function initTableInteractions(editorEl, saveCallback) {
+  editorEl.querySelectorAll('.note-table-wrapper').forEach(wrapper => {
+    if (wrapper.querySelector('.note-table-add-row')) return;
+    const btn = document.createElement('button');
+    btn.className = 'note-table-add-row';
+    btn.contentEditable = 'false';
+    btn.textContent = '+ Add row';
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const table = wrapper.querySelector('table');
+      if (!table) return;
+      const tbody = table.querySelector('tbody');
+      const colCount = table.rows[0]?.cells.length || 3;
+      const newRow = document.createElement('tr');
+      for (let i = 0; i < colCount; i++) {
+        const td = document.createElement('td');
+        td.contentEditable = 'true';
+        newRow.appendChild(td);
+      }
+      tbody.appendChild(newRow);
+      newRow.cells[0].focus();
+      if (saveCallback) saveCallback();
+    });
+    wrapper.appendChild(btn);
+  });
+}
+
+function convertPastedTable(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const tables = tmp.querySelectorAll('table');
+  if (!tables.length) return '';
+  let result = '';
+  tables.forEach(table => {
+    const headers = [];
+    const rows = [];
+    const thead = table.querySelector('thead');
+    if (thead) {
+      const headerRow = thead.querySelector('tr');
+      if (headerRow) {
+        Array.from(headerRow.querySelectorAll('th, td')).forEach(cell => {
+          headers.push(cell.textContent.trim());
+        });
+      }
+    }
+    const allBodyRows = Array.from(table.querySelectorAll('tr'))
+      .filter(row => !row.closest('thead'));
+    allBodyRows.forEach((row, i) => {
+      if (!thead && i === 0) {
+        Array.from(row.querySelectorAll('th, td')).forEach(cell => {
+          headers.push(cell.textContent.trim());
+        });
+        return;
+      }
+      const cells = Array.from(row.querySelectorAll('th, td')).map(c => c.textContent.trim());
+      if (cells.length) rows.push(cells);
+    });
+    if (!headers.length) return;
+    result += buildNoteTableHTML(headers, rows);
+  });
+  return result;
+}
+
+function convertMarkdownTable(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.includes('|'));
+  if (!lines.length) return '';
+  const parseRow = line => line.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+  const isSep    = line => /^[\|\s\-:]+$/.test(line);
+  const headers  = parseRow(lines[0]);
+  const dataStart = lines.length > 1 && isSep(lines[1]) ? 2 : 1;
+  const rows = lines.slice(dataStart).filter(l => !isSep(l)).map(parseRow);
+  if (!headers.length) return '';
+  return buildNoteTableHTML(headers, rows);
 }
 
 /* ---- FINANCE: OVERVIEW ---- */
@@ -2082,6 +2168,7 @@ function bindMainEvents() {
       n.title = noteTitleEl.value;
       const contentClone = noteContentEl.cloneNode(true);
       contentClone.querySelectorAll('.hd-toggle').forEach(t => t.remove());
+      contentClone.querySelectorAll('.note-table-add-row').forEach(t => t.remove());
       n.content = contentClone.innerHTML;
       n.updated_at = new Date().toISOString();
       if (noteSavedLbl) {
@@ -2137,6 +2224,90 @@ function bindMainEvents() {
     if (!noteContentEl.innerHTML.trim()) setTimeout(() => noteContentEl.focus(), 80);
     // collapsible headings
     setTimeout(() => initHeadingCollapse(noteContentEl), 50);
+    // table interactions on load
+    setTimeout(() => initTableInteractions(noteContentEl, triggerNoteSave), 60);
+  }
+
+  // editor: table insert button
+  const tbTableBtn = main.querySelector('#tb-table-btn');
+  if (tbTableBtn && noteContentEl) {
+    tbTableBtn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      noteContentEl.focus();
+      const html = buildNoteTableHTML(
+        ['Header 1', 'Header 2', 'Header 3'],
+        [['Cell', 'Cell', 'Cell'], ['Cell', 'Cell', 'Cell']]
+      );
+      document.execCommand('insertHTML', false, html);
+      initTableInteractions(noteContentEl, triggerNoteSave);
+      triggerNoteSave();
+    });
+  }
+
+  // editor: Tab key navigation inside table cells
+  if (noteContentEl) {
+    noteContentEl.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      const cell = e.target.closest ? e.target.closest('td[contenteditable], th[contenteditable]') : null;
+      if (!cell) return;
+      e.preventDefault();
+      const table = cell.closest('table');
+      const cells = Array.from(table.querySelectorAll('th[contenteditable], td[contenteditable]'));
+      const idx = cells.indexOf(cell);
+      if (idx < cells.length - 1) {
+        cells[idx + 1].focus();
+      } else {
+        const tbody = table.querySelector('tbody');
+        const colCount = table.rows[0]?.cells.length || 3;
+        const newRow = document.createElement('tr');
+        for (let i = 0; i < colCount; i++) {
+          const td = document.createElement('td');
+          td.contentEditable = 'true';
+          newRow.appendChild(td);
+        }
+        tbody.appendChild(newRow);
+        newRow.cells[0].focus();
+        triggerNoteSave();
+      }
+    });
+  }
+
+  // editor: paste handler — convert HTML/markdown tables
+  if (noteContentEl) {
+    noteContentEl.addEventListener('paste', (e) => {
+      if (e.target.closest && e.target.closest('td, th')) return;
+      const html = e.clipboardData.getData('text/html');
+      const text = e.clipboardData.getData('text/plain');
+      if (html && /<table/i.test(html)) {
+        e.preventDefault();
+        const converted = convertPastedTable(html);
+        if (converted) {
+          const tablesBefore = new Set(noteContentEl.querySelectorAll('.note-table'));
+          document.execCommand('insertHTML', false, converted);
+          initTableInteractions(noteContentEl, triggerNoteSave);
+          const newTable = Array.from(noteContentEl.querySelectorAll('.note-table')).find(t => !tablesBefore.has(t));
+          if (newTable) {
+            const firstCell = newTable.querySelector('th[contenteditable], td[contenteditable]');
+            if (firstCell) setTimeout(() => firstCell.focus(), 0);
+          }
+          triggerNoteSave();
+        }
+      } else if (text && text.trimStart().startsWith('|')) {
+        e.preventDefault();
+        const converted = convertMarkdownTable(text);
+        if (converted) {
+          const tablesBefore = new Set(noteContentEl.querySelectorAll('.note-table'));
+          document.execCommand('insertHTML', false, converted);
+          initTableInteractions(noteContentEl, triggerNoteSave);
+          const newTable = Array.from(noteContentEl.querySelectorAll('.note-table')).find(t => !tablesBefore.has(t));
+          if (newTable) {
+            const firstCell = newTable.querySelector('th[contenteditable], td[contenteditable]');
+            if (firstCell) setTimeout(() => firstCell.focus(), 0);
+          }
+          triggerNoteSave();
+        }
+      }
+    });
   }
 }
 
