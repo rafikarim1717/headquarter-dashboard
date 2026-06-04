@@ -37,6 +37,27 @@
   input, textarea, select { font: inherit; color: inherit; background: transparent; border: 0; outline: 0; }
   ::selection { background: var(--accent); color: #111; }
 
+  /* ============ DATE INPUT — global dark theme fix ============ */
+  input[type="date"] {
+    cursor: pointer;
+    color-scheme: dark;
+    position: relative;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.6;
+    cursor: pointer;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    color: transparent;
+  }
+
   /* ============ LOGIN SCREEN ============ */
   #login-screen {
     position: fixed; inset: 0;
@@ -332,8 +353,9 @@
   .card-row { display: grid; gap: var(--gap); }
 
   .metric-grid {
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap);
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); align-items: stretch;
   }
+  .metric-grid > .card { margin-top: 0; display: flex; flex-direction: column; justify-content: space-between; }
   @media (max-width: 520px) { .metric-grid { grid-template-columns: 1fr; } }
   .metric .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .metric .num { font-size: 32px; font-weight: var(--num-weight, 300); letter-spacing: -0.02em; margin-top: 10px; font-variant-numeric: tabular-nums; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -710,7 +732,7 @@
     main { padding: 32px 32px 64px; max-width: 100%; width: 100%; margin: 0; }
     .topbar { padding-bottom: 28px; }
     .page-title { font-size: 28px; }
-    .metric { height: 120px; overflow: hidden; padding: 20px 24px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; width: 100%; }
+    .metric { height: 100%; padding: 20px 24px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; width: 100%; }
     .metric .num { font-size: clamp(20px, 2.5vw, 32px); margin-top: 0; }
     .metric .sub { margin-top: 0; }
     .focus-input { font-size: 28px; }
@@ -1001,15 +1023,15 @@
   .note-table th { background: #1a1a1a; color: #ffffff; font-weight: 500; font-size: 12px; letter-spacing: 0.04em; }
   .note-table td { background: transparent; color: #cccccc; }
   .note-table tr:hover td { background: rgba(255,255,255,0.02); }
-  .note-table-add-row {
-    display: none; width: 100%; margin-top: 4px; padding: 5px 8px;
-    font-size: 11px; color: var(--text-faint); background: transparent;
-    border: 1px dashed var(--border); border-radius: 4px; cursor: pointer;
+  .table-toolbar { display: flex; gap: 8px; margin-top: 4px; opacity: 0; transition: opacity 150ms; }
+  .table-wrapper:hover .table-toolbar { opacity: 1; }
+  .tbl-btn {
+    font-size: 12px; color: #666;
+    background: #1a1a1a; border: 1px solid #2a2a2a;
+    border-radius: 6px; padding: 4px 10px; cursor: pointer;
     transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
-    text-align: left;
   }
-  .note-table-add-row:hover { color: var(--text-dim); border-color: var(--border-strong); }
-  .note-table-wrapper:hover .note-table-add-row { display: block; }
+  .tbl-btn:hover { color: #fff; border-color: #3a3a3a; }
   .note-table tbody td:last-child { position: relative; padding-right: 30px; }
   .delete-row-btn {
     position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
@@ -1030,6 +1052,7 @@
   @media (max-width: 767px) {
     .delete-row-btn { opacity: 1; }
     .delete-table-btn { opacity: 1; position: static; display: block; margin-bottom: 4px; text-align: right; }
+    .table-toolbar { opacity: 1; }
   }
 
   /* ============ PROJECTS ============ */
@@ -1214,8 +1237,10 @@
   #modal-container textarea {
     width: 100%; border: 1px solid var(--border); border-radius: 8px;
     padding: 10px 12px; background: #121212; color: var(--text);
-    font-size: 13px; font-family: inherit; outline: none;
+    font-size: 13px; font-family: inherit; outline: none; box-sizing: border-box;
+    pointer-events: auto;
   }
+  #modal-container input[type="date"] { position: relative; z-index: 2; cursor: pointer; }
   #modal-container input:focus,
   #modal-container select:focus,
   #modal-container textarea:focus { border-color: var(--accent); }

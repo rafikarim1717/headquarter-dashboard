@@ -1055,13 +1055,17 @@ function initTableInteractions(editorEl, saveCallback) {
       tableWrapper.appendChild(delTableBtn);
     }
 
-    // Add + Add row button
-    if (!wrapper.querySelector('.note-table-add-row')) {
-      const btn = document.createElement('button');
-      btn.className = 'note-table-add-row';
-      btn.contentEditable = 'false';
-      btn.textContent = '+ Add row';
-      btn.addEventListener('mousedown', (e) => {
+    // Add table toolbar (add-row + add-col)
+    if (!tableWrapper.querySelector('.table-toolbar')) {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'table-toolbar';
+      toolbar.contentEditable = 'false';
+
+      const addRowBtn = document.createElement('button');
+      addRowBtn.className = 'tbl-btn';
+      addRowBtn.contentEditable = 'false';
+      addRowBtn.textContent = '+ Add row';
+      addRowBtn.addEventListener('mousedown', (e) => {
         e.preventDefault();
         const table = wrapper.querySelector('table');
         if (!table) return;
@@ -1078,7 +1082,40 @@ function initTableInteractions(editorEl, saveCallback) {
         newRow.cells[0].focus();
         if (saveCallback) saveCallback();
       });
-      wrapper.appendChild(btn);
+
+      const addColBtn = document.createElement('button');
+      addColBtn.className = 'tbl-btn';
+      addColBtn.contentEditable = 'false';
+      addColBtn.textContent = '+ Add col';
+      addColBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const table = wrapper.querySelector('table');
+        if (!table) return;
+        const thead = table.querySelector('thead');
+        if (thead) {
+          thead.querySelectorAll('tr').forEach(tr => {
+            const th = document.createElement('th');
+            th.contentEditable = 'true';
+            tr.appendChild(th);
+          });
+        }
+        const tbody = table.querySelector('tbody');
+        if (tbody) {
+          tbody.querySelectorAll('tr').forEach(tr => {
+            const existingBtn = tr.querySelector('.delete-row-btn');
+            if (existingBtn) existingBtn.remove();
+            const td = document.createElement('td');
+            td.contentEditable = 'true';
+            tr.appendChild(td);
+            addDeleteRowBtn(tr, saveCallback);
+          });
+        }
+        if (saveCallback) saveCallback();
+      });
+
+      toolbar.appendChild(addRowBtn);
+      toolbar.appendChild(addColBtn);
+      tableWrapper.appendChild(toolbar);
     }
 
     // Add delete-row-btn to existing tbody rows
@@ -1164,8 +1201,32 @@ function last7DaysSpend() {
 
 function renderFinanceOverview() {
   const inc = thisMonthIncome(), spent = todaySpend(), debt = totalDebt();
-  const soonest = state.debts.filter(d=>!d.paid).map(d=>daysUntil(d.due)).sort((a,b)=>a-b)[0];
-  const showAlert = soonest !== undefined && soonest <= 7 && soonest >= 0;
+  const unpaidDebts = state.debts.filter(d => !d.paid);
+  const overdueDebts = unpaidDebts.filter(d => daysUntil(d.due) < 0);
+  const urgentDebts  = unpaidDebts.filter(d => { const n = daysUntil(d.due); return n >= 0 && n <= 7; });
+  const alertParts = [];
+  if (overdueDebts.length > 0) {
+    alertParts.push(`<div class="alert"><span class="glyph">⚠</span> ${overdueDebts.length} debt${overdueDebts.length === 1 ? '' : 's'} overdue</div>`);
+  }
+  if (urgentDebts.length > 0) {
+    const todayDebts  = urgentDebts.filter(d => daysUntil(d.due) === 0);
+    const futureDebts = urgentDebts.filter(d => daysUntil(d.due) > 0);
+    let urgentMsg;
+    if (todayDebts.length === 1) {
+      urgentMsg = `Debt due today: ${escapeHtml(todayDebts[0].creditor)}`;
+    } else if (todayDebts.length > 1) {
+      urgentMsg = `${todayDebts.length} debts due today`;
+    } else if (futureDebts.length === 1) {
+      const n = daysUntil(futureDebts[0].due);
+      urgentMsg = `Debt due in ${n} day${n === 1 ? '' : 's'}: ${escapeHtml(futureDebts[0].creditor)}`;
+    } else {
+      urgentMsg = `${urgentDebts.length} debts due within 7 days`;
+    }
+    alertParts.push(`<div class="alert"><span class="glyph">⚠</span> ${urgentMsg}</div>`);
+  }
+  const alertsHtml = alertParts.length
+    ? `<div style="margin-top:18px; display:flex; flex-direction:column; gap:8px;">${alertParts.join('')}</div>`
+    : '';
   const days = last7DaysSpend();
   const max = Math.max(1, ...days.map(d=>d.total));
   const pfx = window.__HQ_TWEAKS.currencyPrefix||'$';
@@ -1178,7 +1239,7 @@ function renderFinanceOverview() {
       <div class="card metric" style="animation-delay:80ms"><div class="label">Spent · today</div><div class="num" data-target="${spent}" data-prefix="${pfx}">${fmtMoney(0)}</div><div class="sub">${state.spending.filter(s=>s.date===todayISO()).length} transactions</div></div>
       <div class="card metric" style="animation-delay:160ms"><div class="label">Total debt</div><div class="num" data-target="${debt}" data-prefix="${pfx}">${fmtMoney(0)}</div><div class="sub">${state.debts.filter(d=>!d.paid).length} open</div></div>
     </div>
-    ${showAlert ? `<div class="alert" style="margin-top:18px"><span class="glyph">⚠</span> Debt due in ${soonest} day${soonest===1?'':'s'}</div>` : ''}
+    ${alertsHtml}
     <div class="card" style="margin-top:18px; animation-delay:220ms">
       <div class="section-title" style="margin-top:0">Last 7 days spending <span class="meta">${fmtMoney(days.reduce((a,b)=>a+b.total,0))}</span></div>
       <div class="bar-chart">
@@ -1979,6 +2040,27 @@ function bindMainEvents() {
     });
   }));
 
+  main.querySelectorAll('[data-income-filter]').forEach(el => el.addEventListener('click', () => {
+    state.incomeFilter = el.dataset.incomeFilter;
+    state.incomePickedDate = null;
+    state.incomePage = 1;
+    render();
+  }));
+
+  const incomeDateInput = main.querySelector('#income-date-input');
+  if (incomeDateInput) incomeDateInput.addEventListener('change', () => {
+    state.incomePickedDate = incomeDateInput.value || null;
+    state.incomePage = 1;
+    render();
+  });
+
+  const incomeDateClear = main.querySelector('#income-date-clear');
+  if (incomeDateClear) incomeDateClear.addEventListener('click', () => {
+    state.incomePickedDate = null;
+    state.incomePage = 1;
+    render();
+  });
+
   // ---- SPENDING ----
   const _spendCats = ['Food', 'Transport', 'Shopping', 'Other'];
 
@@ -2039,6 +2121,27 @@ function bindMainEvents() {
     });
   }));
 
+  main.querySelectorAll('[data-spend-filter]').forEach(el => el.addEventListener('click', () => {
+    state.spendingFilter = el.dataset.spendFilter;
+    state.spendingPickedDate = null;
+    state.spendingPage = 1;
+    render();
+  }));
+
+  const spendDateInput = main.querySelector('#spend-date-input');
+  if (spendDateInput) spendDateInput.addEventListener('change', () => {
+    state.spendingPickedDate = spendDateInput.value || null;
+    state.spendingPage = 1;
+    render();
+  });
+
+  const spendDateClear = main.querySelector('#spend-date-clear');
+  if (spendDateClear) spendDateClear.addEventListener('click', () => {
+    state.spendingPickedDate = null;
+    state.spendingPage = 1;
+    render();
+  });
+
   // ---- DEBTS ----
   main.querySelectorAll('[data-del-debt]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delDebt;
@@ -2097,12 +2200,25 @@ function bindMainEvents() {
     });
   }));
 
-  main.querySelectorAll('[data-pay-debt]').forEach(el => el.addEventListener('click', () => {
-    const d = state.debts.find(x => x.id === el.dataset.payDebt);
+  main.querySelectorAll('[data-pay-debt]').forEach(el => el.addEventListener('click', async () => {
+    const id = el.dataset.payDebt;
+    const d = state.debts.find(x => x.id === id);
     if (!d) return;
-    d.paid = !d.paid;
-    render();
-    dbCall(() => sb.from('debts').update({ paid: d.paid }).eq('id', d.id));
+    try {
+      if (d.paid) {
+        await dbCall(() => sb.from('debts').update({ paid: false }).eq('id', id));
+        d.paid = false;
+        render();
+        showToast('Marked as unpaid');
+      } else {
+        await dbCall(() => sb.from('debts').update({ paid: true }).eq('id', id));
+        d.paid = true;
+        render();
+        showToast('Marked as paid');
+      }
+    } catch (e) {
+      // dbCall already shows the failure toast
+    }
   }));
 
 
@@ -2242,6 +2358,7 @@ function bindMainEvents() {
       const contentClone = noteContentEl.cloneNode(true);
       contentClone.querySelectorAll('.hd-toggle').forEach(t => t.remove());
       contentClone.querySelectorAll('.note-table-add-row').forEach(t => t.remove());
+      contentClone.querySelectorAll('.table-toolbar').forEach(t => t.remove());
       contentClone.querySelectorAll('.delete-row-btn').forEach(t => t.remove());
       contentClone.querySelectorAll('.delete-table-btn').forEach(t => t.remove());
       contentClone.querySelectorAll('.table-wrapper').forEach(outer => {
@@ -2323,9 +2440,16 @@ function bindMainEvents() {
     });
   }
 
-  // editor: Tab key navigation inside table cells
+  // editor: Tab key navigation inside table cells + cell deletion protection
   if (noteContentEl) {
     noteContentEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        const cell = e.target.closest ? e.target.closest('td, th') : null;
+        if (cell && cell.innerText.trim() === '') {
+          e.preventDefault();
+        }
+        return;
+      }
       if (e.key !== 'Tab') return;
       const cell = e.target.closest ? e.target.closest('td[contenteditable], th[contenteditable]') : null;
       if (!cell) return;
