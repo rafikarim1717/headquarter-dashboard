@@ -621,6 +621,55 @@ function computeDailyScore() {
   return Math.round((checkedToday / totalGoals) * 100);
 }
 
+function animateComplianceRing() {
+  const card = document.getElementById('commit-compliance-card');
+  if (!card) return;
+  card.querySelectorAll('.compliance-arc').forEach(arc => {
+    const full   = parseFloat(arc.dataset.full || arc.getAttribute('stroke-dasharray') || 213.63);
+    const pct    = parseFloat(arc.dataset.pct || 0);
+    const target = full - (pct / 100 * full);
+    requestAnimationFrame(() => requestAnimationFrame(() => { arc.style.strokeDashoffset = target; }));
+  });
+  const pctEls   = card.querySelectorAll('.compliance-pct-text');
+  const firstArc = card.querySelector('.compliance-arc');
+  const target   = firstArc ? parseFloat(firstArc.dataset.pct || 0) : 0;
+  if (!target) { pctEls.forEach(el => el.textContent = '0'); return; }
+  const start = performance.now();
+  const dur   = 600;
+  (function step(now) {
+    const t    = Math.min(1, (now - start) / dur);
+    const ease = 1 - Math.pow(1 - t, 3);
+    pctEls.forEach(el => el.textContent = Math.round(target * ease));
+    if (t < 1) requestAnimationFrame(step);
+    else pctEls.forEach(el => el.textContent = target);
+  })(performance.now());
+}
+
+function updateComplianceRing() {
+  const card = document.getElementById('commit-compliance-card');
+  if (!card) return;
+  const dos      = state.goals.dos   || [];
+  const donts    = state.goals.donts || [];
+  const total    = dos.length + donts.length;
+  const dosChk   = dos.filter(g   => getTodayLog(g.id)?.checked).length;
+  const dontsChk = donts.filter(g => getTodayLog(g.id)?.checked).length;
+  const pct      = total ? Math.round((dosChk + dontsChk) / total * 100) : 0;
+  const dosPct   = dos.length   ? Math.round(dosChk   / dos.length   * 100) : 0;
+  const dontsPct = donts.length ? Math.round(dontsChk / donts.length * 100) : 0;
+  card.querySelectorAll('.compliance-arc').forEach(arc => {
+    const full = parseFloat(arc.getAttribute('stroke-dasharray') || 213.63);
+    arc.style.strokeDashoffset = full - (pct / 100 * full);
+    arc.dataset.pct = pct;
+  });
+  card.querySelectorAll('.compliance-pct-text').forEach(el => el.textContent = pct);
+  const fills  = card.querySelectorAll('.compliance-bar-fill');
+  if (fills[0])  fills[0].style.width  = dosPct + '%';
+  if (fills[1])  fills[1].style.width  = dontsPct + '%';
+  const counts = card.querySelectorAll('.compliance-bar-count');
+  if (counts[0]) counts[0].textContent = `${dosChk}/${dos.length}`;
+  if (counts[1]) counts[1].textContent = `${dontsChk}/${donts.length}`;
+}
+
 function renderCommitments() {
   const today = todayISO();
   const dos   = state.goals.dos   || [];
@@ -699,21 +748,45 @@ function renderCommitments() {
   return `
     ${topbar()}
     <h1 class="page-title">Commitments</h1>
-    <div class="card" style="animation-delay:0ms">
-      <div class="section-title" style="margin-top:0">Today's progress</div>
-      <div class="commit-progress-row">
-        <span class="commit-prog-label">Do's</span>
-        <div class="progress" style="flex:1;margin-top:0"><div class="bar" style="width:${dosPct}%"></div></div>
-        <span class="commit-prog-meta">${dosChecked} / ${dos.length}</span>
-      </div>
-      <div class="commit-progress-row" style="margin-top:10px">
-        <span class="commit-prog-label">Don'ts</span>
-        <div class="progress" style="flex:1;margin-top:0"><div class="bar" style="width:${dontsPct}%"></div></div>
-        <span class="commit-prog-meta">${dontsChecked} / ${donts.length}</span>
-      </div>
-      <div class="commit-big-pct">
-        <div style="font-size:48px;font-weight:200;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1">${overallPct}<span style="font-size:24px">%</span></div>
-        <div style="font-size:12px;color:var(--text-faint);margin-top:6px">today's compliance</div>
+    <div class="card commit-compliance-card" id="commit-compliance-card" style="animation-delay:0ms">
+      <div class="compliance-inner">
+        <svg class="compliance-ring-desktop" width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+          <circle cx="40" cy="40" r="34" fill="none" stroke="#2a2a2a" stroke-width="6"/>
+          <circle class="compliance-arc" cx="40" cy="40" r="34" fill="none"
+            stroke="var(--accent)" stroke-width="6" stroke-linecap="round"
+            stroke-dasharray="213.63"
+            style="stroke-dashoffset:213.63;transform:rotate(-90deg);transform-origin:40px 40px;transition:stroke-dashoffset 600ms ease-out"
+            data-pct="${overallPct}" data-full="213.63"/>
+          <text x="40" y="40" text-anchor="middle" dominant-baseline="middle"
+            font-size="18" font-weight="300" fill="var(--accent)"
+            class="compliance-pct-text">0</text>
+        </svg>
+        <svg class="compliance-ring-mobile" width="100" height="100" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="#2a2a2a" stroke-width="7"/>
+          <circle class="compliance-arc" cx="50" cy="50" r="42" fill="none"
+            stroke="var(--accent)" stroke-width="7" stroke-linecap="round"
+            stroke-dasharray="263.89"
+            style="stroke-dashoffset:263.89;transform:rotate(-90deg);transform-origin:50px 50px;transition:stroke-dashoffset 600ms ease-out"
+            data-pct="${overallPct}" data-full="263.89"/>
+          <text x="50" y="46" text-anchor="middle" dominant-baseline="middle"
+            font-size="20" font-weight="300" fill="var(--accent)"
+            class="compliance-pct-text">0</text>
+          <text x="50" y="64" text-anchor="middle" dominant-baseline="middle"
+            font-size="9" fill="#6a6a6a">today</text>
+        </svg>
+        <div class="compliance-bars">
+          <div class="compliance-label">TODAY'S COMPLIANCE</div>
+          <div class="compliance-bar-row">
+            <span class="compliance-bar-lbl">DO'S</span>
+            <div class="compliance-bar-track"><div class="compliance-bar-fill" style="width:${dosPct}%"></div></div>
+            <span class="compliance-bar-count">${dosChecked}/${dos.length}</span>
+          </div>
+          <div class="compliance-bar-row">
+            <span class="compliance-bar-lbl">DON'TS</span>
+            <div class="compliance-bar-track"><div class="compliance-bar-fill" style="width:${dontsPct}%"></div></div>
+            <span class="compliance-bar-count">${dontsChecked}/${donts.length}</span>
+          </div>
+        </div>
       </div>
     </div>
     <div style="margin-top:16px">${col("Do's", dos, 'dos')}</div>
@@ -1025,6 +1098,57 @@ function addDeleteRowBtn(tr, saveCallback) {
   lastTd.appendChild(btn);
 }
 
+/*
+ * Duplicate table UI investigation (5 questions):
+ *
+ * Q1. Where is initTableInteractions called?
+ *   1. setTimeout(..., 60) on editor open — processes all existing tables.
+ *   2. Immediately after the toolbar "insert table" button's execCommand.
+ *   3. Immediately after the paste handler inserts an HTML table via execCommand.
+ *   4. Immediately after the paste handler converts and inserts a markdown table.
+ *
+ * Q2. How many times can it run for the same table?
+ *   Each call scans ALL .note-table-wrapper elements in the editor, not just the
+ *   newly-inserted one. So every pre-existing table is re-processed on every
+ *   toolbar insert or paste — up to 4 times across a single editing session.
+ *
+ * Q3. Does autosave reset innerHTML and trigger re-init?
+ *   NO. triggerNoteSave works on a deep clone (cloneNode(true)), strips UI
+ *   elements from the clone, and only writes contentClone.innerHTML to n.content
+ *   (in-memory). The live noteContentEl DOM is never modified. Autosave is not
+ *   the cause.
+ *
+ * Q4. Does the MutationObserver trigger re-init?
+ *   NO. initHeadingCollapse observes editorEl with { childList: true } and fires
+ *   rebuildToggles() when direct children change (e.g. when insertBefore wraps a
+ *   table). rebuildToggles() only rebuilds heading-collapse spans; it never calls
+ *   initTableInteractions.
+ *
+ * Q5. Are there multiple code paths that all call init?
+ *   YES — see Q1. Each path processes the whole editor, so any table that already
+ *   has buttons will pass through the function again. The per-element querySelector
+ *   guards (delete-table-btn, table-toolbar, delete-row-btn) should block double
+ *   insertion in theory, but they are fragile: document.execCommand('insertHTML')
+ *   fires a synchronous input event that can trigger intermediate render work before
+ *   all guards are in place, depending on browser and contenteditable state.
+ *
+ * Fix: check for actual DOM presence of .table-toolbar instead of dataset flag.
+ * dataset.initialized is set on a specific DOM node object — if that node is ever
+ * replaced (e.g. execCommand rebuilds the wrapper), the new node has no flag and
+ * the guard is bypassed. querySelector checks real DOM state and survives replacement.
+ *
+ * Call sites for initTableInteractions (do not add new ones without updating this list):
+ *   ~line 2572 — setTimeout 60ms on editor open (processes all existing tables)
+ *   ~line 2586 — toolbar "insert table" button mousedown (processes whole editor)
+ *   ~line 2639 — paste handler after HTML table execCommand insert
+ *   ~line 2653 — paste handler after markdown table execCommand insert
+ *
+ * Call sites for addDeleteRowBtn:
+ *   ~line 1196 — addRowBtn.mousedown inside initTableInteractions (new row)
+ *   ~line 1225 — addColBtn.mousedown inside initTableInteractions (new last-col td)
+ *   ~line 1238 — forEach existing tbody rows inside initTableInteractions
+ *   ~line 2620 — Tab keydown handler (new row on Tab from last cell)
+ */
 function initTableInteractions(editorEl, saveCallback) {
   editorEl.querySelectorAll('.note-table-wrapper').forEach(wrapper => {
     // Wrap in .table-wrapper if not already done
@@ -1035,6 +1159,9 @@ function initTableInteractions(editorEl, saveCallback) {
       outer.appendChild(wrapper);
     }
     const tableWrapper = wrapper.parentElement;
+
+    // Guard: bail if toolbar already exists in DOM — survives node replacement unlike dataset
+    if (tableWrapper.querySelector('.table-toolbar')) return;
 
     // Add delete-table-btn
     if (!tableWrapper.querySelector('.delete-table-btn')) {
@@ -1760,7 +1887,40 @@ function bindMainEvents() {
     } else {
       state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked });
     }
-    pulse(el); render();
+    pulse(el);
+    el.classList.toggle('checked', newChecked);
+    const labelEl = el.closest('.goal-item')?.querySelector('.check-label');
+    if (labelEl) labelEl.classList.toggle('done', newChecked);
+    updateComplianceRing();
+    const { data } = await dbCall(() => sb.from('goal_logs').upsert(
+      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked },
+      { onConflict: 'goal_id,date' }
+    ).select().single());
+    if (data) {
+      const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
+      if (localLog && !localLog.id) localLog.id = data.id;
+    }
+  }));
+
+  // today page goal toggle → upsert goal_logs
+  main.querySelectorAll('[data-toggle-today-goal]').forEach(el => el.addEventListener('click', async () => {
+    const id = el.dataset.toggleTodayGoal;
+    const allG = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+    const g = allG.find(x => x.id === id);
+    if (!g || !currentUser) return;
+    const today = todayISO();
+    const existingLog = getTodayLog(id);
+    const newChecked = existingLog ? !existingLog.checked : true;
+    if (existingLog) {
+      existingLog.checked = newChecked;
+    } else {
+      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked });
+    }
+    pulse(el);
+    el.classList.toggle('checked', newChecked);
+    const lbl = document.getElementById(`today-commit-text-${id}`);
+    if (lbl) lbl.classList.toggle('done', newChecked);
+    updateComplianceRing();
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
       { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked },
       { onConflict: 'goal_id,date' }

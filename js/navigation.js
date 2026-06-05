@@ -31,6 +31,7 @@ function render() {
       bindMainEvents();
       animateNumbers();
       animateBars();
+      animateComplianceRing();
       main.style.opacity = '1';
     }, 60);
   });
