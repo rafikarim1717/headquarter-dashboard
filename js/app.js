@@ -1160,6 +1160,10 @@ function initTableInteractions(editorEl, saveCallback) {
     }
     const tableWrapper = wrapper.parentElement;
 
+    // Re-apply contenteditable on all cells: browser can strip the attribute when
+    // the note HTML is re-parsed via innerHTML, leaving cells non-focusable.
+    wrapper.querySelectorAll('th, td').forEach(cell => { cell.contentEditable = 'true'; });
+
     // Guard: bail if toolbar already exists in DOM — survives node replacement unlike dataset
     if (tableWrapper.querySelector('.table-toolbar')) return;
 
@@ -2590,6 +2594,26 @@ function bindMainEvents() {
     tbTableBtn.addEventListener('mousedown', (e) => {
       e.preventDefault();
       noteContentEl.focus();
+      // If cursor is inside a table cell, move it after the table wrapper first —
+      // otherwise execCommand inserts the new table nested inside the cell, causing
+      // initTableInteractions to produce a separate toolbar for each and "double" buttons.
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        const anchor = sel.anchorNode;
+        const cell = (anchor?.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor)?.closest?.('td, th');
+        if (cell) {
+          const outerEl = cell.closest('.table-wrapper') || cell.closest('.note-table-wrapper');
+          if (outerEl && outerEl.parentNode) {
+            try {
+              const r = document.createRange();
+              r.setStartAfter(outerEl);
+              r.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(r);
+            } catch (_) {}
+          }
+        }
+      }
       const html = buildNoteTableHTML(
         ['Header 1', 'Header 2', 'Header 3'],
         [['Cell', 'Cell', 'Cell'], ['Cell', 'Cell', 'Cell']]
