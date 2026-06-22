@@ -1016,6 +1016,19 @@ function renderNoteEditor() {
         <button class="tb-btn"          data-cmd="insertUnorderedList" title="Bullet list">•</button>
       </div>
       <div class="tb-sep"></div>
+      <select class="tb-btn tb-fontsize" id="tb-fontsize" title="Font size">
+        <option value="13">Size</option>
+        <option value="12">12</option>
+        <option value="13">13</option>
+        <option value="14">14</option>
+        <option value="16">16</option>
+        <option value="18">18</option>
+        <option value="20">20</option>
+        <option value="24">24</option>
+        <option value="28">28</option>
+        <option value="32">32</option>
+      </select>
+      <div class="tb-sep"></div>
       <button class="tb-btn" id="tb-table-btn" title="Insert table">⊞</button>
     </div>
     <div class="note-content" id="note-content" contenteditable="true"
@@ -1253,6 +1266,22 @@ function initTableInteractions(editorEl, saveCallback) {
     const tbody = wrapper.querySelector('tbody');
     if (tbody) tbody.querySelectorAll('tr').forEach(tr => addDeleteRowBtn(tr, saveCallback));
   });
+}
+
+function sanitizePastedHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  tmp.querySelectorAll('style, meta, link, script').forEach(el => el.remove());
+  tmp.querySelectorAll('[style]').forEach(el => {
+    el.style.removeProperty('background');
+    el.style.removeProperty('background-color');
+    el.style.removeProperty('background-image');
+    el.style.removeProperty('color');
+    if (!el.getAttribute('style').trim()) el.removeAttribute('style');
+  });
+  tmp.querySelectorAll('[bgcolor]').forEach(el => el.removeAttribute('bgcolor'));
+  tmp.querySelectorAll('font[color]').forEach(el => el.removeAttribute('color'));
+  return tmp.innerHTML;
 }
 
 function convertPastedTable(html) {
@@ -2576,16 +2605,50 @@ function bindMainEvents() {
       triggerNoteSave();
     });
   });
+  // editor: remember the last selection so the font-size <select> (which steals
+  // focus when opened) can still apply to the text the user had selected
+  let savedNoteRange = null;
+  const saveNoteSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount && noteContentEl && noteContentEl.contains(sel.anchorNode)) {
+      savedNoteRange = sel.getRangeAt(0).cloneRange();
+    }
+  };
   if (noteContentEl) {
     noteContentEl.addEventListener('keyup',   updateTbState);
     noteContentEl.addEventListener('mouseup', updateTbState);
     noteContentEl.addEventListener('focus',   updateTbState);
+    noteContentEl.addEventListener('keyup',   saveNoteSelection);
+    noteContentEl.addEventListener('mouseup', saveNoteSelection);
+    noteContentEl.addEventListener('focus',   saveNoteSelection);
     // focus the editor on load if content is empty
     if (!noteContentEl.innerHTML.trim()) setTimeout(() => noteContentEl.focus(), 80);
     // collapsible headings
     setTimeout(() => initHeadingCollapse(noteContentEl), 50);
     // table interactions on load
     setTimeout(() => initTableInteractions(noteContentEl, triggerNoteSave), 60);
+  }
+
+  // editor: font size dropdown
+  const tbFontSize = main.querySelector('#tb-fontsize');
+  if (tbFontSize && noteContentEl) {
+    tbFontSize.addEventListener('change', () => {
+      const px = tbFontSize.value;
+      noteContentEl.focus();
+      const sel = window.getSelection();
+      if (savedNoteRange) {
+        sel.removeAllRanges();
+        sel.addRange(savedNoteRange);
+      }
+      if (!sel || sel.isCollapsed) { tbFontSize.value = '13'; return; }
+      document.execCommand('fontSize', false, '7');
+      noteContentEl.querySelectorAll('font[size="7"]').forEach(f => {
+        f.removeAttribute('size');
+        f.style.fontSize = px + 'px';
+      });
+      tbFontSize.value = '13';
+      triggerNoteSave();
+    });
   }
 
   // editor: table insert button
@@ -2694,6 +2757,11 @@ function bindMainEvents() {
           }
           triggerNoteSave();
         }
+      } else if (html) {
+        e.preventDefault();
+        const cleaned = sanitizePastedHtml(html);
+        document.execCommand('insertHTML', false, cleaned);
+        triggerNoteSave();
       }
     });
   }

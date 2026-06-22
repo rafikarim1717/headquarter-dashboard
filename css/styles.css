@@ -1001,6 +1001,10 @@
   .tb-btn-b { font-weight: 700; }
   .tb-btn-i { font-style: italic; }
   .tb-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+  .tb-fontsize {
+    background: var(--card-2); border: 1px solid var(--border); cursor: pointer;
+  }
+  .tb-fontsize:hover { background: #252525; color: var(--text); }
   .note-content {
     outline: none; font-size: 16px; line-height: 1.7; color: var(--text);
     min-height: 300px; padding-bottom: 60px; caret-color: var(--accent);
