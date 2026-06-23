@@ -839,7 +839,6 @@ function renderProjectCard(p, i) {
         </div>
         <div class="proj-card-acts">
           <button class="fin-edit-btn" data-edit-proj="${p.id}" title="Edit">&#x270E;</button>
-          <button class="fin-edit-btn" data-toggle-proj-done="${p.id}" title="${isDone?'Reopen':'Mark done'}" style="color:${isDone?'var(--text-faint)':'var(--good)'}">${isDone?'↩':'✓'}</button>
           <button class="fin-del-btn" data-del-proj="${p.id}" title="Delete">&#x00D7;</button>
         </div>
       </div>
@@ -869,6 +868,7 @@ function renderProjectCard(p, i) {
                     ${t.description ? `<div class="task-desc-text">${escapeHtml(t.description.length>80?t.description.slice(0,80)+'...':t.description)}</div>` : ''}
                   </div>
                   <div class="focus-task-acts">
+                    <button class="fin-assign-btn" data-assign-proj-task="${p.id}|${t.id}" title="Assign to today's schedule">&#x1F4C5;</button>
                     <button class="fin-edit-btn" data-edit-proj-task="${p.id}|${t.id}">&#x270E;</button>
                     <button class="fin-del-btn" data-del-proj-task="${p.id}|${t.id}">&#x00D7;</button>
                   </div>
@@ -1875,14 +1875,38 @@ function bindMainEvents() {
     });
   }));
 
-  // project toggle done/reopen
-  main.querySelectorAll('[data-toggle-proj-done]').forEach(el => el.addEventListener('click', () => {
-    const id = el.dataset.toggleProjDone;
-    const proj = state.projects.find(p => p.id === id);
+  // project task assign to today's schedule
+  main.querySelectorAll('[data-assign-proj-task]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const [projId, taskId] = el.dataset.assignProjTask.split('|');
+    const proj = state.projects.find(p => p.id === projId);
     if (!proj) return;
-    proj.status = proj.status === 'done' ? 'active' : 'done';
-    render();
-    dbCall(() => sb.from('projects').update({ status: proj.status, updated_at: new Date().toISOString() }).eq('id', id));
+    const task = proj.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const day = todayISO();
+    showModal({
+      title: 'Assign to Today\'s Schedule',
+      fields: [
+        { id: 'time',       label: 'Time',       type: 'time',     value: '09:00' },
+        { id: 'title',      label: 'Title',      type: 'text',     value: task.text },
+        { id: 'note',       label: 'Note',       type: 'text',     value: task.description || '', placeholder: 'optional' },
+        { id: 'alarm',      label: 'Set alarm',  type: 'toggle',   value: false, controls: 'alarm_time' },
+        { id: 'alarm_time', label: 'Alarm time', type: 'time',     value: '09:00' }
+      ],
+      saveLabel: 'Assign',
+      onSave: async ({ time, title, note, alarm, alarm_time }) => {
+        if (!title.trim()) return;
+        const alarm_time_val = alarm ? (alarm_time || time) : null;
+        const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title: title.trim(), note: note.trim(), alarm_time: alarm_time_val }).select().single());
+        if (data) {
+          if (!state.schedule[day]) state.schedule[day] = [];
+          state.schedule[day].push({ id: data.id, time, title: title.trim(), sub: note.trim(), alarm_time: alarm_time_val });
+          state.schedule[day].sort((a, b) => a.time.localeCompare(b.time));
+          showToast('Assigned to today\'s schedule');
+          render();
+        }
+      }
+    });
   }));
 
   // project task delete

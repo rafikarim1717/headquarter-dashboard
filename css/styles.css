@@ -599,17 +599,22 @@
   }
   .fin-item:hover .fin-acts { opacity: 1; }
   .fin-edit-btn {
-    color: #555; padding: 4px; cursor: pointer;
-    transition: color var(--t-fast) ease; line-height: 1;
+    color: var(--good); padding: 4px; cursor: pointer;
+    transition: filter var(--t-fast) ease; line-height: 1;
   }
-  .fin-edit-btn:hover { color: var(--accent); }
-  .debt-pay-btn--unpaid:hover { color: var(--good) !important; }
-  .debt-pay-btn--paid:hover { color: #d4a857 !important; }
+  .fin-edit-btn:hover { filter: brightness(1.35); }
+  .debt-pay-btn--unpaid:hover { color: var(--good) !important; filter: brightness(1.35); }
+  .debt-pay-btn--paid:hover { color: #d4a857 !important; filter: none; }
   .fin-del-btn {
-    color: #555; padding: 4px; cursor: pointer;
+    color: var(--danger); padding: 4px; cursor: pointer;
+    transition: filter var(--t-fast) ease; line-height: 1;
+  }
+  .fin-del-btn:hover { filter: brightness(1.35); }
+  .fin-assign-btn {
+    color: var(--text-dim); padding: 4px; cursor: pointer;
     transition: color var(--t-fast) ease; line-height: 1;
   }
-  .fin-del-btn:hover { color: #c0392b; }
+  .fin-assign-btn:hover { color: var(--accent); }
   .fin-item .inline-form.open { max-height: 360px; }
   /* debt two-row layout */
   .debt-row-info { display: flex; align-items: center; gap: 14px; padding: 12px 0 4px; }
@@ -668,14 +673,16 @@
   .sched-item:hover .sched-acts { opacity: 1; }
   .sched-edit-btn {
     font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
-    color: var(--text-dim); padding: 6px 10px;
-    transition: color var(--t-fast) ease;
+    color: var(--good); padding: 6px 10px;
+    transition: filter var(--t-fast) ease;
   }
-  .sched-edit-btn:hover { color: var(--text); }
+  .sched-edit-btn:hover { filter: brightness(1.35); }
   .sched-del-btn {
     font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
     color: var(--danger); padding: 6px 10px;
+    transition: filter var(--t-fast) ease;
   }
+  .sched-del-btn:hover { filter: brightness(1.35); }
   .sched-item .inline-form.open { max-height: 420px; }
 
   /* ============ DEBTS ============ */
