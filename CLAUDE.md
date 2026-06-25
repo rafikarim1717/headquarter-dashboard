@@ -41,9 +41,8 @@ Routes are defined in `navigation.js` as a plain object:
 const ROUTES = {
   'life:home': renderLifeHome,
   'life:schedule': renderSchedule,
-  'life:goals': renderGoals,
-  'life:habits': renderHabits,
-  'life:focus': renderFocus,
+  'life:commitments': renderCommitments,
+  'life:projects': renderProjects,
   'life:notes': renderNotes,
   'finance:overview': renderFinanceOverview,
   'finance:income': renderIncome,
@@ -51,6 +50,8 @@ const ROUTES = {
   'finance:debts': renderDebts
 };
 ```
+
+> Habits/Goals/Focus as separate pages no longer exist — they were merged into **Commitments** (do's/don'ts with daily check-off, streak ring, weekly/monthly compliance heatmap). **Projects** is a newer page (objective → small tasks → progress bar → activity heatmap) that replaced the old single-board Focus page.
 
 `render()` fades `<main>` out (opacity 0), waits 60ms, replaces `innerHTML` via `ROUTES[tab]()`, calls `bindMainEvents()` + `animateNumbers()` + `animateBars()`, then fades back in. The page is **always fully re-rendered** from state — no partial DOM patching (except some in-place edit updates for performance).
 
@@ -61,11 +62,14 @@ All data lives in `state` (defined top of `app.js`). Loaded once from Supabase o
 ```js
 let state = {
   profile: { name: 'Friend' },
-  schedule: {},       // { [iso-date]: [{id, time, title, sub, alarm_time}] }
-  goals: { dos: [], donts: [] },
-  habits: [],         // [{id, name, streak, doneToday, log:[7]}]
-  focus: { main: '', tasks: [] },
-  notes: [],          // [{id, title, content, created_at, updated_at}]
+  schedule: {},        // { [iso-date]: [{id, time, title, sub, alarm_time}] }
+  goals: { dos: [], donts: [] },           // backing data for the Commitments page
+  goalLogs: [],         // [{id, goal_id, user_id, date, checked}] — daily check-off log, drives streak/compliance %
+  projects: [],         // [{id, name, description, status, deadline, tasks:[{id,text,description,checked,completed_at}]}]
+  projectsFilter: 'all',
+  expandedProjectIds: [],
+  homeProjectIndex: 0,  // which active project is shown in the Home "Active project" carousel
+  notes: [],            // [{id, title, content, created_at, updated_at}]
   income: [],
   spending: [],
   debts: [],
@@ -75,9 +79,12 @@ let state = {
   activeNoteId: null,
   notesSort: 'newest',
   notesFilter: 'all',
-  notesDisplay: 'grid'
+  notesDisplay: 'grid',
+  commitPreviewTab: 'weekly'
 };
 ```
+
+`goals`/`goalLogs` together implement "Commitments" — `goals` are the static do/dont items, `goalLogs` is one row per `(goal_id, date)` recording whether it was checked that day. This is what powers the daily compliance ring, the weekly strip, and the monthly compliance calendar on the Commitments page.
 
 UI navigation prefs (`activeTab`, `selectedDay`, `viewMonth`) are also saved to `localStorage('hq.prefs')` and restored on login.
 
@@ -117,49 +124,48 @@ Index on `(user_id, date)`.
 | `user_id` | uuid FK | → `auth.users` |
 | `type` | text | `'do'` or `'dont'` (check constraint in schema.sql) |
 | `text` | text | Goal description |
-| `checked` | boolean | Default false |
+| `checked` | boolean | Default false — legacy column, no longer written to; per-day state now lives in `goal_logs` |
 | `created_at` | timestamptz | |
 
-### `habits`
+### `goal_logs`
+**[MISSING FROM SCHEMA FILES]** — Referenced in `supabase.js` `loadFromSupabase()` and throughout the Commitments page logic in `app.js` (`getTodayLog`, `getDayCompliancePct`, `computeDailyScore`). One row per `(goal_id, date)`, written via upsert when a commitment is checked/unchecked for a given day. Inferred columns:
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
 | `user_id` | uuid FK | → `auth.users` |
-| `name` | text | Habit name |
-| `streak` | integer | Current streak count, updated on toggle |
-| `created_at` | timestamptz | |
-
-### `habit_logs`
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid PK | |
-| `user_id` | uuid FK | → `auth.users` |
-| `habit_id` | uuid FK | → `habits(id)`, cascade delete |
+| `goal_id` | uuid FK | → `goals(id)`, cascade delete |
 | `date` | date | Log date |
 | `checked` | boolean | Default false |
-| UNIQUE | `(habit_id, date)` | Prevents duplicate log per day |
+| UNIQUE | `(goal_id, date)` | Prevents duplicate log per day |
 
-Written via `upsert` on conflict `habit_id,date`.
+Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compliance calendar, and Home's "Daily score".
 
-### `focus_board`
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid PK | |
-| `user_id` | uuid UNIQUE FK | → `auth.users` (one row per user) |
-| `main_focus` | text | The main focus statement |
-| `created_at` | timestamptz | (schema.sql only) |
+> Note: `habits`/`habit_logs`/`focus_board`/`focus_tasks` tables described in older versions of this doc are **no longer used by the app** — the Habits and Focus pages were replaced by Commitments and Projects. The tables may still exist in `schema_fix.sql`/the live DB as unused leftovers; safe to ignore or drop.
 
-One row per user. The `id` is stored in `focusBoardId` global for use in focus_tasks FK.
-
-### `focus_tasks`
+### `projects`
+**[MISSING FROM SCHEMA FILES]** — Referenced throughout `app.js` (Projects page, Home "Active project" card) and `supabase.js` `loadFromSupabase()`. Run the migration in `schema_fix.sql` (section 11) to create it.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
 | `user_id` | uuid FK | → `auth.users` |
-| `focus_id` | uuid FK | → `focus_board(id)`, cascade delete |
+| `name` | text | Project name |
+| `description` | text | Optional, shown truncated on the card |
+| `status` | text | `'active'` \| `'on_hold'` \| `'done'` |
+| `deadline` | date | Optional |
+| `created_at` | timestamptz | |
+| `updated_at` | timestamptz | Bumped on every edit |
+
+### `project_tasks`
+**[MISSING FROM SCHEMA FILES]** — Run the migration in `schema_fix.sql` (section 12) to create it.
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `user_id` | uuid FK | → `auth.users` |
+| `project_id` | uuid FK | → `projects(id)`, cascade delete |
 | `text` | text | Task title |
+| `description` | text | Optional |
 | `checked` | boolean | Default false |
-| `description` | text | **[MISSING FROM SCHEMA FILES]** used in code |
+| `completed_at` | timestamptz | Set to `now()` when `checked` flips to `true`, cleared to `NULL` on uncheck. Drives the GitHub-style activity heatmap on the Home "Active project" card — a day is "green" if any task in that project has `completed_at` on that date. |
 | `created_at` | timestamptz | |
 
 ### `income_entries`
@@ -283,12 +289,16 @@ One row per user. The `id` is stored in `focusBoardId` global for use in focus_t
 
 | Route | Page | Description |
 |---|---|---|
-| `life:home` | Today | Greeting + live clock, Today's schedule preview (5 items), Current focus statement + 3 sub-tasks, optional quick-navigation pills. Layout togglable (Stacked / Hero). |
+| `life:home` | Today | Greeting + live clock, Daily score, Today's commitments preview, Today's schedule preview (5 items), "Active project" card (progress bar + activity heatmap + carousel if multiple active projects), optional quick-navigation pills. Layout togglable (Stacked / Hero). |
 | `life:schedule` | Schedule | Full month calendar view, day selector, event list for selected day. Add/edit/delete events. Alarm toggle per event (Web Notifications + AudioContext beep). |
-| `life:goals` | Goals & Rules | Two columns: Do's and Don'ts. Progress bar based on Do's checked. Add/edit/delete/toggle goals. |
-| `life:habits` | Habits | Grid of habit cards (2 cols mobile, 3 cols desktop). Each card: name, streak, 7-day dot grid, check-off. Long-press mobile to enter delete mode. Hover desktop shows edit/delete. |
-| `life:focus` | Focus | Large textarea for main focus statement (autosaves debounced 600ms). Sub-tasks list with check/add/edit/delete. Each task has optional description field. |
+| `life:commitments` | Commitments | Replaces the old Goals/Habits pages. Do's/Don'ts columns with daily check-off (backed by `goal_logs`, not a static `checked` flag). Compliance ring (today's %), weekly strip, and a monthly compliance calendar (color intensity = that day's %). |
+| `life:projects` | Projects | List of projects (filter: All/Active/On Hold/Done). Each card: name, description, status/deadline badges, progress bar (tasks done / total), expandable task list with check/edit/delete/assign-to-schedule, add task. |
 | `life:notes` | Notes | Grid/list view of note cards. Sort (Newest/Oldest/A-Z) and filter (All/Today/Week) dropdowns. New note → rich text editor (contenteditable, toolbar: H1/H2/H3/Normal/Bold/Italic/Bullet). Heading collapse toggle. Autosaves title+content debounced 1000ms. Relative timestamps. |
+
+**Home "Active project" card details** (`projectsBlock` inside `renderLifeHome`, `js/app.js`):
+- Shows one active project at a time from `state.projects.filter(p => p.status === 'active')`, indexed by `state.homeProjectIndex`.
+- If more than one active project exists, `‹`/`›` nav buttons (`data-home-proj-nav="-1"|"1"`) cycle through them — bound in `bindMainEvents()`, must call `e.stopPropagation()` since the whole card has `data-go="life:projects"`.
+- Below the progress bar: `renderProjectHeatmap(tasks)` renders a 7-row × N-week GitHub-style contribution grid (`.proj-heatmap`, CSS `grid-auto-flow: column`). A cell is "active" (green) if any task in the project has `completed_at` on that date — computed by `buildProjectHeatmapCells()`.
 
 ### Finance Tab
 
@@ -333,7 +343,7 @@ For goals: full re-render.
   ↓ click → filter item out of state array → render()
   ↓ dbCall(() => sb.from(...).delete().eq('id', id))  [fire and forget]
 ```
-Habits have animated delete: `card.classList.add('deleting')` → 260ms → filter state → render().
+Projects have a confirm modal before delete (cascades to its tasks).
 
 ### Toggle Pattern (checkboxes)
 ```
@@ -341,7 +351,7 @@ Habits have animated delete: `card.classList.add('deleting')` → 260ms → filt
   ↓ click → mutate state → pulse(el) → render()
   ↓ dbCall(() => sb.from(...).update({ checked: ... }).eq('id', id))
 ```
-Habits also upsert `habit_logs` and update `habits.streak`.
+Commitments also upsert `goal_logs` for the day. Project task toggle additionally sets/clears `completed_at` (`new Date().toISOString()` on check, `null` on uncheck) — this is what feeds the Home activity heatmap.
 
 ### Notes Autosave
 Title + content changes debounced 1000ms, then `sb.from('notes').update(...)`. Focus textarea changes debounced 600ms.
@@ -374,8 +384,9 @@ Title + content changes debounced 1000ms, then `sb.from('notes').update(...)`. F
 
 ## Schema Gaps (Action Required)
 
-These columns/tables are used in the code but **missing from both schema files**:
+These columns/tables are used in the code but **missing from both schema files** (or only just added to `schema_fix.sql` and still need to be run against the live Supabase project):
 
 1. **`notes` table** — entire table missing from schema. Create with: `id uuid PK, user_id uuid FK, title text, content text, created_at timestamptz, updated_at timestamptz`. Enable RLS.
 2. **`schedule_events.alarm_time`** — `text` column, nullable. Add: `ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS alarm_time text;`
-3. **`focus_tasks.description`** — `text` column, nullable. Add: `ALTER TABLE focus_tasks ADD COLUMN IF NOT EXISTS description text;`
+3. **`goal_logs` table** — entire table missing from schema. See columns above; needed for Commitments to track per-day check-off.
+4. **`projects` / `project_tasks` tables** — now added to `schema_fix.sql` (sections 11–12), including `project_tasks.completed_at`. **Run `schema_fix.sql` in the Supabase SQL editor** to create/patch these on the live DB — the app already reads/writes `completed_at` in code, so the Home activity heatmap will silently no-op (no green cells) until this migration is run.

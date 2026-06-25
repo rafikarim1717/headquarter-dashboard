@@ -8,7 +8,9 @@
       "PowerShell(Get-Content *)",
       "PowerShell(New-Item *)",
       "PowerShell(\\(Get-Content \"C:\\\\Users\\\\Asus\\\\Desktop\\\\Work\\\\HQ-Dashboard\\\\js\\\\app.js\"\\).Count; \\(Get-Content \"C:\\\\Users\\\\Asus\\\\Desktop\\\\Work\\\\HQ-Dashboard\\\\css\\\\styles.css\"\\).Count)",
-      "Bash(node --check \"js/app.js\")"
+      "Bash(node --check \"js/app.js\")",
+      "Bash(node --check \"js/supabase.js\")",
+      "Bash(sed \"s/.*\\\\.from\\\\\\('\\\\\\([^']*\\\\\\)'.*/\\\\1/\")"
     ]
   }
 }

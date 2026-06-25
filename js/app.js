@@ -47,6 +47,38 @@ function escapeHtml(s) {
 }
 
 /* =========================================================
+   PROJECT ACTIVITY HEATMAP (GitHub-style contribution grid)
+   — green cell = at least one task completed that day
+========================================================= */
+function buildProjectHeatmapCells(tasks, weeks) {
+  const activeDates = new Set((tasks || []).filter(t => t.completed_at).map(t => isoLocal(new Date(t.completed_at))));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const end = new Date(today);
+  end.setDate(end.getDate() + (6 - end.getDay())); // extend to Saturday of this week
+  const start = new Date(end);
+  start.setDate(start.getDate() - (weeks * 7 - 1));
+
+  const cells = [];
+  for (let i = 0; i < weeks * 7; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    const iso = isoLocal(d);
+    cells.push({ iso, active: activeDates.has(iso), isFuture: d > today });
+  }
+  return cells;
+}
+
+function renderProjectHeatmap(tasks, weeks = 14) {
+  const cells = buildProjectHeatmapCells(tasks, weeks);
+  return `
+    <div class="proj-heatmap-wrap">
+      <div class="proj-heatmap">
+        ${cells.map(c => `<div class="heatmap-cell${c.active ? ' active' : ''}${c.isFuture ? ' future' : ''}" title="${c.iso}${c.active ? ' · progress made' : ''}"></div>`).join('')}
+      </div>
+    </div>`;
+}
+
+/* =========================================================
    IN-MEMORY STATE  (populated from Supabase on login)
 ========================================================= */
 let currentUser = null;
@@ -60,9 +92,10 @@ let state = {
   schedule: {},   // { [iso-date]: [{id, time, title, sub}] }
   goals: { dos: [], donts: [] },
   goalLogs: [],   // [{id, goal_id, user_id, date, checked}]
-  projects: [],       // [{id, name, status, deadline, tasks:[{id,text,description,checked}]}]
+  projects: [],       // [{id, name, status, deadline, tasks:[{id,text,description,checked,completed_at}]}]
   projectsFilter: 'all',
   expandedProjectIds: [],
+  homeProjectIndex: 0,
   notes: [],      // [{id, title, content, created_at, updated_at}]
   income: [],
   spending: [],
@@ -443,29 +476,42 @@ function renderLifeHome() {
       <div style="font-size:12px;color:var(--text-faint);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">${checkedTodayCount} of ${totalGoals} done today</div>
     </div>`;
 
-  const firstActive = (state.projects || []).find(p => p.status === 'active');
-  const projDone  = firstActive ? firstActive.tasks.filter(t => t.checked).length : 0;
-  const projTotal = firstActive ? firstActive.tasks.length : 0;
+  const activeProjects = (state.projects || []).filter(p => p.status === 'active');
+  if (!(state.homeProjectIndex >= 0 && state.homeProjectIndex < activeProjects.length)) state.homeProjectIndex = 0;
+  const homeProjIdx = state.homeProjectIndex;
+  const current   = activeProjects[homeProjIdx] || null;
+  const projDone  = current ? current.tasks.filter(t => t.checked).length : 0;
+  const projTotal = current ? current.tasks.length : 0;
   const projPct   = projTotal ? Math.round(projDone / projTotal * 100) : 0;
   const projectsBlock = (delay) => `
     <div class="card" style="animation-delay:${delay}ms;cursor:pointer" data-go="life:projects">
-      <div class="section-title" style="margin-top:0">Active project</div>
-      ${firstActive ? `
-        <div style="font-size:${layout === 'hero' ? '18px' : '15px'};font-weight:500;line-height:1.35">${escapeHtml(firstActive.name)}</div>
+      <div class="section-title" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">
+        <span>Active project</span>
+        ${activeProjects.length > 1 ? `
+          <span style="display:flex;align-items:center;gap:6px">
+            <button class="proj-nav-btn" data-home-proj-nav="-1" title="Previous project">&#x2039;</button>
+            <span style="font-size:11px;color:var(--text-faint)">${homeProjIdx + 1}/${activeProjects.length}</span>
+            <button class="proj-nav-btn" data-home-proj-nav="1" title="Next project">&#x203A;</button>
+          </span>
+        ` : ''}
+      </div>
+      ${current ? `
+        <div style="font-size:${layout === 'hero' ? '18px' : '15px'};font-weight:500;line-height:1.35">${escapeHtml(current.name)}</div>
         ${projTotal > 0 ? `
           <div class="proj-progress">
             <div class="proj-progress-meta"><span>${projDone} / ${projTotal} tasks done</span><span>${projPct}%</span></div>
             <div class="progress"><div class="bar" style="width:${projPct}%"></div></div>
           </div>
           <ul class="list" style="margin-top:12px">
-            ${firstActive.tasks.slice(0, 3).map(t => `
+            ${current.tasks.slice(0, 3).map(t => `
               <li class="list-item" style="padding:8px 0">
-                <span class="check ${t.checked ? 'checked' : ''}" data-toggle-proj-task="${firstActive.id}|${t.id}"></span>
+                <span class="check ${t.checked ? 'checked' : ''}" data-toggle-proj-task="${current.id}|${t.id}"></span>
                 <span class="check-label ${t.checked ? 'done' : ''}">${escapeHtml(t.text)}</span>
               </li>
             `).join('')}
           </ul>
         ` : '<div style="font-size:12px;color:var(--text-faint);margin-top:8px">No tasks yet.</div>'}
+        ${renderProjectHeatmap(current.tasks)}
       ` : `<div style="font-size:12px;color:var(--text-faint)">No active projects.</div>`}
     </div>`;
 
@@ -1808,6 +1854,16 @@ function bindMainEvents() {
   // navigation pills
   main.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => setActiveTab(el.dataset.go)));
 
+  // home: cycle through active projects
+  main.querySelectorAll('[data-home-proj-nav]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dir = Number(el.dataset.homeProjNav);
+    const activeProjects = (state.projects || []).filter(p => p.status === 'active');
+    if (!activeProjects.length) return;
+    state.homeProjectIndex = ((state.homeProjectIndex || 0) + dir + activeProjects.length) % activeProjects.length;
+    render();
+  }));
+
   // schedule day pick
   main.querySelectorAll('[data-pick-day]').forEach(el => el.addEventListener('click', () => {
     state.selectedDay = el.dataset.pickDay;
@@ -1855,8 +1911,9 @@ function bindMainEvents() {
     const task = proj.tasks.find(t => t.id === taskId);
     if (!task) return;
     task.checked = !task.checked;
+    task.completed_at = task.checked ? new Date().toISOString() : null;
     pulse(el); render();
-    dbCall(() => sb.from('project_tasks').update({ checked: task.checked }).eq('id', taskId));
+    dbCall(() => sb.from('project_tasks').update({ checked: task.checked, completed_at: task.completed_at }).eq('id', taskId));
   }));
 
   // project delete
@@ -2171,7 +2228,7 @@ function bindMainEvents() {
         const proj = state.projects.find(p => p.id === projId);
         if (!proj) return;
         const { data } = await dbCall(() => sb.from('project_tasks').insert({ user_id: currentUser.id, project_id: projId, text: trimmed, description: description.trim() || null, checked: false }).select().single());
-        if (data) { proj.tasks.push({ id: data.id, text: trimmed, description: description.trim(), checked: false }); render(); }
+        if (data) { proj.tasks.push({ id: data.id, text: trimmed, description: description.trim(), checked: false, completed_at: null }); render(); }
       }
     });
   }));

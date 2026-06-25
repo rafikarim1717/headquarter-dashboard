@@ -105,7 +105,7 @@ async function loadFromSupabase(userId) {
       description: p.description || '',
       status: p.status,
       deadline: p.deadline,
-      tasks: tasks.map(t => ({ id: t.id, text: t.text, description: t.description || '', checked: t.checked }))
+      tasks: tasks.map(t => ({ id: t.id, text: t.text, description: t.description || '', checked: t.checked, completed_at: t.completed_at || null }))
     };
   });
 
@@ -208,7 +208,7 @@ async function seedSampleData(userId) {
       description: p.description || '',
       status: p.status,
       deadline: p.deadline,
-      tasks: tasks.map(t => ({ id: t.id, text: t.text, description: t.description || '', checked: t.checked }))
+      tasks: tasks.map(t => ({ id: t.id, text: t.text, description: t.description || '', checked: t.checked, completed_at: t.completed_at || null }))
     };
   });
 

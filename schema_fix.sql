@@ -406,3 +406,94 @@ DO $$ BEGIN
     FOR DELETE USING (auth.uid() = user_id);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+
+-- ────────────────────────────────────────────────────────────
+-- 11. projects
+--     Operations: select / insert / update(name,description,status,deadline) / delete
+--     Columns: name, description, status ('active'|'on_hold'|'done'), deadline, updated_at
+-- ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS projects (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name        text NOT NULL,
+  description text,
+  status      text NOT NULL DEFAULT 'active',
+  deadline    date,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "projects_select" ON projects
+    FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "projects_insert" ON projects
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "projects_update" ON projects
+    FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "projects_delete" ON projects
+    FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+
+-- ────────────────────────────────────────────────────────────
+-- 12. project_tasks
+--     Operations: select / insert / update(text,description,checked,completed_at) / delete
+--     Columns: project_id, text, description, checked, completed_at
+--     completed_at: set to now() when checked -> true, cleared to NULL when unchecked.
+--     Drives the GitHub-style activity heatmap shown under "Active project" on Home.
+-- ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS project_tasks (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  project_id   uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  text         text NOT NULL,
+  description  text,
+  checked      boolean NOT NULL DEFAULT false,
+  completed_at timestamptz,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+-- Safe to re-run on an already-existing project_tasks table that predates this column.
+ALTER TABLE project_tasks ADD COLUMN IF NOT EXISTS completed_at timestamptz;
+
+ALTER TABLE project_tasks ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "project_tasks_select" ON project_tasks
+    FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "project_tasks_insert" ON project_tasks
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "project_tasks_update" ON project_tasks
+    FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "project_tasks_delete" ON project_tasks
+    FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
