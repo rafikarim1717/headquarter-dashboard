@@ -10,7 +10,8 @@
       "PowerShell(\\(Get-Content \"C:\\\\Users\\\\Asus\\\\Desktop\\\\Work\\\\HQ-Dashboard\\\\js\\\\app.js\"\\).Count; \\(Get-Content \"C:\\\\Users\\\\Asus\\\\Desktop\\\\Work\\\\HQ-Dashboard\\\\css\\\\styles.css\"\\).Count)",
       "Bash(node --check \"js/app.js\")",
       "Bash(node --check \"js/supabase.js\")",
-      "Bash(sed \"s/.*\\\\.from\\\\\\('\\\\\\([^']*\\\\\\)'.*/\\\\1/\")"
+      "Bash(sed \"s/.*\\\\.from\\\\\\('\\\\\\([^']*\\\\\\)'.*/\\\\1/\")",
+      "Bash(grep -v \"//\\\\|text-faint\\\\|pointer-events\\\\|stroke-dash\\\\|ring-spin\\\\|ring-spin-rev\\\\|ring-spin-lg\\\\|ring-spin-rev-lg\\\\|disabled\\\\|opacity:.3\\\\|opacity: 0.3\")"
     ]
   }
 }

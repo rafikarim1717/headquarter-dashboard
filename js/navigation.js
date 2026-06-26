@@ -22,19 +22,10 @@ const ROUTES = {
 function render() {
   const tab = state.activeTab in ROUTES ? state.activeTab : 'life:home';
   const section = tab.split(':')[0];
-  const html = ROUTES[tab]();
-  main.style.transition = 'opacity 200ms ease';
-  main.style.opacity = '0';
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      main.innerHTML = html;
-      bindMainEvents();
-      animateNumbers();
-      animateBars();
-      animateComplianceRing();
-      main.style.opacity = '1';
-    }, 60);
-  });
+  main.innerHTML = ROUTES[tab]();
+  bindMainEvents();
+  animateNumbers();
+  animateComplianceRing();
   document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.go === tab));
   document.querySelectorAll('.bottom-nav .main-tab-btn').forEach(el => el.classList.toggle('active', el.dataset.mainTab === section));
 }

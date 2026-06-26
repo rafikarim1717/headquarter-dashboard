@@ -47,34 +47,64 @@ function escapeHtml(s) {
 }
 
 /* =========================================================
-   PROJECT ACTIVITY HEATMAP (GitHub-style contribution grid)
-   — green cell = at least one task completed that day
+   PROJECT ACTIVITY HEATMAP (GitHub-style yearly contribution grid)
 ========================================================= */
-function buildProjectHeatmapCells(tasks, weeks) {
-  const activeDates = new Set((tasks || []).filter(t => t.completed_at).map(t => isoLocal(new Date(t.completed_at))));
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const end = new Date(today);
-  end.setDate(end.getDate() + (6 - end.getDay())); // extend to Saturday of this week
-  const start = new Date(end);
-  start.setDate(start.getDate() - (weeks * 7 - 1));
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  const cells = [];
-  for (let i = 0; i < weeks * 7; i++) {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    const iso = isoLocal(d);
-    cells.push({ iso, active: activeDates.has(iso), isFuture: d > today });
+function buildYearHeatmapData(tasks, year) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const counts = {};
+  (tasks || []).filter(t => t.completed_at).forEach(t => {
+    const iso = isoLocal(new Date(t.completed_at));
+    counts[iso] = (counts[iso] || 0) + 1;
+  });
+  // Start: Sunday of week containing Jan 1
+  const jan1 = new Date(year, 0, 1);
+  const start = new Date(year, 0, 1 - jan1.getDay());
+  // End: Dec 31 or today (whichever is earlier), extended to Saturday
+  const yearEnd = year < today.getFullYear() ? new Date(year, 11, 31) : today;
+  const end = new Date(yearEnd.getFullYear(), yearEnd.getMonth(), yearEnd.getDate() + (6 - yearEnd.getDay()));
+  const cells = [], monthLabels = [];
+  let col = 0, prevMonth = -1, d = new Date(start);
+  while (d <= end) {
+    for (let row = 0; row < 7; row++) {
+      const iso = isoLocal(d);
+      const inYear = d.getFullYear() === year;
+      const m = d.getMonth();
+      if (row === 0 && inYear && m !== prevMonth) { monthLabels.push({ month: m, col }); prevMonth = m; }
+      cells.push({ iso, count: counts[iso] || 0, active: inYear && !!counts[iso], isFuture: d > today, isOut: !inYear });
+      d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    }
+    col++;
   }
-  return cells;
+  const total = Object.entries(counts).filter(([iso]) => iso.startsWith(String(year))).reduce((s,[,n]) => s + n, 0);
+  return { cells, monthLabels, totalCols: col, total };
 }
 
-function renderProjectHeatmap(tasks, weeks = 14) {
-  const cells = buildProjectHeatmapCells(tasks, weeks);
+function renderProjectHeatmap(tasks, year) {
+  const { cells, monthLabels, totalCols, total } = buildYearHeatmapData(tasks, year);
+  const todayYear = new Date().getFullYear();
+  const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+  const cols = `24px repeat(${totalCols},1fr)`;
   return `
-    <div class="proj-heatmap-wrap">
-      <div class="proj-heatmap">
-        ${cells.map(c => `<div class="heatmap-cell${c.active ? ' active' : ''}${c.isFuture ? ' future' : ''}" title="${c.iso}${c.active ? ' · progress made' : ''}"></div>`).join('')}
+    <div class="heatmap-header">
+      <span class="heatmap-total">${total} task${total !== 1 ? 's' : ''} completed in ${year}</span>
+      <div class="heatmap-year-nav">
+        <button class="proj-nav-btn" data-heatmap-year="-1" title="Previous year">&#x2039;</button>
+        <span style="font-size:11px;color:var(--text-faint)">${year}</span>
+        <button class="proj-nav-btn" data-heatmap-year="1" title="Next year"${year >= todayYear ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#x203A;</button>
       </div>
+    </div>
+    <div class="heatmap-month-row" style="grid-template-columns:${cols}">
+      <span></span>
+      ${monthLabels.map(({month, col}) => `<span class="heatmap-month-lbl" style="grid-column:${col + 2}">${MONTH_NAMES[month]}</span>`).join('')}
+    </div>
+    <div class="proj-heatmap" style="grid-template-columns:${cols};grid-template-rows:repeat(7,1fr)">
+      ${DAY_LABELS.map(l => `<span class="hm-day-lbl">${l}</span>`).join('')}
+      ${cells.map(c => {
+        const cls = c.isOut || c.isFuture ? 'heatmap-cell empty' : c.active ? 'heatmap-cell active' : 'heatmap-cell';
+        return `<div class="${cls}" title="${c.iso}${c.count ? ` · ${c.count} task${c.count > 1 ? 's' : ''} done` : ''}"></div>`;
+      }).join('')}
     </div>`;
 }
 
@@ -114,7 +144,8 @@ let state = {
   spendingPage: 1,
   debtsPage: 1,
   incomeFilter: 'month',
-  incomePickedDate: null
+  incomePickedDate: null,
+  heatmapYear: new Date().getFullYear()
 };
 
 /* =========================================================
@@ -511,7 +542,6 @@ function renderLifeHome() {
             `).join('')}
           </ul>
         ` : '<div style="font-size:12px;color:var(--text-faint);margin-top:8px">No tasks yet.</div>'}
-        ${renderProjectHeatmap(current.tasks)}
       ` : `<div style="font-size:12px;color:var(--text-faint)">No active projects.</div>`}
     </div>`;
 
@@ -537,8 +567,14 @@ function renderLifeHome() {
       <button class="pill" data-go="life:projects">Projects</button>
     </div>` : '';
 
-  const stacked = scheduleBlock(60) + commitmentsBlock(120) + projectsBlock(180);
-  const hero    = projectsBlock(60) + scheduleBlock(120) + commitmentsBlock(180);
+  const allTasks = (state.projects || []).flatMap(p => p.tasks || []);
+  const heatmapBlock = `
+    <div class="card" style="animation-delay:240ms">
+      ${renderProjectHeatmap(allTasks, state.heatmapYear)}
+    </div>`;
+
+  const stacked = scheduleBlock(60) + commitmentsBlock(120) + projectsBlock(180) + heatmapBlock;
+  const hero    = projectsBlock(60) + scheduleBlock(120) + commitmentsBlock(180) + heatmapBlock;
 
   return `
     ${topbar()}
@@ -671,24 +707,13 @@ function animateComplianceRing() {
   const card = document.getElementById('commit-compliance-card');
   if (!card) return;
   card.querySelectorAll('.compliance-arc').forEach(arc => {
-    const full   = parseFloat(arc.dataset.full || arc.getAttribute('stroke-dasharray') || 213.63);
-    const pct    = parseFloat(arc.dataset.pct || 0);
-    const target = full - (pct / 100 * full);
-    requestAnimationFrame(() => requestAnimationFrame(() => { arc.style.strokeDashoffset = target; }));
+    const full = parseFloat(arc.dataset.full || arc.getAttribute('stroke-dasharray') || 213.63);
+    const pct  = parseFloat(arc.dataset.pct || 0);
+    arc.style.strokeDashoffset = full - (pct / 100 * full);
   });
-  const pctEls   = card.querySelectorAll('.compliance-pct-text');
   const firstArc = card.querySelector('.compliance-arc');
-  const target   = firstArc ? parseFloat(firstArc.dataset.pct || 0) : 0;
-  if (!target) { pctEls.forEach(el => el.textContent = '0'); return; }
-  const start = performance.now();
-  const dur   = 600;
-  (function step(now) {
-    const t    = Math.min(1, (now - start) / dur);
-    const ease = 1 - Math.pow(1 - t, 3);
-    pctEls.forEach(el => el.textContent = Math.round(target * ease));
-    if (t < 1) requestAnimationFrame(step);
-    else pctEls.forEach(el => el.textContent = target);
-  })(performance.now());
+  const pct = firstArc ? parseFloat(firstArc.dataset.pct || 0) : 0;
+  card.querySelectorAll('.compliance-pct-text').forEach(el => el.textContent = Math.round(pct));
 }
 
 function updateComplianceRing() {
@@ -801,7 +826,7 @@ function renderCommitments() {
           <circle class="compliance-arc" cx="40" cy="40" r="34" fill="none"
             stroke="var(--accent)" stroke-width="6" stroke-linecap="round"
             stroke-dasharray="213.63"
-            style="stroke-dashoffset:213.63;transform:rotate(-90deg);transform-origin:40px 40px;transition:stroke-dashoffset 600ms ease-out"
+            style="stroke-dashoffset:213.63;transform:rotate(-90deg);transform-origin:40px 40px"
             data-pct="${overallPct}" data-full="213.63"/>
           <text x="40" y="40" text-anchor="middle" dominant-baseline="middle"
             font-size="18" font-weight="300" fill="var(--accent)"
@@ -812,7 +837,7 @@ function renderCommitments() {
           <circle class="compliance-arc" cx="50" cy="50" r="42" fill="none"
             stroke="var(--accent)" stroke-width="7" stroke-linecap="round"
             stroke-dasharray="263.89"
-            style="stroke-dashoffset:263.89;transform:rotate(-90deg);transform-origin:50px 50px;transition:stroke-dashoffset 600ms ease-out"
+            style="stroke-dashoffset:263.89;transform:rotate(-90deg);transform-origin:50px 50px"
             data-pct="${overallPct}" data-full="263.89"/>
           <text x="50" y="46" text-anchor="middle" dominant-baseline="middle"
             font-size="20" font-weight="300" fill="var(--accent)"
@@ -1452,7 +1477,7 @@ function renderFinanceOverview() {
         ${days.map((d,i) => `
           <div class="col ${d.total===0?'dim':''}">
             <div class="bar-track">
-              <div class="bar" style="height:${d.total===0?6:Math.max(8,(d.total/max)*100)}%; transition-delay:${i*40}ms"></div>
+              <div class="bar" style="height:${d.total===0?6:Math.max(8,(d.total/max)*100)}%"></div>
             </div>
             <div class="lbl">${d.label}</div>
           </div>`).join('')}
@@ -1687,23 +1712,14 @@ function animateNumbers() {
   document.querySelectorAll('.num[data-target]').forEach(el => {
     const target = Number(el.dataset.target || 0);
     const prefix = el.dataset.prefix || '';
+    const fmt = n => prefix + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     const start = performance.now();
     const dur = 600;
-    const fmt = (n) => prefix + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    function step(now) {
+    (function step(now) {
       const t = Math.min(1, (now - start) / dur);
-      const eased = 1 - Math.pow(1 - t, 3);
-      el.textContent = fmt(target * eased);
+      el.textContent = fmt(target * (1 - Math.pow(1 - t, 3)));
       if (t < 1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
-  });
-}
-function animateBars() {
-  document.querySelectorAll('.bar-chart .bar').forEach(b => {
-    const h = b.style.height;
-    b.style.height = '0%';
-    requestAnimationFrame(() => requestAnimationFrame(() => { b.style.height = h; }));
+    })(performance.now());
   });
 }
 
@@ -1853,6 +1869,15 @@ function bindMainEvents() {
 
   // navigation pills
   main.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => setActiveTab(el.dataset.go)));
+
+  // heatmap: year nav
+  main.querySelectorAll('[data-heatmap-year]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dir = Number(el.dataset.heatmapYear);
+    const todayYear = new Date().getFullYear();
+    state.heatmapYear = Math.min(todayYear, (state.heatmapYear || todayYear) + dir);
+    render();
+  }));
 
   // home: cycle through active projects
   main.querySelectorAll('[data-home-proj-nav]').forEach(el => el.addEventListener('click', (e) => {
@@ -2035,6 +2060,22 @@ function bindMainEvents() {
     const lbl = document.getElementById(`today-commit-text-${id}`);
     if (lbl) lbl.classList.toggle('done', newChecked);
     updateComplianceRing();
+    const newScore = computeDailyScore();
+    const scoreEl = document.querySelector('.num[data-target]');
+    if (scoreEl) {
+      scoreEl.dataset.target = newScore;
+      const sc = newScore >= 70 ? 'var(--accent)' : newScore >= 40 ? '#c8a850' : 'var(--danger)';
+      scoreEl.style.color = sc;
+      const prefix = scoreEl.dataset.prefix || '';
+      const fmt = n => prefix + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      const prev = Number(scoreEl.textContent.replace(/\D/g,'')) || 0;
+      const start = performance.now();
+      (function step(now) {
+        const t = Math.min(1, (now - start) / 400);
+        scoreEl.textContent = fmt(prev + (newScore - prev) * (1 - Math.pow(1 - t, 3)));
+        if (t < 1) requestAnimationFrame(step);
+      })(performance.now());
+    }
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
       { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked },
       { onConflict: 'goal_id,date' }
@@ -2510,11 +2551,7 @@ function bindMainEvents() {
         const card = main.querySelector(`.note-card[data-open-note="${id}"]`);
         state.notes = state.notes.filter(n => n.id !== id);
         if (state.activeNoteId === id) state.activeNoteId = null;
-        if (card) {
-          card.style.transition = 'opacity 200ms ease';
-          card.style.opacity = '0';
-          setTimeout(() => card.remove(), 200);
-        }
+        if (card) card.remove();
         dbCall(() => sb.from('notes').delete().eq('id', id));
       }
     });
