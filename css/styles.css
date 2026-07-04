@@ -680,6 +680,14 @@
   .goal-item > .list-item { border-bottom: 0; }
   .goal-item:hover .fin-acts { opacity: 1; }
 
+  .goal-reorder { display: flex; flex-direction: column; gap: 0; flex-shrink: 0; margin-right: 2px; }
+  .goal-move-btn {
+    color: var(--text-dim); padding: 0 4px; cursor: pointer;
+    font-size: 10px; line-height: 1.3; transition: color var(--t-fast) ease;
+  }
+  .goal-move-btn:hover:not(:disabled) { color: var(--accent); }
+  .goal-move-btn:disabled { color: var(--border); cursor: default; }
+
   /* ============ SCHEDULE EDIT ============ */
   .sched-item { display: block; border-bottom: 1px solid var(--border); }
   .sched-item:last-child { border-bottom: 0; }

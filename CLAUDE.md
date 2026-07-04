@@ -125,6 +125,7 @@ Index on `(user_id, date)`.
 | `type` | text | `'do'` or `'dont'` (check constraint in schema.sql) |
 | `text` | text | Goal description |
 | `checked` | boolean | Default false — legacy column, no longer written to; per-day state now lives in `goal_logs` |
+| `order_index` | integer | Default 0. Manual sort position within its `type` (dos/donts ordered independently). Set on insert (`items.length`), swapped in pairs when reordered via the ▲/▼ buttons on Commitments. Load query orders by `order_index` then `created_at`. |
 | `created_at` | timestamptz | |
 
 ### `goal_logs`

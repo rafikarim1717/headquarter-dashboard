@@ -497,3 +497,23 @@ DO $$ BEGIN
     FOR DELETE USING (auth.uid() = user_id);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+
+-- ────────────────────────────────────────────────────────────
+-- 13. goals.order_index
+--     Lets Do's / Don't's be manually reordered on the Commitments page.
+--     Safe to re-run on an existing goals table that predates this column.
+--     Backfill gives existing rows a stable order matching their old
+--     created_at ordering, scoped per user + type (dos and donts order independently).
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE goals ADD COLUMN IF NOT EXISTS order_index integer NOT NULL DEFAULT 0;
+
+WITH ranked AS (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id, type ORDER BY created_at) - 1 AS rn
+  FROM goals
+)
+UPDATE goals
+SET order_index = ranked.rn
+FROM ranked
+WHERE goals.id = ranked.id
+  AND goals.order_index = 0;

@@ -61,7 +61,7 @@ async function loadFromSupabase(userId) {
   ] = await Promise.all([
     sb.from('profiles').select('*').eq('id', userId).maybeSingle(),
     sb.from('schedule_events').select('*').eq('user_id', userId),
-    sb.from('goals').select('*').eq('user_id', userId).order('created_at'),
+    sb.from('goals').select('*').eq('user_id', userId).order('order_index').order('created_at'),
     sb.from('goal_logs').select('*').eq('user_id', userId),
     sb.from('projects').select('*').eq('user_id', userId).order('created_at'),
     sb.from('project_tasks').select('*').eq('user_id', userId).order('created_at'),
@@ -166,8 +166,8 @@ async function seedSampleData(userId) {
 
   // Goals
   const goalRows = [
-    ...def.goals.dos.map(g => ({ user_id: userId, type: 'do', text: g.text })),
-    ...def.goals.donts.map(g => ({ user_id: userId, type: 'dont', text: g.text }))
+    ...def.goals.dos.map((g, i) => ({ user_id: userId, type: 'do', text: g.text, order_index: i })),
+    ...def.goals.donts.map((g, i) => ({ user_id: userId, type: 'dont', text: g.text, order_index: i }))
   ];
   const { data: goalData } = await sb.from('goals').insert(goalRows).select();
   state.goals.dos   = (goalData || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text }));

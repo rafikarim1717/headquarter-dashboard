@@ -759,11 +759,15 @@ function renderCommitments() {
       <div class="card" style="animation-delay:40ms">
         <div class="section-title" style="margin-top:0">${title} <span class="meta">${items.filter(i => getTodayLog(i.id)?.checked).length} / ${items.length}</span></div>
         <ul class="list" style="padding:0">
-          ${items.map(i => {
+          ${items.map((i, idx) => {
             const isChecked = getTodayLog(i.id)?.checked || false;
             return `
             <li class="goal-item">
               <div class="list-item" style="padding:10px 0;align-items:center">
+                <div class="goal-reorder">
+                  <button class="goal-move-btn" data-move-goal="${key}|${i.id}|-1" ${idx === 0 ? 'disabled' : ''}>&#x25B4;</button>
+                  <button class="goal-move-btn" data-move-goal="${key}|${i.id}|1" ${idx === items.length - 1 ? 'disabled' : ''}>&#x25BE;</button>
+                </div>
                 <span class="check ${isChecked ? 'checked' : ''}" data-toggle-goal="${key}|${i.id}"></span>
                 <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
                 <div class="fin-acts">
@@ -2192,6 +2196,19 @@ function bindMainEvents() {
     });
   }));
 
+  main.querySelectorAll('[data-move-goal]').forEach(el => el.addEventListener('click', () => {
+    const [k, id, dirStr] = el.dataset.moveGoal.split('|');
+    const dir = Number(dirStr);
+    const list = state.goals[k] || [];
+    const idx = list.findIndex(x => x.id === id);
+    const swapIdx = idx + dir;
+    if (idx === -1 || swapIdx < 0 || swapIdx >= list.length) return;
+    [list[idx], list[swapIdx]] = [list[swapIdx], list[idx]];
+    render();
+    dbCall(() => sb.from('goals').update({ order_index: idx }).eq('id', list[idx].id));
+    dbCall(() => sb.from('goals').update({ order_index: swapIdx }).eq('id', list[swapIdx].id));
+  }));
+
   main.querySelectorAll('[data-modal-add^="goal-"]').forEach(btn => btn.addEventListener('click', () => {
     const key = btn.dataset.modalAdd.replace('goal-', '');
     const isDo = key === 'dos';
@@ -2203,7 +2220,8 @@ function bindMainEvents() {
         const trimmed = text.trim();
         if (!trimmed) return;
         const type = isDo ? 'do' : 'dont';
-        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text: trimmed }).select().single());
+        const order_index = state.goals[key].length;
+        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text: trimmed, order_index }).select().single());
         if (data) { state.goals[key].push({ id: data.id, text: trimmed }); render(); }
       }
     });

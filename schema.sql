@@ -50,6 +50,7 @@ create table if not exists goals (
   type text not null check (type in ('do', 'dont')),
   text text not null,
   checked boolean not null default false,
+  order_index integer not null default 0,
   created_at timestamptz not null default now()
 );
 
