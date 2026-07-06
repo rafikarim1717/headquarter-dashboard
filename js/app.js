@@ -116,6 +116,7 @@ const firedAlarms = new Set(); // event IDs that have already fired today
 let alarmInterval = null;
 let clockIntervalId = null;
 let notesTimestampIntervalId = null;
+let draggedGoalId = null; // id of the goal/commitment card currently being drag-reordered
 
 let state = {
   profile: { name: 'Friend' },
@@ -137,7 +138,11 @@ let state = {
   notesSort: 'newest',
   notesFilter: 'all',
   notesDisplay: 'grid',
-  commitPreviewTab: 'weekly',
+  commitPreviewTab: 'week',   // 'day' | 'week' | 'month' | 'year'
+  commitViewDay: todayISO(),
+  commitViewWeekStart: null,  // Monday ISO date; null = current week
+  commitViewMonth: todayISO().slice(0, 7),
+  commitHeatmapYear: new Date().getFullYear(),
   incomePage: 1,
   spendingFilter: 'daily',
   spendingPickedDate: null,
@@ -681,12 +686,14 @@ function getDayCompliancePct(dateIso) {
   }).length;
   return (checked / allGoals.length) * 100;
 }
-function getCurrentWeekDays() {
-  const today = new Date();
-  const dow = today.getDay();
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
-  monday.setHours(0, 0, 0, 0);
+function getMondayOf(dateIso) {
+  const d = new Date(dateIso + 'T00:00:00');
+  const dow = d.getDay();
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+  return isoLocal(d);
+}
+function getWeekDays(mondayIso) {
+  const monday = new Date(mondayIso + 'T00:00:00');
   const days = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
@@ -694,6 +701,63 @@ function getCurrentWeekDays() {
     days.push(d);
   }
   return days;
+}
+function buildCommitYearHeatmapData(year) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const jan1 = new Date(year, 0, 1);
+  const start = new Date(year, 0, 1 - jan1.getDay());
+  const yearEnd = year < today.getFullYear() ? new Date(year, 11, 31) : today;
+  const end = new Date(yearEnd.getFullYear(), yearEnd.getMonth(), yearEnd.getDate() + (6 - yearEnd.getDay()));
+  const cells = [], monthLabels = [];
+  let col = 0, prevMonth = -1, d = new Date(start);
+  let sum = 0, dayCount = 0;
+  while (d <= end) {
+    for (let row = 0; row < 7; row++) {
+      const iso = isoLocal(d);
+      const inYear = d.getFullYear() === year;
+      const m = d.getMonth();
+      const isFuture = d > today;
+      if (row === 0 && inYear && m !== prevMonth) { monthLabels.push({ month: m, col }); prevMonth = m; }
+      let pct = 0;
+      if (inYear && !isFuture) {
+        pct = getDayCompliancePct(iso);
+        sum += pct; dayCount++;
+      }
+      cells.push({ iso, pct, isFuture, isOut: !inYear });
+      d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    }
+    col++;
+  }
+  const avgPct = dayCount ? Math.round(sum / dayCount) : 0;
+  return { cells, monthLabels, totalCols: col, avgPct };
+}
+function renderCommitYearHeatmap(year, hasGoals) {
+  const { cells, monthLabels, totalCols, avgPct } = buildCommitYearHeatmapData(year);
+  const todayYear = new Date().getFullYear();
+  const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+  const cols = `24px repeat(${totalCols},1fr)`;
+  return `
+    <div class="heatmap-header">
+      <span class="heatmap-total">${hasGoals ? avgPct + '% average compliance in ' + year : 'No commitments yet'}</span>
+      <div class="heatmap-year-nav">
+        <button class="proj-nav-btn" data-commit-year-nav="-1" title="Previous year">&#8249;</button>
+        <span style="font-size:11px;color:var(--text-faint)">${year}</span>
+        <button class="proj-nav-btn" data-commit-year-nav="1" title="Next year"${year >= todayYear ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
+      </div>
+    </div>
+    <div class="heatmap-month-row" style="grid-template-columns:${cols}">
+      <span></span>
+      ${monthLabels.map(({month, col}) => `<span class="heatmap-month-lbl" style="grid-column:${col + 2}">${MONTH_NAMES[month]}</span>`).join('')}
+    </div>
+    <div class="proj-heatmap" style="grid-template-columns:${cols};grid-template-rows:repeat(7,1fr)">
+      ${DAY_LABELS.map(l => `<span class="hm-day-lbl">${l}</span>`).join('')}
+      ${cells.map(c => {
+        if (c.isOut || c.isFuture) return `<div class="heatmap-cell empty"></div>`;
+        const lvl = c.pct >= 80 ? 'high' : c.pct >= 40 ? 'mid' : c.pct > 0 ? 'low' : '';
+        const cls = lvl ? `heatmap-cell lvl-${lvl}` : 'heatmap-cell';
+        return `<div class="${cls}" title="${c.iso} · ${Math.round(c.pct)}%"></div>`;
+      }).join('')}
+    </div>`;
 }
 function computeDailyScore() {
   const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
@@ -758,16 +822,12 @@ function renderCommitments() {
     return `
       <div class="card" style="animation-delay:40ms">
         <div class="section-title" style="margin-top:0">${title} <span class="meta">${items.filter(i => getTodayLog(i.id)?.checked).length} / ${items.length}</span></div>
-        <ul class="list" style="padding:0">
-          ${items.map((i, idx) => {
+        <ul class="list" style="padding:0" data-goal-list="${key}">
+          ${items.map(i => {
             const isChecked = getTodayLog(i.id)?.checked || false;
             return `
-            <li class="goal-item">
+            <li class="goal-item" draggable="true" data-goal-drag="${i.id}">
               <div class="list-item" style="padding:10px 0;align-items:center">
-                <div class="goal-reorder">
-                  <button class="goal-move-btn" data-move-goal="${key}|${i.id}|-1" ${idx === 0 ? 'disabled' : ''}>&#x25B4;</button>
-                  <button class="goal-move-btn" data-move-goal="${key}|${i.id}|1" ${idx === items.length - 1 ? 'disabled' : ''}>&#x25BE;</button>
-                </div>
                 <span class="check ${isChecked ? 'checked' : ''}" data-toggle-goal="${key}|${i.id}"></span>
                 <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
                 <div class="fin-acts">
@@ -782,42 +842,98 @@ function renderCommitments() {
       </div>`;
   }
 
-  // Weekly recap
-  const weekDayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const weekDays = getCurrentWeekDays();
-  const weeklyHtml = weekDays.map((d, i) => {
-    const iso = isoLocal(d);
-    const isFuture = iso > today;
-    const isToday  = iso === today;
-    if (isFuture) return `<div class="week-day"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle future">–</div><div class="week-pct">–</div></div>`;
-    const pct = getDayCompliancePct(iso);
-    const cls  = pct >= 80 ? 'full' : pct >= 40 ? 'half' : 'low';
-    const char = pct >= 80 ? '●' : pct >= 40 ? '◐' : '○';
-    return `<div class="week-day${isToday ? ' today' : ''}"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle ${cls}">${char}</div><div class="week-pct">${Math.round(pct)}%</div></div>`;
-  }).join('');
+  // History tab content — Day / Week / Month / Year (all derived from goalLogs, already fully loaded)
+  const tab = state.commitPreviewTab;
+  let tabBodyHtml = '';
 
-  // Monthly compliance calendar
-  const [vy, vm] = today.slice(0, 7).split('-').map(Number);
-  const monthLabel  = new Date(vy, vm - 1, 1).toLocaleDateString(undefined, { month: 'long' });
-  const firstDow    = new Date(vy, vm - 1, 1).getDay();
-  const daysInMonth = new Date(vy, vm, 0).getDate();
-  const calDows = ['S','M','T','W','T','F','S'];
-  let monthCalHtml = calDows.map(d => `<div class="commit-cal-dow">${d}</div>`).join('');
-  for (let i = 0; i < firstDow; i++) monthCalHtml += `<div class="commit-cal-cell other"></div>`;
-  for (let day = 1; day <= daysInMonth; day++) {
-    const iso = `${String(vy).padStart(4,'0')}-${String(vm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const isToday  = iso === today;
-    const isFuture = iso > today;
-    let bg = '';
-    let tt = '';
-    if (!isFuture && totalGoals > 0) {
+  if (tab === 'day') {
+    const viewDay  = state.commitViewDay || today;
+    const isToday  = viewDay === today;
+    const dayLabel = isToday ? 'Today' : new Date(viewDay + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    const dayPct   = totalGoals ? Math.round(getDayCompliancePct(viewDay)) : 0;
+    const rows = allGoals.map(g => {
+      const isDo    = dos.includes(g);
+      const checked = getLogByDate(g.id, viewDay)?.checked || false;
+      return `
+        <li class="commit-day-row${checked ? ' checked' : ''}">
+          <span class="commit-day-icon">${checked ? '&#10003;' : '&#8211;'}</span>
+          <span class="commit-day-text">${escapeHtml(g.text)}</span>
+          <span class="commit-day-type">${isDo ? "Do" : "Don't"}</span>
+        </li>`;
+    }).join('');
+    tabBodyHtml = `
+      <div class="commit-day-nav">
+        <button class="proj-nav-btn" data-commit-day-nav="-1" title="Previous day">&#8249;</button>
+        <span class="commit-day-label">${dayLabel}</span>
+        <button class="proj-nav-btn" data-commit-day-nav="1" title="Next day"${isToday ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
+        ${!isToday ? `<button class="commit-tab-btn" data-commit-day-today>Today</button>` : ''}
+      </div>
+      ${totalGoals
+        ? `<div class="commit-day-pct">${dayPct}% compliance</div><ul class="commit-day-list">${rows}</ul>`
+        : `<div class="commit-day-pct" style="color:var(--text-faint)">No commitments yet.</div>`
+      }`;
+
+  } else if (tab === 'week') {
+    const weekDayNames  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const weekMonday    = state.commitViewWeekStart || getMondayOf(today);
+    const isCurrentWeek = weekMonday === getMondayOf(today);
+    const weekDays      = getWeekDays(weekMonday);
+    const weekRangeLabel = `${fmtDate(weekDays[0])} – ${fmtDate(weekDays[6])}`;
+    const weeklyHtml = weekDays.map((d, i) => {
+      const iso = isoLocal(d);
+      const isFuture = iso > today;
+      const isToday  = iso === today;
+      if (isFuture) return `<div class="week-day"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle future">–</div><div class="week-pct">–</div></div>`;
       const pct = getDayCompliancePct(iso);
-      if (pct >= 80)      bg = `background:color-mix(in oklab, var(--accent) 80%, transparent);`;
-      else if (pct >= 40) bg = `background:color-mix(in oklab, var(--accent) 30%, transparent);`;
-      else if (pct > 0)   bg = `background:color-mix(in oklab, var(--danger) 30%, transparent);`;
-      if (pct > 0) tt = `title="${Math.round(pct)}%"`;
+      const cls  = pct >= 80 ? 'full' : pct >= 40 ? 'half' : 'low';
+      const char = pct >= 80 ? '●' : pct >= 40 ? '◐' : '○';
+      return `<div class="week-day${isToday ? ' today' : ''}"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle ${cls}">${char}</div><div class="week-pct">${Math.round(pct)}%</div></div>`;
+    }).join('');
+    tabBodyHtml = `
+      <div class="commit-day-nav">
+        <button class="proj-nav-btn" data-commit-week-nav="-1" title="Previous week">&#8249;</button>
+        <span class="commit-day-label">${weekRangeLabel}</span>
+        <button class="proj-nav-btn" data-commit-week-nav="1" title="Next week"${isCurrentWeek ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
+        ${!isCurrentWeek ? `<button class="commit-tab-btn" data-commit-week-today>This week</button>` : ''}
+      </div>
+      <div class="week-strip" style="margin-top:12px">${weeklyHtml}</div>`;
+
+  } else if (tab === 'month') {
+    const viewMonthStr   = state.commitViewMonth || today.slice(0, 7);
+    const [vy, vm]       = viewMonthStr.split('-').map(Number);
+    const monthLabel     = new Date(vy, vm - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    const isCurrentMonth = viewMonthStr === today.slice(0, 7);
+    const firstDow       = new Date(vy, vm - 1, 1).getDay();
+    const daysInMonth    = new Date(vy, vm, 0).getDate();
+    const calDows = ['S','M','T','W','T','F','S'];
+    let monthCalHtml = calDows.map(d => `<div class="commit-cal-dow">${d}</div>`).join('');
+    for (let i = 0; i < firstDow; i++) monthCalHtml += `<div class="commit-cal-cell other"></div>`;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const iso = `${String(vy).padStart(4,'0')}-${String(vm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      const isToday  = iso === today;
+      const isFuture = iso > today;
+      let bg = '';
+      let tt = '';
+      if (!isFuture && totalGoals > 0) {
+        const pct = getDayCompliancePct(iso);
+        if (pct >= 80)      bg = `background:color-mix(in oklab, var(--accent) 80%, transparent);`;
+        else if (pct >= 40) bg = `background:color-mix(in oklab, var(--accent) 30%, transparent);`;
+        else if (pct > 0)   bg = `background:color-mix(in oklab, var(--danger) 30%, transparent);`;
+        if (pct > 0) tt = `title="${Math.round(pct)}%"`;
+      }
+      monthCalHtml += `<div class="commit-cal-cell${isToday ? ' today' : ''}${isFuture ? ' future' : ''}" style="${bg}" ${tt}>${day}</div>`;
     }
-    monthCalHtml += `<div class="commit-cal-cell${isToday ? ' today' : ''}${isFuture ? ' future' : ''}" style="${bg}" ${tt}>${day}</div>`;
+    tabBodyHtml = `
+      <div class="commit-day-nav">
+        <button class="proj-nav-btn" data-commit-month-nav="-1" title="Previous month">&#8249;</button>
+        <span class="commit-day-label">${monthLabel}</span>
+        <button class="proj-nav-btn" data-commit-month-nav="1" title="Next month"${isCurrentMonth ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
+        ${!isCurrentMonth ? `<button class="commit-tab-btn" data-commit-month-today>This month</button>` : ''}
+      </div>
+      <div class="commit-cal-grid">${monthCalHtml}</div>`;
+
+  } else {
+    tabBodyHtml = renderCommitYearHeatmap(state.commitHeatmapYear, totalGoals > 0);
   }
 
   return `
@@ -868,13 +984,12 @@ function renderCommitments() {
     <div style="margin-top:16px">${col("Don'ts", donts, 'donts')}</div>
     <div class="card" style="margin-top:16px;animation-delay:80ms">
       <div class="commit-preview-tabs">
-        <button class="commit-tab-btn${state.commitPreviewTab === 'weekly' ? ' active' : ''}" data-commit-tab="weekly">Weekly</button>
-        <button class="commit-tab-btn${state.commitPreviewTab === 'monthly' ? ' active' : ''}" data-commit-tab="monthly">Monthly</button>
+        <button class="commit-tab-btn${tab === 'day'   ? ' active' : ''}" data-commit-tab="day">Day</button>
+        <button class="commit-tab-btn${tab === 'week'  ? ' active' : ''}" data-commit-tab="week">Week</button>
+        <button class="commit-tab-btn${tab === 'month' ? ' active' : ''}" data-commit-tab="month">Month</button>
+        <button class="commit-tab-btn${tab === 'year'  ? ' active' : ''}" data-commit-tab="year">Year</button>
       </div>
-      ${state.commitPreviewTab === 'weekly'
-        ? `<div class="week-strip" style="margin-top:12px">${weeklyHtml}</div>`
-        : `<div style="font-size:11px;color:var(--text-faint);margin-bottom:8px;text-align:right">${monthLabel}</div><div class="commit-cal-grid">${monthCalHtml}</div>`
-      }
+      ${tabBodyHtml}
     </div>
   `;
 }
@@ -2017,6 +2132,53 @@ function bindMainEvents() {
     render();
   }));
 
+  // commitments history nav — Day
+  main.querySelectorAll('[data-commit-day-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.commitDayNav);
+    const d = new Date((state.commitViewDay || todayISO()) + 'T00:00:00');
+    d.setDate(d.getDate() + dir);
+    const iso = isoLocal(d);
+    if (iso > todayISO()) return;
+    state.commitViewDay = iso;
+    render();
+  }));
+  const commitDayToday = main.querySelector('[data-commit-day-today]');
+  if (commitDayToday) commitDayToday.addEventListener('click', () => { state.commitViewDay = todayISO(); render(); });
+
+  // commitments history nav — Week
+  main.querySelectorAll('[data-commit-week-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.commitWeekNav);
+    const monday = state.commitViewWeekStart || getMondayOf(todayISO());
+    const d = new Date(monday + 'T00:00:00');
+    d.setDate(d.getDate() + dir * 7);
+    const iso = isoLocal(d);
+    if (iso > getMondayOf(todayISO())) return;
+    state.commitViewWeekStart = iso;
+    render();
+  }));
+  const commitWeekToday = main.querySelector('[data-commit-week-today]');
+  if (commitWeekToday) commitWeekToday.addEventListener('click', () => { state.commitViewWeekStart = null; render(); });
+
+  // commitments history nav — Month
+  main.querySelectorAll('[data-commit-month-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.commitMonthNav);
+    const [y, m] = (state.commitViewMonth || todayISO().slice(0, 7)).split('-').map(Number);
+    const next = ymLocal(new Date(y, m - 1 + dir, 1));
+    if (next > todayISO().slice(0, 7)) return;
+    state.commitViewMonth = next;
+    render();
+  }));
+  const commitMonthToday = main.querySelector('[data-commit-month-today]');
+  if (commitMonthToday) commitMonthToday.addEventListener('click', () => { state.commitViewMonth = todayISO().slice(0, 7); render(); });
+
+  // commitments history nav — Year
+  main.querySelectorAll('[data-commit-year-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.commitYearNav);
+    const todayYear = new Date().getFullYear();
+    state.commitHeatmapYear = Math.min(todayYear, (state.commitHeatmapYear || todayYear) + dir);
+    render();
+  }));
+
   // goal toggle → upsert goal_logs
   main.querySelectorAll('[data-toggle-goal]').forEach(el => el.addEventListener('click', async () => {
     const [k, id] = el.dataset.toggleGoal.split('|');
@@ -2196,18 +2358,59 @@ function bindMainEvents() {
     });
   }));
 
-  main.querySelectorAll('[data-move-goal]').forEach(el => el.addEventListener('click', () => {
-    const [k, id, dirStr] = el.dataset.moveGoal.split('|');
-    const dir = Number(dirStr);
-    const list = state.goals[k] || [];
-    const idx = list.findIndex(x => x.id === id);
-    const swapIdx = idx + dir;
-    if (idx === -1 || swapIdx < 0 || swapIdx >= list.length) return;
-    [list[idx], list[swapIdx]] = [list[swapIdx], list[idx]];
-    render();
-    dbCall(() => sb.from('goals').update({ order_index: idx }).eq('id', list[idx].id));
-    dbCall(() => sb.from('goals').update({ order_index: swapIdx }).eq('id', list[swapIdx].id));
-  }));
+  main.querySelectorAll('[data-goal-list]').forEach(ul => {
+    const key = ul.dataset.goalList;
+
+    ul.addEventListener('dragstart', e => {
+      const li = e.target.closest('.goal-item');
+      if (!li) return;
+      draggedGoalId = li.dataset.goalDrag;
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => li.classList.add('dragging'));
+    });
+
+    ul.addEventListener('dragend', () => {
+      ul.querySelectorAll('.goal-item').forEach(x => x.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom'));
+      draggedGoalId = null;
+    });
+
+    ul.addEventListener('dragover', e => {
+      if (!draggedGoalId) return;
+      e.preventDefault();
+      const li = e.target.closest('.goal-item');
+      ul.querySelectorAll('.goal-item').forEach(x => x.classList.remove('drag-over-top', 'drag-over-bottom'));
+      if (li && li.dataset.goalDrag !== draggedGoalId) {
+        const rect = li.getBoundingClientRect();
+        const before = e.clientY - rect.top < rect.height / 2;
+        li.classList.add(before ? 'drag-over-top' : 'drag-over-bottom');
+      }
+    });
+
+    ul.addEventListener('drop', e => {
+      if (!draggedGoalId) return;
+      e.preventDefault();
+      const list = state.goals[key] || [];
+      const fromIdx = list.findIndex(x => x.id === draggedGoalId);
+      if (fromIdx === -1) return;
+
+      const li = e.target.closest('.goal-item');
+      let toIdx = list.length - 1;
+      if (li && li.dataset.goalDrag !== draggedGoalId) {
+        const targetIdx = list.findIndex(x => x.id === li.dataset.goalDrag);
+        const rect = li.getBoundingClientRect();
+        const before = e.clientY - rect.top < rect.height / 2;
+        toIdx = targetIdx + (before ? 0 : 1);
+        if (toIdx > fromIdx) toIdx--;
+      }
+      if (toIdx === fromIdx) return;
+
+      const [moved] = list.splice(fromIdx, 1);
+      list.splice(toIdx, 0, moved);
+      draggedGoalId = null;
+      render();
+      list.forEach((g, idx) => dbCall(() => sb.from('goals').update({ order_index: idx }).eq('id', g.id)));
+    });
+  });
 
   main.querySelectorAll('[data-modal-add^="goal-"]').forEach(btn => btn.addEventListener('click', () => {
     const key = btn.dataset.modalAdd.replace('goal-', '');
