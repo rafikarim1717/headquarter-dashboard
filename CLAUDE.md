@@ -51,7 +51,7 @@ const ROUTES = {
 };
 ```
 
-> Habits/Goals/Focus as separate pages no longer exist — they were merged into **Commitments** (do's/don'ts with daily check-off, streak ring, weekly/monthly compliance heatmap). **Projects** is a newer page (objective → small tasks → progress bar → activity heatmap) that replaced the old single-board Focus page.
+> Habits/Goals/Focus as separate pages no longer exist — they were merged into **Commitments** (do's/don'ts with daily check-off, drag-to-reorder, streak ring, and a Day/Week/Month/Year compliance history view). **Projects** is a newer page (objective → small tasks → progress bar → activity heatmap) that replaced the old single-board Focus page.
 
 `render()` fades `<main>` out (opacity 0), waits 60ms, replaces `innerHTML` via `ROUTES[tab]()`, calls `bindMainEvents()` + `animateNumbers()` + `animateBars()`, then fades back in. The page is **always fully re-rendered** from state — no partial DOM patching (except some in-place edit updates for performance).
 
@@ -80,11 +80,15 @@ let state = {
   notesSort: 'newest',
   notesFilter: 'all',
   notesDisplay: 'grid',
-  commitPreviewTab: 'weekly'
+  commitPreviewTab: 'week',   // 'day' | 'week' | 'month' | 'year' — Commitments history tab
+  commitViewDay: todayISO(),
+  commitViewWeekStart: null,  // Monday ISO date; null = current week
+  commitViewMonth: todayISO().slice(0, 7),
+  commitHeatmapYear: new Date().getFullYear()
 };
 ```
 
-`goals`/`goalLogs` together implement "Commitments" — `goals` are the static do/dont items, `goalLogs` is one row per `(goal_id, date)` recording whether it was checked that day. This is what powers the daily compliance ring, the weekly strip, and the monthly compliance calendar on the Commitments page.
+`goals`/`goalLogs` together implement "Commitments" — `goals` are the static do/dont items, `goalLogs` is one row per `(goal_id, date)` recording whether it was checked that day. This is what powers the daily compliance ring and the Day/Week/Month/Year history section on the Commitments page (see below).
 
 UI navigation prefs (`activeTab`, `selectedDay`, `viewMonth`) are also saved to `localStorage('hq.prefs')` and restored on login.
 
@@ -125,7 +129,7 @@ Index on `(user_id, date)`.
 | `type` | text | `'do'` or `'dont'` (check constraint in schema.sql) |
 | `text` | text | Goal description |
 | `checked` | boolean | Default false — legacy column, no longer written to; per-day state now lives in `goal_logs` |
-| `order_index` | integer | Default 0. Manual sort position within its `type` (dos/donts ordered independently). Set on insert (`items.length`), swapped in pairs when reordered via the ▲/▼ buttons on Commitments. Load query orders by `order_index` then `created_at`. |
+| `order_index` | integer | Default 0. Manual sort position within its `type` (dos/donts ordered independently). Set on insert (`items.length`); reordered via native HTML5 drag-and-drop on the card itself (`draggable="true"` on `.goal-item`, `dragstart`/`dragover`/`drop`/`dragend` handlers in `bindMainEvents()` — no arrow buttons). Dropping a card splices it to its new array position, then re-syncs `order_index` for every item in that column. Load query orders by `order_index` then `created_at`. |
 | `created_at` | timestamptz | |
 
 ### `goal_logs`
@@ -292,9 +296,22 @@ Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compli
 |---|---|---|
 | `life:home` | Today | Greeting + live clock, Daily score, Today's commitments preview, Today's schedule preview (5 items), "Active project" card (progress bar + activity heatmap + carousel if multiple active projects), optional quick-navigation pills. Layout togglable (Stacked / Hero). |
 | `life:schedule` | Schedule | Full month calendar view, day selector, event list for selected day. Add/edit/delete events. Alarm toggle per event (Web Notifications + AudioContext beep). |
-| `life:commitments` | Commitments | Replaces the old Goals/Habits pages. Do's/Don'ts columns with daily check-off (backed by `goal_logs`, not a static `checked` flag). Compliance ring (today's %), weekly strip, and a monthly compliance calendar (color intensity = that day's %). |
+| `life:commitments` | Commitments | Replaces the old Goals/Habits pages. Do's/Don'ts columns with daily check-off (backed by `goal_logs`, not a static `checked` flag) and drag-and-drop reordering. Compliance ring (today's %) plus a history card with **Day / Week / Month / Year** tabs (see below). |
 | `life:projects` | Projects | List of projects (filter: All/Active/On Hold/Done). Each card: name, description, status/deadline badges, progress bar (tasks done / total), expandable task list with check/edit/delete/assign-to-schedule, add task. |
 | `life:notes` | Notes | Grid/list view of note cards. Sort (Newest/Oldest/A-Z) and filter (All/Today/Week) dropdowns. New note → rich text editor (contenteditable, toolbar: H1/H2/H3/Normal/Bold/Italic/Bullet). Heading collapse toggle. Autosaves title+content debounced 1000ms. Relative timestamps. |
+
+**Commitments — drag-and-drop reorder** (`renderCommitments`, `js/app.js`):
+- Each `.goal-item` card is `draggable="true"`. Hover shows `cursor: grab`; an active drag shows `cursor: grabbing` and `opacity: 0.4` on the source card (`.dragging` class).
+- Drop position is computed from the pointer's Y position relative to the hovered card's midpoint (`.drag-over-top` / `.drag-over-bottom` gives a 2px accent-colored edge as the insert indicator).
+- Cross-column drops (Do → Don't) are naturally rejected — the drop handler looks up the dragged id inside the target `<ul data-goal-list>`'s own array, which fails for an id from the other column.
+- No arrow buttons anymore — this replaced the old ▲/▼ `data-move-goal` pattern entirely.
+
+**Commitments — history section** (bottom card on the page, `renderCommitments`, `js/app.js`): four tabs, all derived purely from `goalLogs` already held in memory (no extra fetch). State: `commitPreviewTab` (`'day'|'week'|'month'|'year'`), `commitViewDay`, `commitViewWeekStart`, `commitViewMonth`, `commitHeatmapYear` — each tab remembers its own navigation position independently. None of the four allow navigating into the future (no compliance data can exist there); all allow navigating arbitrarily far into the past.
+- **Day** — the only per-commitment drill-down: ‹/› step one date at a time (+ a "Today" jump button), shows that date's overall % plus a checked/unchecked row for every Do/Don't (`getLogByDate(goalId, date)`).
+- **Week** — the old "weekly strip" (7 circles, Mon–Sun), now navigable to any past week via `getMondayOf()` / `getWeekDays()` instead of being locked to the current week.
+- **Month** — the old compliance calendar grid, now navigable to any past month instead of being locked to the current month.
+- **Year** — new: a GitHub-style contribution heatmap (`buildCommitYearHeatmapData()` / `renderCommitYearHeatmap()`, reuses the `.proj-heatmap`/`.heatmap-cell` CSS from the Projects heatmap) — one cell per day, intensity = that day's compliance %.
+- Shared color rule (Week circles, Month cells, Year cells): **≥80% → `--accent` full, ≥40% → `--accent` ~30-40% mix, >0% → `--danger` ~30-40% mix, 0%/no data → default dark**.
 
 **Home "Active project" card details** (`projectsBlock` inside `renderLifeHome`, `js/app.js`):
 - Shows one active project at a time from `state.projects.filter(p => p.status === 'active')`, indexed by `state.homeProjectIndex`.
@@ -344,7 +361,7 @@ For goals: full re-render.
   ↓ click → filter item out of state array → render()
   ↓ dbCall(() => sb.from(...).delete().eq('id', id))  [fire and forget]
 ```
-Projects have a confirm modal before delete (cascades to its tasks).
+Projects have a confirm modal before delete (cascades to its tasks). Most delete buttons (`.fin-del-btn`, red/`--danger`) render the shared `ICON_TRASH` SVG — used by Commitments, Income, Spending, Debts, Projects, Project Tasks, Notes. Schedule's delete button (`.sched-del-btn`) is the one holdout still using the text "Delete" instead of the icon.
 
 ### Toggle Pattern (checkboxes)
 ```
@@ -390,4 +407,5 @@ These columns/tables are used in the code but **missing from both schema files**
 1. **`notes` table** — entire table missing from schema. Create with: `id uuid PK, user_id uuid FK, title text, content text, created_at timestamptz, updated_at timestamptz`. Enable RLS.
 2. **`schedule_events.alarm_time`** — `text` column, nullable. Add: `ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS alarm_time text;`
 3. **`goal_logs` table** — entire table missing from schema. See columns above; needed for Commitments to track per-day check-off.
-4. **`projects` / `project_tasks` tables** — now added to `schema_fix.sql` (sections 11–12), including `project_tasks.completed_at`. **Run `schema_fix.sql` in the Supabase SQL editor** to create/patch these on the live DB — the app already reads/writes `completed_at` in code, so the Home activity heatmap will silently no-op (no green cells) until this migration is run.
+4. **`projects` / `project_tasks` tables** — now added to `schema_fix.sql` (sections 11–12), including `project_tasks.completed_at`. **Run `schema_fix.sql` in the Supabase SQL editor** to create/patch these on the live DB — the app already reads/writes `completed_at` in code, so checking off a project task fails outright (Postgrest rejects the whole `UPDATE` when an unknown column is referenced) until this migration is run.
+5. **`goals.order_index`** — added to `schema.sql` and `schema_fix.sql` (section 13) to support Commitments drag-to-reorder. **Run this migration on the live DB** — until then, both loading goals (`.order('order_index')`) and inserting a new Do/Don't fail ("Sync failed" toast / empty Commitments list).

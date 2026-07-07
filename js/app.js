@@ -832,7 +832,7 @@ function renderCommitments() {
                 <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
                 <div class="fin-acts">
                   <button class="fin-edit-btn" data-edit-goal="${key}|${i.id}">&#x270E;</button>
-                  <button class="fin-del-btn" data-del-goal="${key}|${i.id}">Delete</button>
+                  <button class="fin-del-btn" data-del-goal="${key}|${i.id}" title="Delete">${ICON_TRASH}</button>
                 </div>
               </div>
             </li>`;
