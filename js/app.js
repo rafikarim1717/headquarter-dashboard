@@ -81,16 +81,22 @@ function buildYearHeatmapData(tasks, year) {
   return { cells, monthLabels, totalCols: col, total };
 }
 
+function getEarliestHeatmapYear(tasks) {
+  const years = (tasks || []).filter(t => t.completed_at).map(t => new Date(t.completed_at).getFullYear());
+  return years.length ? Math.min(...years) : new Date().getFullYear();
+}
+
 function renderProjectHeatmap(tasks, year) {
   const { cells, monthLabels, totalCols, total } = buildYearHeatmapData(tasks, year);
   const todayYear = new Date().getFullYear();
+  const earliestYear = getEarliestHeatmapYear(tasks);
   const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
   const cols = `24px repeat(${totalCols},1fr)`;
   return `
     <div class="heatmap-header">
       <span class="heatmap-total">${total} task${total !== 1 ? 's' : ''} completed in ${year}</span>
       <div class="heatmap-year-nav">
-        <button class="proj-nav-btn" data-heatmap-year="-1" title="Previous year">&#x2039;</button>
+        <button class="proj-nav-btn" data-heatmap-year="-1" title="Previous year"${year <= earliestYear ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#x2039;</button>
         <span style="font-size:11px;color:var(--text-faint)">${year}</span>
         <button class="proj-nav-btn" data-heatmap-year="1" title="Next year"${year >= todayYear ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#x203A;</button>
       </div>
@@ -520,7 +526,7 @@ function renderLifeHome() {
   const projTotal = current ? current.tasks.length : 0;
   const projPct   = projTotal ? Math.round(projDone / projTotal * 100) : 0;
   const projectsBlock = (delay) => `
-    <div class="card" style="animation-delay:${delay}ms;cursor:pointer" data-go="life:projects">
+    <div class="card" style="animation-delay:${delay}ms;cursor:pointer" data-open-project="${current ? current.id : ''}">
       <div class="section-title" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">
         <span>Active project</span>
         ${activeProjects.length > 1 ? `
@@ -538,8 +544,8 @@ function renderLifeHome() {
             <div class="proj-progress-meta"><span>${projDone} / ${projTotal} tasks done</span><span>${projPct}%</span></div>
             <div class="progress"><div class="bar" style="width:${projPct}%"></div></div>
           </div>
-          <ul class="list" style="margin-top:12px">
-            ${current.tasks.slice(0, 3).map(t => `
+          <ul class="list" style="margin-top:12px;${current.tasks.length > 5 ? 'max-height:190px;overflow-y:auto' : ''}">
+            ${current.tasks.map(t => `
               <li class="list-item" style="padding:8px 0">
                 <span class="check ${t.checked ? 'checked' : ''}" data-toggle-proj-task="${current.id}|${t.id}"></span>
                 <span class="check-label ${t.checked ? 'done' : ''}">${escapeHtml(t.text)}</span>
@@ -1989,12 +1995,32 @@ function bindMainEvents() {
   // navigation pills
   main.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => setActiveTab(el.dataset.go)));
 
+  // home: "Active project" card → jump to Projects page, expanded on that project
+  main.querySelectorAll('[data-open-project]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.openProject;
+    if (id) {
+      if (!(state.expandedProjectIds || []).includes(id)) {
+        state.expandedProjectIds = [...(state.expandedProjectIds || []), id];
+      }
+      state.projectsFilter = 'all';
+    }
+    setActiveTab('life:projects');
+    if (id) {
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-proj-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }));
+
   // heatmap: year nav
   main.querySelectorAll('[data-heatmap-year]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const dir = Number(el.dataset.heatmapYear);
     const todayYear = new Date().getFullYear();
-    state.heatmapYear = Math.min(todayYear, (state.heatmapYear || todayYear) + dir);
+    const allTasks = (state.projects || []).flatMap(p => p.tasks || []);
+    const earliestYear = getEarliestHeatmapYear(allTasks);
+    const nextYear = (state.heatmapYear || todayYear) + dir;
+    state.heatmapYear = Math.min(todayYear, Math.max(earliestYear, nextYear));
     render();
   }));
 
