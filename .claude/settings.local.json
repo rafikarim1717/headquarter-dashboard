@@ -14,7 +14,8 @@
       "Bash(grep -v \"//\\\\|text-faint\\\\|pointer-events\\\\|stroke-dash\\\\|ring-spin\\\\|ring-spin-rev\\\\|ring-spin-lg\\\\|ring-spin-rev-lg\\\\|disabled\\\\|opacity:.3\\\\|opacity: 0.3\")",
       "Skill(run)",
       "Bash(node --check js/app.js)",
-      "Bash(node --check js/supabase.js)"
+      "Bash(node --check js/supabase.js)",
+      "Bash(node --check js/navigation.js)"
     ]
   }
 }

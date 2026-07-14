@@ -664,8 +664,8 @@ function renderSchedule() {
                 ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
               </div>
               <div class="sched-acts">
-                <button class="sched-edit-btn" data-edit-sched="${s.id}">Edit</button>
-                <button class="sched-del-btn" data-del-sched="${s.id}">Delete</button>
+                <button class="fin-edit-btn" data-edit-sched="${s.id}" title="Edit">${ICON_PENCIL}</button>
+                <button class="fin-del-btn" data-del-sched="${s.id}" title="Delete">${ICON_TRASH}</button>
               </div>
             </div>
           </li>`).join('') || `<li class="list-item"><div class="item-sub">No events. Add one below.</div></li>`}
@@ -1877,6 +1877,8 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
       const fmtInitial = f.value ? Number(f.value).toLocaleString('id-ID') : '';
       const pfxInitial = fmtInitial ? (window.__HQ_TWEAKS?.currencyPrefix || 'Rp ') + fmtInitial : '';
       input = `<input type="text" inputmode="numeric" id="modal-f-${f.id}" value="${fmtInitial}" placeholder="${escapeHtml(f.placeholder||'0')}"/><div class="amount-preview" id="preview-${f.id}">${pfxInitial}</div>`;
+    } else if (f.type === 'time') {
+      input = `<input type="time" id="modal-f-${f.id}" lang="id-ID" value="${escapeHtml(String(f.value??''))}" placeholder="${escapeHtml(f.placeholder||'')}"/>`;
     } else {
       input = `<input type="${f.type||'text'}" id="modal-f-${f.id}" value="${escapeHtml(String(f.value??''))}" placeholder="${escapeHtml(f.placeholder||'')}"/>`;
     }
