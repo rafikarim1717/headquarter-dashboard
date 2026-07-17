@@ -37,14 +37,14 @@ async function dbCall(fn) {
     if (result.error) throw result.error;
     return result;
   } catch (e) {
-    showToast('Sync failed, retrying...');
+    showToast('Sync failed, retrying...', 'error');
     await new Promise(r => setTimeout(r, 1500));
     try {
       const result = await fn();
       if (result.error) throw result.error;
       return result;
     } catch (e2) {
-      showToast('Sync failed. Check connection.');
+      showToast('Sync failed. Check connection.', 'error');
       throw e2;
     }
   }
@@ -265,7 +265,7 @@ async function handleSession(session) {
     await loadFromSupabase(currentUser.id);
   } catch (e) {
     console.error('Failed to load data', e);
-    showToast('Failed to load data. Please refresh.');
+    showToast('Failed to load data. Please refresh.', 'error');
   }
 
   applyTweaks();
@@ -295,7 +295,7 @@ document.getElementById('google-login-btn').addEventListener('click', async () =
     provider: 'google',
     options: { redirectTo: window.location.origin }
   });
-  if (error) showToast('Login failed: ' + error.message);
+  if (error) showToast('Login failed: ' + error.message, 'error');
 });
 
 // Email / password auth

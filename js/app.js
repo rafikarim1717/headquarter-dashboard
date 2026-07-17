@@ -2,10 +2,12 @@
    TOAST
 ========================================================= */
 let toastTimer = null;
-function showToast(msg) {
+function showToast(msg, type = 'success') {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
+  t.innerHTML = `<span class="toast-icon">${type === 'error' ? '&#x2715;' : '&#x2713;'}</span><span class="toast-msg"></span>`;
+  t.querySelector('.toast-msg').textContent = msg;
+  t.classList.remove('toast-success', 'toast-error');
+  t.classList.add('show', type === 'error' ? 'toast-error' : 'toast-success');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
 }
@@ -185,7 +187,7 @@ function updateMusicBtn(playing) {
 
 function tryAmbientStream(idx) {
   if (idx >= AMBIENT_STREAMS.length) {
-    showToast('No stream available right now');
+    showToast('No stream available right now', 'error');
     ambientPlayer.isPlaying = false;
     updateMusicBtn(false);
     return;
@@ -1300,7 +1302,7 @@ function addDeleteRowBtn(tr, saveCallback) {
     e.preventDefault();
     const tbody = tr.closest('tbody');
     if (!tbody) return;
-    if (tbody.querySelectorAll('tr').length <= 1) { showToast('Cannot delete the only row'); return; }
+    if (tbody.querySelectorAll('tr').length <= 1) { showToast('Cannot delete the only row', 'error'); return; }
     tr.remove();
     if (saveCallback) saveCallback();
   });
