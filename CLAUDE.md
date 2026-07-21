@@ -62,7 +62,7 @@ All data lives in `state` (defined top of `app.js`). Loaded once from Supabase o
 ```js
 let state = {
   profile: { name: 'Friend' },
-  schedule: {},        // { [iso-date]: [{id, time, title, sub, alarm_time}] }
+  schedule: {},        // { [iso-date]: [{id, time, title, sub, alarm_time, completed_at}] }, sorted ascending by time at render time
   goals: { dos: [], donts: [] },           // backing data for the Commitments page
   goalLogs: [],         // [{id, goal_id, user_id, date, checked}] — daily check-off log, drives streak/compliance %
   projects: [],         // [{id, name, description, status, deadline, tasks:[{id,text,description,checked,completed_at}]}]
@@ -116,7 +116,8 @@ Operations: `select` (maybeSingle by id), `upsert` (on first login), `update` (n
 | `time` | text | "HH:MM" format |
 | `title` | text | Event title |
 | `note` | text | Subtitle/note |
-| `alarm_time` | text | **[MISSING FROM SCHEMA FILES]** "HH:MM" alarm, used in code |
+| `alarm_time` | text | Nullable. "HH:MM" alarm, used in code. Added to `schema.sql`/`schema_fix.sql`; **run `schema_fix.sql` on the live DB** to backfill the column there. |
+| `completed_at` | timestamptz | Nullable. Not yet written to by any UI — added as a foundation column for a future "mark schedule block done" visualization (parallels `project_tasks.completed_at`). Added to `schema.sql`/`schema_fix.sql`; **run `schema_fix.sql` on the live DB**. |
 | `created_at` | timestamptz | Default `now()` |
 
 Index on `(user_id, date)`.
@@ -405,7 +406,7 @@ Title + content changes debounced 1000ms, then `sb.from('notes').update(...)`. F
 These columns/tables are used in the code but **missing from both schema files** (or only just added to `schema_fix.sql` and still need to be run against the live Supabase project):
 
 1. **`notes` table** — entire table missing from schema. Create with: `id uuid PK, user_id uuid FK, title text, content text, created_at timestamptz, updated_at timestamptz`. Enable RLS.
-2. **`schedule_events.alarm_time`** — `text` column, nullable. Add: `ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS alarm_time text;`
+2. **`schedule_events.alarm_time` / `schedule_events.completed_at`** — now added to `schema.sql` and `schema_fix.sql` (section 2). **Run `schema_fix.sql` on the live DB** to backfill both columns — `alarm_time text` (used by the alarm toggle) and `completed_at timestamptz` (foundation column, not yet written to by any UI — reserved for a future schedule-completion visualization, parallel to `project_tasks.completed_at`).
 3. **`goal_logs` table** — entire table missing from schema. See columns above; needed for Commitments to track per-day check-off.
 4. **`projects` / `project_tasks` tables** — now added to `schema_fix.sql` (sections 11–12), including `project_tasks.completed_at`. **Run `schema_fix.sql` in the Supabase SQL editor** to create/patch these on the live DB — the app already reads/writes `completed_at` in code, so checking off a project task fails outright (Postgrest rejects the whole `UPDATE` when an unknown column is referenced) until this migration is run.
 5. **`goals.order_index`** — added to `schema.sql` and `schema_fix.sql` (section 13) to support Commitments drag-to-reorder. **Run this migration on the live DB** — until then, both loading goals (`.order('order_index')`) and inserting a new Do/Don't fail ("Sync failed" toast / empty Commitments list).

@@ -31,6 +31,8 @@ create table if not exists schedule_events (
   time text not null default '09:00',
   title text not null,
   note text not null default '',
+  alarm_time text,
+  completed_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -191,3 +193,40 @@ create policy "Users can manage own debts"
   on debts for all using (auth.uid() = user_id);
 
 create index if not exists debts_user_id on debts(user_id);
+
+-- ============================================================
+-- NOTES
+-- ============================================================
+create table if not exists notes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null default '',
+  content text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table notes enable row level security;
+
+create policy "Users can manage own notes"
+  on notes for all using (auth.uid() = user_id);
+
+create index if not exists notes_user_id on notes(user_id);
+
+-- ============================================================
+-- TODAY'S FOCUS ITEMS
+-- ============================================================
+create table if not exists today_focus_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  text text not null,
+  checked boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table today_focus_items enable row level security;
+
+create policy "Users can manage own today_focus_items"
+  on today_focus_items for all using (auth.uid() = user_id);
+
+create index if not exists today_focus_items_user_id on today_focus_items(user_id);

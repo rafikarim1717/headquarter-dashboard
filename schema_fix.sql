@@ -48,14 +48,20 @@ END $$;
 --    Columns: date, time, title, note
 -- ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schedule_events (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  date       date NOT NULL,
-  time       text,
-  title      text,
-  note       text,
-  created_at timestamptz NOT NULL DEFAULT now()
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  date         date NOT NULL,
+  time         text,
+  title        text,
+  note         text,
+  alarm_time   text,
+  completed_at timestamptz,
+  created_at   timestamptz NOT NULL DEFAULT now()
 );
+
+-- Safe to re-run on an already-existing schedule_events table that predates these columns.
+ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS alarm_time text;
+ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS completed_at timestamptz;
 
 ALTER TABLE schedule_events ENABLE ROW LEVEL SECURITY;
 
@@ -517,3 +523,85 @@ SET order_index = ranked.rn
 FROM ranked
 WHERE goals.id = ranked.id
   AND goals.order_index = 0;
+
+
+-- ────────────────────────────────────────────────────────────
+-- 14. notes
+--     Operations: select / insert / update(title,content,updated_at) / delete
+--     Columns: title, content, updated_at
+-- ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS notes (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title      text NOT NULL DEFAULT '',
+  content    text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "notes_select" ON notes
+    FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "notes_insert" ON notes
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "notes_update" ON notes
+    FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "notes_delete" ON notes
+    FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+
+-- ────────────────────────────────────────────────────────────
+-- 15. today_focus_items
+--     Operations: select / insert / update(checked) / delete
+--     Columns: text, checked
+--     Backs the "Today's focus" quick-priority-list widget on Home.
+-- ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS today_focus_items (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  text       text NOT NULL,
+  checked    boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE today_focus_items ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "today_focus_items_select" ON today_focus_items
+    FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "today_focus_items_insert" ON today_focus_items
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "today_focus_items_update" ON today_focus_items
+    FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "today_focus_items_delete" ON today_focus_items
+    FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

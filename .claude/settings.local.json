@@ -15,7 +15,11 @@
       "Skill(run)",
       "Bash(node --check js/app.js)",
       "Bash(node --check js/supabase.js)",
-      "Bash(node --check js/navigation.js)"
+      "Bash(node --check js/navigation.js)",
+      "Bash(node -e \"console.log\\('node ok'\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8843/index.html)",
+      "Read(//tmp/**)",
+      "Bash(taskkill //F //IM node.exe //T)"
     ]
   }
 }

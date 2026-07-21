@@ -57,7 +57,7 @@ async function loadFromSupabase(userId) {
   const [
     profileRes, eventsRes, goalsRes, goalLogsRes,
     projectsRes, projectTasksRes,
-    incomeRes, spendingRes, debtsRes, notesRes
+    incomeRes, spendingRes, debtsRes, notesRes, todayFocusRes
   ] = await Promise.all([
     sb.from('profiles').select('*').eq('id', userId).maybeSingle(),
     sb.from('schedule_events').select('*').eq('user_id', userId),
@@ -68,7 +68,8 @@ async function loadFromSupabase(userId) {
     sb.from('income_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
     sb.from('spending_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
     sb.from('debts').select('*').eq('user_id', userId).order('due_date'),
-    sb.from('notes').select('*').eq('user_id', userId).order('updated_at', { ascending: false })
+    sb.from('notes').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
+    sb.from('today_focus_items').select('*').eq('user_id', userId).order('created_at')
   ]);
 
   const isNewUser = !profileRes.data;
@@ -87,7 +88,7 @@ async function loadFromSupabase(userId) {
   (eventsRes.data || []).forEach(e => {
     const d = e.date;
     if (!state.schedule[d]) state.schedule[d] = [];
-    state.schedule[d].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '', alarm_time: e.alarm_time || null });
+    state.schedule[d].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '', alarm_time: e.alarm_time || null, completed_at: e.completed_at || null });
   });
 
   // Goals
@@ -116,6 +117,9 @@ async function loadFromSupabase(userId) {
 
   // Notes
   state.notes = (notesRes.data || []).map(n => ({ id: n.id, title: n.title || '', content: n.content || '', created_at: n.created_at, updated_at: n.updated_at }));
+
+  // Today's Focus
+  state.todayFocus = (todayFocusRes.data || []).map(f => ({ id: f.id, text: f.text, checked: f.checked, created_at: f.created_at }));
 }
 
 function compute7DayLog(logs) {
@@ -161,7 +165,7 @@ async function seedSampleData(userId) {
   state.schedule = {};
   (schedData || []).forEach(e => {
     if (!state.schedule[e.date]) state.schedule[e.date] = [];
-    state.schedule[e.date].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '', alarm_time: null });
+    state.schedule[e.date].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '', alarm_time: null, completed_at: null });
   });
 
   // Goals

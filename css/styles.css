@@ -976,12 +976,39 @@
     position: absolute; top: 12px; right: 12px;
     width: 20px; height: 20px; border-radius: 50%;
     border: none; background: none;
-    color: #444; font-size: 18px; line-height: 1;
+    color: #444; line-height: 1;
     cursor: pointer; display: flex; align-items: center; justify-content: center;
     opacity: 0; transition: opacity var(--t-fast) ease, color var(--t-fast) ease;
   }
   .note-card:hover .note-card-del { opacity: 1; }
   .note-card-del:hover { color: #c0392b; }
+  /* Today's Focus (Home) */
+  .tf-add-row { display: flex; gap: 8px; margin: 4px 0 12px; }
+  .tf-input {
+    flex: 1; min-width: 0;
+    background: var(--card-2); border: 1px solid var(--border);
+    border-radius: var(--r-sm); padding: 8px 10px;
+    font-family: inherit; font-size: 13px; color: var(--text);
+    transition: border-color var(--t-fast) ease;
+  }
+  .tf-input:focus { outline: none; border-color: var(--border-strong); }
+  .tf-input::placeholder { color: var(--text-faint); }
+  .tf-add-btn {
+    flex-shrink: 0; padding: 0 16px; border-radius: var(--r-sm);
+    border: 1px solid var(--border); background: var(--card-2);
+    color: var(--text-dim); font-size: 12px; cursor: pointer;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .tf-add-btn:hover { background: #222; color: var(--text); border-color: var(--border-strong); }
+  .tf-divider { height: 1px; background: var(--border); margin-bottom: 6px; }
+  .tf-item { position: relative; }
+  .tf-del-btn {
+    flex-shrink: 0; border: none; background: none; padding: 4px;
+    color: #444; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .tf-item:hover .tf-del-btn { opacity: 1; }
+  .tf-del-btn:hover { color: var(--danger); }
   /* heading collapse toggle in note editor */
   .hd-toggle {
     display: inline-block; cursor: pointer;
@@ -1357,7 +1384,6 @@
   #modal-container input[type="text"],
   #modal-container input[type="number"],
   #modal-container input[type="date"],
-  #modal-container input[type="time"],
   #modal-container select,
   #modal-container textarea {
     width: 100%; border: 1px solid var(--border); border-radius: 8px;
@@ -1365,12 +1391,31 @@
     font-size: 13px; font-family: inherit; outline: none; box-sizing: border-box;
     pointer-events: auto;
   }
-  #modal-container input[type="date"],
-  #modal-container input[type="time"] { position: relative; z-index: 2; cursor: pointer; }
+  #modal-container input[type="date"] { position: relative; z-index: 2; cursor: pointer; }
   #modal-container input:focus,
   #modal-container select:focus,
   #modal-container textarea:focus { border-color: var(--accent); }
   #modal-container textarea { resize: none; line-height: 1.45; }
+
+  /* ============ MODAL — time spinner (24h) ============ */
+  #modal-container .time-picker {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: #121212; padding: 8px 12px; box-sizing: border-box;
+  }
+  #modal-container .time-picker:focus-within { border-color: var(--accent); }
+  #modal-container .time-spin { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #modal-container .time-spin-btn {
+    width: 26px; height: 18px; border: 1px solid var(--border); border-radius: 5px;
+    background: #1a1a1a; color: var(--text-dim); font-size: 8px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  #modal-container .time-spin-btn:hover { color: var(--text); border-color: var(--border-strong); }
+  #modal-container .time-spin-input {
+    width: 34px; text-align: center; border: none; background: none; color: var(--text);
+    font-size: 18px; font-variant-numeric: tabular-nums; outline: none; padding: 2px 0;
+  }
+  #modal-container .time-spin-sep { font-size: 18px; color: var(--text-faint); font-weight: 600; }
   #modal-container .modal-footer {
     margin-top: 20px; padding-top: 16px; border-top: 1px solid #2a2a2a;
     display: flex; justify-content: flex-end; gap: 8px;
@@ -1380,6 +1425,7 @@
   @media (max-width: 768px) {
     .note-content { min-height: calc(100vh - 280px); padding-bottom: 120px; overflow-y: auto; }
     .note-card-del { opacity: 1; }
+    .tf-del-btn { opacity: 1; }
   }
 
   /* ============ FINANCE ROW — mobile ============ */

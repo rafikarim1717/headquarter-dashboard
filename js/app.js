@@ -136,6 +136,7 @@ let state = {
   expandedProjectIds: [],
   homeProjectIndex: 0,
   notes: [],      // [{id, title, content, created_at, updated_at}]
+  todayFocus: [], // [{id, text, checked, created_at}]
   income: [],
   spending: [],
   debts: [],
@@ -478,7 +479,7 @@ function paginationHtml(page, total, prevAttr, nextAttr) {
 /* ---- LIFE: HOME ---- */
 function renderLifeHome() {
   const today = todayISO();
-  const sched = (state.schedule[today] || []).slice(0, 5);
+  const sched = (state.schedule[today] || []).slice().sort((a, b) => a.time.localeCompare(b.time)).slice(0, 5);
   const layout = window.__HQ_TWEAKS.homeLayout;
   const showPills = String(window.__HQ_TWEAKS.showQuickPills) === 'true' || window.__HQ_TWEAKS.showQuickPills === true;
 
@@ -496,6 +497,28 @@ function renderLifeHome() {
             <div style="font-size:16px;color:var(--text-faint)">/100</div>
           </div>`
       }
+    </div>`;
+
+  const focusItems = state.todayFocus || [];
+  const focusBlock = `
+    <div class="card" style="animation-delay:30ms">
+      <div class="section-title" style="margin-top:0">Today's focus</div>
+      <div class="tf-add-row">
+        <input type="text" class="tf-input" id="tf-input" placeholder="Add a priority..." aria-label="Add a focus item" autocomplete="off"/>
+        <button class="tf-add-btn" id="tf-add-btn">Add</button>
+      </div>
+      <div class="tf-divider"></div>
+      ${focusItems.length ? `
+        <ul class="list tf-list">
+          ${focusItems.map(it => `
+            <li class="list-item tf-item" data-tf-id="${it.id}">
+              <span class="check ${it.checked ? 'checked' : ''}" data-toggle-tf="${it.id}" style="flex-shrink:0"></span>
+              <span class="check-label ${it.checked ? 'done' : ''}" style="flex:1;min-width:0">${escapeHtml(it.text)}</span>
+              <button class="tf-del-btn" data-del-tf="${it.id}" title="Delete" aria-label="Delete focus item">${ICON_TRASH}</button>
+            </li>
+          `).join('')}
+        </ul>
+      ` : `<div style="font-size:12px;color:var(--text-faint);padding:4px 0 2px">No focus items yet. Add one above.</div>`}
     </div>`;
 
   const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
@@ -592,6 +615,7 @@ function renderLifeHome() {
   return `
     ${topbar()}
     ${scoreBlock}
+    ${focusBlock}
     ${layout === 'hero' ? hero : stacked}
   `;
 }
@@ -622,7 +646,7 @@ function renderSchedule() {
   const todayIso = todayISO();
   const eventCount = {};
   Object.keys(state.schedule || {}).forEach(k => { eventCount[k] = (state.schedule[k] || []).length; });
-  const list = state.schedule[sel] || [];
+  const list = (state.schedule[sel] || []).slice().sort((a, b) => a.time.localeCompare(b.time));
   const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   return `
@@ -1037,7 +1061,7 @@ function renderProjectCard(p, i) {
         </div>
         <div class="proj-card-acts">
           <button class="fin-edit-btn" data-edit-proj="${p.id}" title="Edit">&#x270E;</button>
-          <button class="fin-del-btn" data-del-proj="${p.id}" title="Delete">&#x00D7;</button>
+          <button class="fin-del-btn" data-del-proj="${p.id}" title="Delete">${ICON_TRASH}</button>
         </div>
       </div>
       ${p.description ? `<div class="proj-desc">${escapeHtml(p.description.length > 120 ? p.description.slice(0, 120) + '...' : p.description)}</div>` : ''}
@@ -1068,7 +1092,7 @@ function renderProjectCard(p, i) {
                   <div class="focus-task-acts">
                     <button class="fin-assign-btn" data-assign-proj-task="${p.id}|${t.id}" title="Assign to today's schedule">&#x1F4C5;</button>
                     <button class="fin-edit-btn" data-edit-proj-task="${p.id}|${t.id}">&#x270E;</button>
-                    <button class="fin-del-btn" data-del-proj-task="${p.id}|${t.id}">&#x00D7;</button>
+                    <button class="fin-del-btn" data-del-proj-task="${p.id}|${t.id}" title="Delete">${ICON_TRASH}</button>
                   </div>
                 </div>
               </li>
@@ -1176,7 +1200,7 @@ function renderNotesList() {
         const previewText = preview.length > 100 ? preview.slice(0, 100) + '...' : preview;
         return `
         <div class="note-card" data-open-note="${n.id}">
-          <button class="note-card-del" data-del-note-card="${n.id}" aria-label="Delete note">&#x00D7;</button>
+          <button class="note-card-del" data-del-note-card="${n.id}" aria-label="Delete note" title="Delete">${ICON_TRASH}</button>
           <div class="note-card-title ${n.title?'':'empty'}">${n.title ? escapeHtml(n.title) : 'Untitled'}</div>
           <div class="note-card-preview">${escapeHtml(previewText)}</div>
           <div class="note-card-date" data-note-ts="${n.id}">${relativeTime(n.updated_at || n.created_at)}</div>
@@ -1296,7 +1320,7 @@ function addDeleteRowBtn(tr, saveCallback) {
   const btn = document.createElement('button');
   btn.className = 'delete-row-btn';
   btn.contentEditable = 'false';
-  btn.textContent = '×';
+  btn.innerHTML = ICON_TRASH;
   btn.title = 'Delete row';
   btn.addEventListener('mousedown', (e) => {
     e.preventDefault();
@@ -1880,7 +1904,20 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
       const pfxInitial = fmtInitial ? (window.__HQ_TWEAKS?.currencyPrefix || 'Rp ') + fmtInitial : '';
       input = `<input type="text" inputmode="numeric" id="modal-f-${f.id}" value="${fmtInitial}" placeholder="${escapeHtml(f.placeholder||'0')}"/><div class="amount-preview" id="preview-${f.id}">${pfxInitial}</div>`;
     } else if (f.type === 'time') {
-      input = `<input type="time" id="modal-f-${f.id}" lang="id-ID" value="${escapeHtml(String(f.value??''))}" placeholder="${escapeHtml(f.placeholder||'')}"/>`;
+      const [hh, mm] = String(f.value || '00:00').split(':');
+      input = `<div class="time-picker" id="modal-f-${f.id}" data-value="${escapeHtml(String(f.value || '00:00'))}">
+        <div class="time-spin">
+          <button type="button" class="time-spin-btn" data-spin-unit="hour" data-spin-dir="1" aria-label="Hour up">&#x25B2;</button>
+          <input type="text" class="time-spin-input" data-unit="hour" inputmode="numeric" maxlength="2" value="${escapeHtml(hh || '00')}">
+          <button type="button" class="time-spin-btn" data-spin-unit="hour" data-spin-dir="-1" aria-label="Hour down">&#x25BC;</button>
+        </div>
+        <span class="time-spin-sep">:</span>
+        <div class="time-spin">
+          <button type="button" class="time-spin-btn" data-spin-unit="minute" data-spin-dir="1" aria-label="Minute up">&#x25B2;</button>
+          <input type="text" class="time-spin-input" data-unit="minute" inputmode="numeric" maxlength="2" value="${escapeHtml(mm || '00')}">
+          <button type="button" class="time-spin-btn" data-spin-unit="minute" data-spin-dir="-1" aria-label="Minute down">&#x25BC;</button>
+        </div>
+      </div>`;
     } else {
       input = `<input type="${f.type||'text'}" id="modal-f-${f.id}" value="${escapeHtml(String(f.value??''))}" placeholder="${escapeHtml(f.placeholder||'')}"/>`;
     }
@@ -1932,6 +1969,34 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
     });
   });
 
+  // Wire up time fields — 24h hour/minute spinners with wraparound
+  fields.forEach(f => {
+    if (f.type !== 'time') return;
+    const wrap = document.getElementById('modal-f-' + f.id);
+    if (!wrap) return;
+    const hourInput = wrap.querySelector('[data-unit="hour"]');
+    const minInput  = wrap.querySelector('[data-unit="minute"]');
+    const wrapUnit = (n, max) => ((n % (max + 1)) + (max + 1)) % (max + 1);
+    const sync = () => {
+      const hh = String(wrapUnit(parseInt(hourInput.value, 10) || 0, 23)).padStart(2, '0');
+      const mm = String(wrapUnit(parseInt(minInput.value, 10) || 0, 59)).padStart(2, '0');
+      hourInput.value = hh; minInput.value = mm;
+      wrap.dataset.value = `${hh}:${mm}`;
+    };
+    wrap.querySelectorAll('.time-spin-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = btn.dataset.spinUnit === 'hour' ? hourInput : minInput;
+        const max = btn.dataset.spinUnit === 'hour' ? 23 : 59;
+        input.value = wrapUnit((parseInt(input.value, 10) || 0) + Number(btn.dataset.spinDir), max);
+        sync();
+      });
+    });
+    [hourInput, minInput].forEach(inp => {
+      inp.addEventListener('input', () => { inp.value = inp.value.replace(/\D/g, '').slice(0, 2); });
+      inp.addEventListener('blur', sync);
+    });
+  });
+
   function closeModal() {
     container.innerHTML = '';
     document.removeEventListener('keydown', modalKeyHandler);
@@ -1961,6 +2026,7 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
       if (f.type === 'toggle') values[f.id] = el.checked;
       else if (f.type === 'number') values[f.id] = Number(el.value || 0);
       else if (f.type === 'amount') values[f.id] = parseInt((el.value || '').replace(/\./g, '')) || 0;
+      else if (f.type === 'time') values[f.id] = el.dataset.value || '00:00';
       else values[f.id] = el.value;
     });
     closeModal();
@@ -2131,7 +2197,7 @@ function bindMainEvents() {
         const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title: title.trim(), note: note.trim(), alarm_time: alarm_time_val }).select().single());
         if (data) {
           if (!state.schedule[day]) state.schedule[day] = [];
-          state.schedule[day].push({ id: data.id, time, title: title.trim(), sub: note.trim(), alarm_time: alarm_time_val });
+          state.schedule[day].push({ id: data.id, time, title: title.trim(), sub: note.trim(), alarm_time: alarm_time_val, completed_at: null });
           state.schedule[day].sort((a, b) => a.time.localeCompare(b.time));
           showToast('Assigned to today\'s schedule');
           render();
@@ -2282,6 +2348,45 @@ function bindMainEvents() {
     }
   }));
 
+  // ---- TODAY'S FOCUS ----
+  const addFocusItem = async () => {
+    const input = main.querySelector('#tf-input');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text || !currentUser) return;
+    input.value = '';
+    const { data } = await dbCall(() =>
+      sb.from('today_focus_items').insert({ user_id: currentUser.id, text, checked: false }).select().single()
+    );
+    if (data) {
+      state.todayFocus.push({ id: data.id, text: data.text, checked: data.checked, created_at: data.created_at });
+      render();
+    }
+  };
+  const tfAddBtn = main.querySelector('#tf-add-btn');
+  if (tfAddBtn) tfAddBtn.addEventListener('click', addFocusItem);
+  const tfInput = main.querySelector('#tf-input');
+  if (tfInput) tfInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addFocusItem(); }
+  });
+
+  main.querySelectorAll('[data-toggle-tf]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.toggleTf;
+    const item = state.todayFocus.find(x => x.id === id);
+    if (!item) return;
+    item.checked = !item.checked;
+    pulse(el);
+    render();
+    dbCall(() => sb.from('today_focus_items').update({ checked: item.checked }).eq('id', id));
+  }));
+
+  main.querySelectorAll('[data-del-tf]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.delTf;
+    state.todayFocus = state.todayFocus.filter(x => x.id !== id);
+    render();
+    dbCall(() => sb.from('today_focus_items').delete().eq('id', id));
+  }));
+
   // ---- SCHEDULE ----
   main.querySelectorAll('[data-del-sched]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delSched;
@@ -2346,7 +2451,7 @@ function bindMainEvents() {
         const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title: title.trim(), note: note.trim(), alarm_time: alarm_time_val }).select().single());
         if (data) {
           if (!state.schedule[day]) state.schedule[day] = [];
-          state.schedule[day].push({ id: data.id, time, title: title.trim(), sub: note.trim(), alarm_time: alarm_time_val });
+          state.schedule[day].push({ id: data.id, time, title: title.trim(), sub: note.trim(), alarm_time: alarm_time_val, completed_at: null });
           state.schedule[day].sort((a, b) => a.time.localeCompare(b.time));
           render();
         }
