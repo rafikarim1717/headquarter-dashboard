@@ -3067,7 +3067,7 @@ function bindMainEvents() {
       btn.classList.toggle('tb-active', on);
     });
   };
-  main.querySelectorAll('.tb-btn').forEach(btn => {
+  main.querySelectorAll('button.tb-btn').forEach(btn => {
     btn.addEventListener('mousedown', (e) => {
       e.preventDefault(); // keep contenteditable focus
       if (!noteContentEl) return;
