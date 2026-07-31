@@ -81,6 +81,7 @@ async function loadFromSupabase(userId) {
 
   // Profile — auth metadata takes priority over DB value
   state.profile.name = displayNameFromUser(currentUser) || profileRes.data?.name || 'Friend';
+  state.profile.noteDefaultStyle = profileRes.data?.note_default_style || null;
   window.__HQ_TWEAKS.name = state.profile.name;
 
   // Schedule: group events by date

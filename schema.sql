@@ -7,6 +7,7 @@
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null default 'Friend',
+  note_default_style jsonb,
   created_at timestamptz not null default now()
 );
 

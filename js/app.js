@@ -127,7 +127,7 @@ let notesTimestampIntervalId = null;
 let draggedGoalId = null; // id of the goal/commitment card currently being drag-reordered
 
 let state = {
-  profile: { name: 'Friend' },
+  profile: { name: 'Friend', noteDefaultStyle: null },
   schedule: {},   // { [iso-date]: [{id, time, title, sub}] }
   goals: { dos: [], donts: [] },
   goalLogs: [],   // [{id, goal_id, user_id, date, checked}]
@@ -466,6 +466,52 @@ const ICON_XCIRCLE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none
 const ICON_CHEV_L  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>`;
 const ICON_CHEV_R  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>`;
 const ICON_UNDO    = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"/></svg>`;
+const ICON_BULLET_LIST   = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`;
+const ICON_NUMBERED_LIST = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>`;
+
+/* ---- notes editor: toolbar reference data ---- */
+const NOTE_STYLE_OPTIONS = [
+  { val: 'p',  label: 'Normal Text' },
+  { val: 'h1', label: 'Title' },
+  { val: 'h2', label: 'Subtitle' },
+  { val: 'h3', label: 'Heading 1' },
+  { val: 'h4', label: 'Heading 2' },
+  { val: 'h5', label: 'Heading 3' }
+];
+const NOTE_FONTS = [
+  { name: 'Arial',           family: 'Arial, sans-serif',              google: false, weights: [['400','Regular'], ['700','Bold']] },
+  { name: 'Georgia',         family: 'Georgia, serif',                 google: false, weights: [['400','Regular'], ['700','Bold']] },
+  { name: 'Times New Roman', family: '"Times New Roman", serif',       google: false, weights: [['400','Regular'], ['700','Bold']] },
+  { name: 'Courier New',     family: '"Courier New", monospace',       google: false, weights: [['400','Regular'], ['700','Bold']] },
+  { name: 'Verdana',         family: 'Verdana, sans-serif',            google: false, weights: [['400','Regular'], ['700','Bold']] },
+  { name: 'Roboto',          family: '"Roboto", sans-serif',           google: true,  weights: [['300','Light'], ['400','Regular'], ['500','Medium'], ['700','Bold']] },
+  { name: 'Poppins',         family: '"Poppins", sans-serif',          google: true,  weights: [['300','Light'], ['400','Regular'], ['500','Medium'], ['600','Semibold'], ['700','Bold']] },
+  { name: 'Merriweather',    family: '"Merriweather", serif',          google: true,  weights: [['300','Light'], ['400','Regular'], ['700','Bold'], ['900','Black']] },
+  { name: 'Lora',            family: '"Lora", serif',                  google: true,  weights: [['400','Regular'], ['500','Medium'], ['600','Semibold'], ['700','Bold']] },
+  { name: 'Inter',           family: '"Inter", sans-serif',            google: true,  weights: [['300','Light'], ['400','Regular'], ['500','Medium'], ['600','Semibold'], ['700','Bold']] }
+];
+const NOTE_FONT_SIZE_PRESETS = [8, 9, 10, 12, 14, 18, 24, 30, 36, 48, 60, 72, 96];
+const NOTE_TEXT_COLORS  = ['#e0645a', '#e0a15a', '#7fbf7f', '#6ea8e0', '#b18ae0'];
+const NOTE_HILITE_COLORS = ['#6b5f2a', '#2f5a3d', '#2a4a6b', '#6b2a4a', '#3a3a3a'];
+
+function rgbToHex(rgb) {
+  const m = (rgb || '').match(/\d+/g);
+  if (!m || m.length < 3) return null;
+  return '#' + m.slice(0, 3).map(n => Math.max(0, Math.min(255, parseInt(n, 10))).toString(16).padStart(2, '0')).join('');
+}
+
+let _noteFontsLoaded = false;
+function ensureNoteFontsLoaded() {
+  if (_noteFontsLoaded) return;
+  _noteFontsLoaded = true;
+  const families = NOTE_FONTS.filter(f => f.google)
+    .map(f => `family=${f.name.replace(/ /g, '+')}:wght@${f.weights.map(w => w[0]).join(';')}`)
+    .join('&');
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
+  document.head.appendChild(link);
+}
 
 function paginationHtml(page, total, prevAttr, nextAttr) {
   if (total <= 1) return '';
@@ -1214,6 +1260,7 @@ function renderNotesList() {
 function renderNoteEditor() {
   const n = state.notes.find(x => x.id === state.activeNoteId);
   if (!n) { state.activeNoteId = null; return renderNotesList(); }
+  ensureNoteFontsLoaded();
   return `
     ${topbar()}
     <div class="note-editor-header">
@@ -1225,31 +1272,79 @@ function renderNoteEditor() {
     <input class="note-title-input" id="note-title" type="text"
       value="${escapeHtml(n.title || '')}" placeholder="Title" autocomplete="off"/>
     <div class="note-toolbar" id="note-toolbar">
-      <div style="display:flex;align-items:center;gap:2px">
-        <button class="tb-btn" data-cmd="formatBlock" data-val="p"  title="Normal">Normal</button>
-        <button class="tb-btn" data-cmd="formatBlock" data-val="h1" title="H1">H1</button>
-        <button class="tb-btn" data-cmd="formatBlock" data-val="h2" title="H2">H2</button>
-        <button class="tb-btn" data-cmd="formatBlock" data-val="h3" title="H3">H3</button>
+      <div class="notes-ctrl-wrap tb-style-wrap">
+        <button class="tb-btn tb-style-btn" id="tb-style-btn" data-dd-toggle title="Text style">
+          <span id="tb-style-label">Normal Text</span><span class="caret">▾</span>
+        </button>
+        <div class="notes-dropdown tb-style-dd" id="tb-style-dd">
+          ${NOTE_STYLE_OPTIONS.map(o => `<button data-block="${o.val}">${o.label}</button>`).join('')}
+          <div class="tb-dd-sep"></div>
+          <div class="tb-dd-more-wrap">
+            <button class="tb-dd-more" id="tb-style-options-btn" data-dd-toggle>Options ▸</button>
+            <div class="notes-dropdown tb-style-options-dd" id="tb-style-options-dd">
+              <button data-style-action="save">Save as my default style</button>
+              <button data-style-action="use">Use my default style</button>
+              <button data-style-action="reset">Reset styles</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tb-sep"></div>
+      <div class="notes-ctrl-wrap tb-font-wrap">
+        <button class="tb-btn tb-font-btn" id="tb-font-btn" data-dd-toggle title="Font family">
+          <span id="tb-font-label">Font</span><span class="caret">▾</span>
+        </button>
+        <div class="notes-dropdown tb-font-dd" id="tb-font-dd">
+          ${NOTE_FONTS.map(f => `
+            <div class="tb-font-item-wrap">
+              <button class="tb-font-item" data-font-toggle="${f.name}" style="font-family:${f.family}">${f.name}</button>
+              <div class="tb-weight-list" data-weight-list="${f.name}">
+                ${f.weights.map(([w, label]) => `<button data-font="${f.name}" data-weight="${w}" style="font-family:${f.family}; font-weight:${w}">${label}</button>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div class="tb-sep"></div>
+      <div class="notes-ctrl-wrap tb-fontsize-wrap">
+        <button class="tb-btn tb-fs-btn" data-fs-step="-1" title="Decrease font size">−</button>
+        <button class="tb-btn tb-fs-num" id="tb-fs-num" data-dd-toggle title="Font size">16</button>
+        <button class="tb-btn tb-fs-btn" data-fs-step="1" title="Increase font size">+</button>
+        <div class="notes-dropdown tb-fs-dd" id="tb-fs-dd">
+          ${NOTE_FONT_SIZE_PRESETS.map(s => `<button data-fs-preset="${s}">${s}</button>`).join('')}
+        </div>
       </div>
       <div class="tb-sep"></div>
       <div style="display:flex;align-items:center;gap:2px">
-        <button class="tb-btn tb-btn-b" data-cmd="bold"                title="Bold">B</button>
-        <button class="tb-btn tb-btn-i" data-cmd="italic"              title="Italic">I</button>
-        <button class="tb-btn"          data-cmd="insertUnorderedList" title="Bullet list">•</button>
+        <button class="tb-btn tb-btn-b" data-cmd="bold"      title="Bold">B</button>
+        <button class="tb-btn tb-btn-i" data-cmd="italic"    title="Italic">I</button>
+        <button class="tb-btn tb-btn-u" data-cmd="underline" title="Underline">U</button>
       </div>
       <div class="tb-sep"></div>
-      <select class="tb-btn tb-fontsize" id="tb-fontsize" title="Font size">
-        <option value="13">Size</option>
-        <option value="12">12</option>
-        <option value="13">13</option>
-        <option value="14">14</option>
-        <option value="16">16</option>
-        <option value="18">18</option>
-        <option value="20">20</option>
-        <option value="24">24</option>
-        <option value="28">28</option>
-        <option value="32">32</option>
-      </select>
+      <div style="display:flex;align-items:center;gap:2px">
+        <button class="tb-btn tb-icon-btn" data-cmd="insertUnorderedList" title="Bullet list">${ICON_BULLET_LIST}</button>
+        <button class="tb-btn tb-icon-btn" data-cmd="insertOrderedList"   title="Numbered list">${ICON_NUMBERED_LIST}</button>
+      </div>
+      <div class="tb-sep"></div>
+      <div class="notes-ctrl-wrap tb-color-wrap">
+        <button class="tb-btn tb-color-btn" id="tb-color-btn" data-dd-toggle title="Text color">
+          <span class="tb-color-icon" id="tb-color-icon">A</span>
+        </button>
+        <div class="notes-dropdown tb-swatches-dd" id="tb-color-dd">
+          <div class="tb-swatches">
+            ${NOTE_TEXT_COLORS.map(c => `<div class="sw" data-text-color="${c}" style="background:${c}"></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="notes-ctrl-wrap tb-color-wrap">
+        <button class="tb-btn tb-hilite-btn" id="tb-hilite-btn" data-dd-toggle title="Highlight color">
+          <span class="tb-hilite-icon" id="tb-hilite-icon">A</span>
+        </button>
+        <div class="notes-dropdown tb-swatches-dd" id="tb-hilite-dd">
+          <div class="tb-swatches">
+            ${NOTE_HILITE_COLORS.map(c => `<div class="sw" data-hilite-color="${c}" style="background:${c}"></div>`).join('')}
+          </div>
+        </div>
+      </div>
       <div class="tb-sep"></div>
       <button class="tb-btn" id="tb-table-btn" title="Insert table">⊞</button>
     </div>
@@ -3047,54 +3142,66 @@ function bindMainEvents() {
   if (noteContentEl) noteContentEl.addEventListener('input', triggerNoteSave);
 
   // editor: toolbar
+  const getSelectionEl = () => {
+    const sel = window.getSelection();
+    if (!sel || !sel.anchorNode || !noteContentEl || !noteContentEl.contains(sel.anchorNode)) return null;
+    return sel.anchorNode.nodeType === Node.TEXT_NODE ? sel.anchorNode.parentElement : sel.anchorNode;
+  };
   const updateTbState = () => {
     if (!noteContentEl) return;
-    const isBold   = document.queryCommandState('bold');
-    const isItalic = document.queryCommandState('italic');
-    const isList   = document.queryCommandState('insertUnorderedList');
-    const block    = (document.queryCommandValue('formatBlock') || '').toLowerCase().trim();
-    main.querySelectorAll('.tb-btn').forEach(btn => {
-      const cmd = btn.dataset.cmd, val = btn.dataset.val;
-      if (!cmd) return;
+    const isBold      = document.queryCommandState('bold');
+    const isItalic    = document.queryCommandState('italic');
+    const isUnderline = document.queryCommandState('underline');
+    const isList      = document.queryCommandState('insertUnorderedList');
+    const isOList     = document.queryCommandState('insertOrderedList');
+    const block       = (document.queryCommandValue('formatBlock') || '').toLowerCase().trim();
+    main.querySelectorAll('.tb-btn[data-cmd]').forEach(btn => {
+      const cmd = btn.dataset.cmd;
       let on = false;
-      if (cmd === 'bold')                on = isBold;
-      else if (cmd === 'italic')         on = isItalic;
+      if (cmd === 'bold')                     on = isBold;
+      else if (cmd === 'italic')              on = isItalic;
+      else if (cmd === 'underline')           on = isUnderline;
       else if (cmd === 'insertUnorderedList') on = isList;
-      else if (cmd === 'formatBlock') {
-        if (val === 'p') on = !block || block === 'p' || block === 'div' || block === 'normal';
-        else on = block === val;
-      }
+      else if (cmd === 'insertOrderedList')   on = isOList;
       btn.classList.toggle('tb-active', on);
     });
+    const normBlock = (!block || block === 'div' || block === 'normal') ? 'p' : block;
+    const styleLabel = main.querySelector('#tb-style-label');
+    if (styleLabel) {
+      const found = NOTE_STYLE_OPTIONS.find(o => o.val === normBlock);
+      styleLabel.textContent = found ? found.label : 'Normal Text';
+    }
+    main.querySelectorAll('#tb-style-dd [data-block]').forEach(b => b.classList.toggle('sel', b.dataset.block === normBlock));
+    const el = getSelectionEl();
+    if (el) {
+      const cs = getComputedStyle(el);
+      const fontLabel = main.querySelector('#tb-font-label');
+      if (fontLabel) {
+        const fam = (cs.fontFamily || '').split(',')[0].replace(/["']/g, '').trim();
+        const match = NOTE_FONTS.find(f => f.name.toLowerCase() === fam.toLowerCase());
+        fontLabel.textContent = match ? match.name : 'Font';
+      }
+      const fsNum = main.querySelector('#tb-fs-num');
+      if (fsNum) {
+        const px = Math.round(parseFloat(cs.fontSize) || 16);
+        fsNum.textContent = px;
+        fsNum.dataset.px = px;
+      }
+    }
   };
-  main.querySelectorAll('button.tb-btn').forEach(btn => {
+  main.querySelectorAll('button.tb-btn[data-cmd]').forEach(btn => {
     btn.addEventListener('mousedown', (e) => {
       e.preventDefault(); // keep contenteditable focus
       if (!noteContentEl) return;
-      const cmd = btn.dataset.cmd;
-      const val = btn.dataset.val || null;
-      if (!cmd) return;
-      document.execCommand(cmd, false, val);
+      document.execCommand(btn.dataset.cmd, false, null);
       setTimeout(updateTbState, 10);
       triggerNoteSave();
     });
   });
-  // editor: remember the last selection so the font-size <select> (which steals
-  // focus when opened) can still apply to the text the user had selected
-  let savedNoteRange = null;
-  const saveNoteSelection = () => {
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount && noteContentEl && noteContentEl.contains(sel.anchorNode)) {
-      savedNoteRange = sel.getRangeAt(0).cloneRange();
-    }
-  };
   if (noteContentEl) {
     noteContentEl.addEventListener('keyup',   updateTbState);
     noteContentEl.addEventListener('mouseup', updateTbState);
     noteContentEl.addEventListener('focus',   updateTbState);
-    noteContentEl.addEventListener('keyup',   saveNoteSelection);
-    noteContentEl.addEventListener('mouseup', saveNoteSelection);
-    noteContentEl.addEventListener('focus',   saveNoteSelection);
     // focus the editor on load if content is empty
     if (!noteContentEl.innerHTML.trim()) setTimeout(() => noteContentEl.focus(), 80);
     // collapsible headings
@@ -3103,27 +3210,207 @@ function bindMainEvents() {
     setTimeout(() => initTableInteractions(noteContentEl, triggerNoteSave), 60);
   }
 
-  // editor: font size dropdown
-  const tbFontSize = main.querySelector('#tb-fontsize');
-  if (tbFontSize && noteContentEl) {
-    tbFontSize.addEventListener('change', () => {
-      const px = tbFontSize.value;
-      noteContentEl.focus();
-      const sel = window.getSelection();
-      if (savedNoteRange) {
-        sel.removeAllRanges();
-        sel.addRange(savedNoteRange);
-      }
-      if (!sel || sel.isCollapsed) { tbFontSize.value = '13'; return; }
-      document.execCommand('fontSize', false, '7');
-      noteContentEl.querySelectorAll('font[size="7"]').forEach(f => {
-        f.removeAttribute('size');
-        f.style.fontSize = px + 'px';
-      });
-      tbFontSize.value = '13';
-      triggerNoteSave();
+  // editor: toolbar dropdowns — opened on mousedown (not click) so the
+  // contenteditable selection is never collapsed before a menu item is chosen
+  const TB_TOP_DD_IDS = ['tb-style-dd', 'tb-font-dd', 'tb-fs-dd', 'tb-color-dd', 'tb-hilite-dd'];
+  const closeTopToolbarDropdowns = () => {
+    TB_TOP_DD_IDS.forEach(id => main.querySelector('#' + id)?.classList.remove('open'));
+    main.querySelector('#tb-style-options-dd')?.classList.remove('open');
+    main.querySelectorAll('.tb-weight-list.open').forEach(l => l.classList.remove('open'));
+  };
+  [['tb-style-btn', 'tb-style-dd'], ['tb-font-btn', 'tb-font-dd'], ['tb-fs-num', 'tb-fs-dd'],
+   ['tb-color-btn', 'tb-color-dd'], ['tb-hilite-btn', 'tb-hilite-dd']].forEach(([btnId, ddId]) => {
+    const btn = main.querySelector('#' + btnId);
+    const dd  = main.querySelector('#' + ddId);
+    if (!btn || !dd) return;
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const wasOpen = dd.classList.contains('open');
+      closeTopToolbarDropdowns();
+      dd.classList.toggle('open', !wasOpen);
+    });
+  });
+  const styleOptBtn = main.querySelector('#tb-style-options-btn');
+  const styleOptDd  = main.querySelector('#tb-style-options-dd');
+  if (styleOptBtn && styleOptDd) {
+    styleOptBtn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      styleOptDd.classList.toggle('open');
     });
   }
+
+  // editor: style dropdown — block format (Normal/Title/Subtitle/Heading 1-3)
+  main.querySelectorAll('#tb-style-dd [data-block]').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      if (!noteContentEl) return;
+      noteContentEl.focus();
+      document.execCommand('formatBlock', false, btn.dataset.block);
+      closeTopToolbarDropdowns();
+      setTimeout(updateTbState, 10);
+      triggerNoteSave();
+    });
+  });
+
+  // editor: font size — shared apply helper used by stepper, presets, and "use default style"
+  const applyFontSize = (px) => {
+    if (!noteContentEl) return;
+    noteContentEl.focus();
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    document.execCommand('fontSize', false, '7');
+    noteContentEl.querySelectorAll('font[size="7"]').forEach(f => {
+      f.removeAttribute('size');
+      f.style.fontSize = px + 'px';
+    });
+    const fsNum = main.querySelector('#tb-fs-num');
+    if (fsNum) { fsNum.textContent = px; fsNum.dataset.px = px; }
+    triggerNoteSave();
+  };
+  main.querySelectorAll('.tb-fs-btn').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const fsNum = main.querySelector('#tb-fs-num');
+      const cur = parseInt(fsNum?.dataset.px || fsNum?.textContent || '16', 10);
+      applyFontSize(Math.max(6, Math.min(200, cur + parseInt(btn.dataset.fsStep, 10))));
+    });
+  });
+  main.querySelectorAll('#tb-fs-dd [data-fs-preset]').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      applyFontSize(parseInt(btn.dataset.fsPreset, 10));
+      closeTopToolbarDropdowns();
+    });
+  });
+
+  // editor: font family — click a font to expand its weight list, apply family+weight together
+  // extra: optional { fontSize, color } applied to the same span in one pass —
+  // chaining separate applyFontSize/applyForeColor calls after this would fail because
+  // replaceWith() detaches the nodes the live selection points at, collapsing it.
+  const applyFontFamily = (family, weight, extra) => {
+    if (!noteContentEl) return;
+    noteContentEl.focus();
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    document.execCommand('fontName', false, '__hq_pending__');
+    noteContentEl.querySelectorAll('font[face="__hq_pending__"]').forEach(f => {
+      const span = document.createElement('span');
+      span.style.fontFamily = family;
+      if (weight) span.style.fontWeight = weight;
+      if (extra?.fontSize) span.style.fontSize = extra.fontSize + 'px';
+      if (extra?.color) span.style.color = extra.color;
+      while (f.firstChild) span.appendChild(f.firstChild);
+      f.replaceWith(span);
+    });
+    if (extra?.fontSize) {
+      const fsNum = main.querySelector('#tb-fs-num');
+      if (fsNum) { fsNum.textContent = extra.fontSize; fsNum.dataset.px = extra.fontSize; }
+    }
+    triggerNoteSave();
+  };
+  main.querySelectorAll('.tb-font-item').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const list = main.querySelector(`.tb-weight-list[data-weight-list="${btn.dataset.fontToggle}"]`);
+      const wasOpen = list?.classList.contains('open');
+      main.querySelectorAll('.tb-weight-list.open').forEach(l => l.classList.remove('open'));
+      if (list) list.classList.toggle('open', !wasOpen);
+    });
+  });
+  main.querySelectorAll('.tb-weight-list [data-font]').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const fontDef = NOTE_FONTS.find(f => f.name === btn.dataset.font);
+      if (!fontDef) return;
+      applyFontFamily(fontDef.family, btn.dataset.weight);
+      const label = main.querySelector('#tb-font-label');
+      if (label) label.textContent = fontDef.name;
+      closeTopToolbarDropdowns();
+    });
+  });
+
+  // editor: text color / highlight color
+  const applyForeColor = (hex) => {
+    if (!noteContentEl) return;
+    noteContentEl.focus();
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    document.execCommand('foreColor', false, hex);
+    const icon = main.querySelector('#tb-color-icon');
+    if (icon) icon.style.borderBottomColor = hex;
+    triggerNoteSave();
+  };
+  const applyHiliteColor = (hex) => {
+    if (!noteContentEl) return;
+    noteContentEl.focus();
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    let ok = false;
+    try { ok = document.execCommand('hiliteColor', false, hex); } catch (_) {}
+    if (!ok) { try { document.execCommand('backColor', false, hex); } catch (_) {} }
+    const icon = main.querySelector('#tb-hilite-icon');
+    if (icon) icon.style.background = hex;
+    triggerNoteSave();
+  };
+  main.querySelectorAll('#tb-color-dd [data-text-color]').forEach(sw => {
+    sw.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      applyForeColor(sw.dataset.textColor);
+      closeTopToolbarDropdowns();
+    });
+  });
+  main.querySelectorAll('#tb-hilite-dd [data-hilite-color]').forEach(sw => {
+    sw.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      applyHiliteColor(sw.dataset.hiliteColor);
+      closeTopToolbarDropdowns();
+    });
+  });
+
+  // editor: style options — save / use / reset personal default style
+  main.querySelectorAll('#tb-style-options-dd [data-style-action]').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      if (!noteContentEl) return;
+      const action = btn.dataset.styleAction;
+      closeTopToolbarDropdowns();
+      if (action === 'save') {
+        const el = getSelectionEl() || noteContentEl;
+        const cs = getComputedStyle(el);
+        const style = {
+          fontFamily: (cs.fontFamily || '').split(',')[0].replace(/["']/g, '').trim(),
+          fontSize: Math.round(parseFloat(cs.fontSize) || 16),
+          fontWeight: cs.fontWeight,
+          color: rgbToHex(cs.color)
+        };
+        state.profile.noteDefaultStyle = style;
+        if (currentUser) dbCall(() => sb.from('profiles').update({ note_default_style: style }).eq('id', currentUser.id));
+        showToast('Default style saved');
+      } else if (action === 'use') {
+        const style = state.profile.noteDefaultStyle;
+        if (!style) { showToast('No default style saved yet', 'error'); return; }
+        noteContentEl.focus();
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) { showToast('Select some text first', 'error'); return; }
+        if (style.fontFamily) {
+          applyFontFamily(style.fontFamily, style.fontWeight, { fontSize: style.fontSize, color: style.color });
+        } else {
+          if (style.fontSize) applyFontSize(style.fontSize);
+          if (style.color)    applyForeColor(style.color);
+        }
+      } else if (action === 'reset') {
+        noteContentEl.focus();
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) { showToast('Select some text first', 'error'); return; }
+        document.execCommand('removeFormat');
+        triggerNoteSave();
+      }
+    });
+  });
 
   // editor: table insert button
   const tbTableBtn = main.querySelector('#tb-table-btn');
@@ -3260,8 +3547,13 @@ document.addEventListener('click', (e) => {
     }
   });
   document.querySelectorAll('.notes-dropdown.open').forEach(dd => {
-    if (!dd.contains(e.target) && !e.target.closest('#notes-sort-btn, #notes-filter-btn')) {
+    if (!dd.contains(e.target) && !e.target.closest('#notes-sort-btn, #notes-filter-btn, [data-dd-toggle]')) {
       dd.classList.remove('open');
+    }
+  });
+  document.querySelectorAll('.tb-weight-list.open').forEach(l => {
+    if (!l.contains(e.target) && !e.target.closest('.tb-font-item')) {
+      l.classList.remove('open');
     }
   });
 });

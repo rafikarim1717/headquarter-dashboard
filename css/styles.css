@@ -1061,6 +1061,8 @@
   .note-toolbar {
     display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
     border-bottom: 1px solid var(--border); padding: 8px 0; margin-bottom: 18px;
+    position: sticky; top: 0; z-index: 5;
+    background: var(--bg);
   }
   .tb-btn {
     padding: 5px 10px; border-radius: 6px;
@@ -1072,11 +1074,41 @@
   .tb-btn.tb-active { background: color-mix(in oklab, var(--accent) 14%, transparent); color: var(--accent); }
   .tb-btn-b { font-weight: 700; }
   .tb-btn-i { font-style: italic; }
+  .tb-icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 9px; }
+  .tb-icon-btn svg { display: block; }
+  .tb-btn-u { text-decoration: underline; }
   .tb-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
-  .tb-fontsize {
-    background: var(--card-2); border: 1px solid var(--border); cursor: pointer;
-  }
-  .tb-fontsize:hover { background: #252525; color: var(--text); }
+
+  /* ---- Notes toolbar: style / font / size / color dropdowns ---- */
+  .tb-style-dd, .tb-font-dd, .tb-fs-dd, .tb-swatches-dd { left: 0; right: auto; }
+  .tb-style-dd { min-width: 160px; overflow: visible; }
+  .tb-style-dd [data-block].sel { color: var(--accent); }
+  .tb-dd-sep { height: 1px; background: var(--border); margin: 4px 8px; }
+  .tb-dd-more-wrap { position: relative; }
+  .tb-dd-more { display: flex; align-items: center; justify-content: space-between; }
+  .tb-style-options-dd { left: 100%; right: auto; top: 0; margin-left: 4px; min-width: 190px; }
+
+  .tb-font-wrap .tb-font-btn span:first-child { max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+  .tb-font-dd { min-width: 180px; max-height: 320px; overflow-y: auto; }
+  .tb-font-item { width: 100%; }
+  .tb-weight-list { display: none; flex-direction: column; background: #151515; }
+  .tb-weight-list.open { display: flex; }
+  .tb-weight-list button { padding-left: 26px; font-size: 11px; }
+  .tb-font-item-wrap:hover .tb-weight-list { display: flex; }
+
+  .tb-fontsize-wrap { display: flex; align-items: center; gap: 2px; }
+  .tb-fs-btn { padding: 5px 8px; }
+  .tb-fs-num { min-width: 26px; text-align: center; }
+  .tb-fs-dd { display: none; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 6px; min-width: 130px; }
+  .tb-fs-dd.open { display: grid; }
+  .tb-fs-dd button { padding: 6px 0; text-align: center; border-radius: 4px; }
+
+  .tb-color-icon { font-weight: 700; border-bottom: 2px solid var(--text-dim); padding-bottom: 1px; }
+  .tb-hilite-icon { background: var(--card-2); padding: 0 3px; border-radius: 2px; }
+  .tb-swatches { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px; }
+  .tb-swatches .sw { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border-strong); cursor: pointer; }
+  .tb-swatches .sw:hover { box-shadow: 0 0 0 2px var(--accent); }
+
   .note-content {
     outline: none; font-size: 16px; line-height: 1.7; color: var(--text);
     min-height: 300px; padding-bottom: 60px; caret-color: var(--accent);
@@ -1085,8 +1117,10 @@
   .note-content h1 { font-size: 28px; font-weight: 500; margin: 18px 0 6px; line-height: 1.25; color: var(--text); }
   .note-content h2 { font-size: 22px; font-weight: 500; margin: 14px 0 5px; line-height: 1.3; color: var(--text); }
   .note-content h3 { font-size: 18px; font-weight: 500; margin: 12px 0 4px; line-height: 1.35; color: var(--text); }
+  .note-content h4 { font-size: 15px; font-weight: 600; margin: 10px 0 4px; line-height: 1.4; color: var(--text); }
+  .note-content h5 { font-size: 14px; font-weight: 600; margin: 8px 0 4px; line-height: 1.4; color: var(--text-dim); }
   .note-content p { margin: 4px 0; }
-  .note-content ul { padding-left: 22px; margin: 6px 0; }
+  .note-content ul, .note-content ol { padding-left: 22px; margin: 6px 0; }
   .note-content li { margin: 3px 0; }
   .note-content b, .note-content strong { font-weight: 600; }
   .note-content i, .note-content em { color: var(--text-dim); }

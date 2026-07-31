@@ -605,3 +605,13 @@ DO $$ BEGIN
     FOR DELETE USING (auth.uid() = user_id);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+
+-- ────────────────────────────────────────────────────────────
+-- 16. profiles.note_default_style
+--     Lets the Notes editor's "Save as my default style" / "Use my
+--     default style" / "Reset styles" options sync across devices.
+--     Shape: { fontFamily, fontSize, fontWeight, color } or NULL.
+--     Safe to re-run on an existing profiles table that predates this column.
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS note_default_style jsonb;

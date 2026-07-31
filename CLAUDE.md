@@ -103,9 +103,10 @@ All tables use Row Level Security (RLS). Every row is owned by a user via `user_
 |---|---|---|
 | `id` | uuid PK | References `auth.users(id)`, cascade delete |
 | `name` | text | User's display name |
+| `note_default_style` | jsonb | Nullable. `{ fontFamily, fontSize, fontWeight, color }` captured by the Notes editor's style dropdown → Options → "Save as my default style", applied by "Use my default style". Added to `schema.sql`/`schema_fix.sql`; **run `schema_fix.sql` on the live DB** to backfill the column there. |
 | `created_at` | timestamptz | Default `now()` (schema.sql) |
 
-Operations: `select` (maybeSingle by id), `upsert` (on first login), `update` (name via Tweaks panel).
+Operations: `select` (maybeSingle by id), `upsert` (on first login), `update` (name via Tweaks panel; `note_default_style` via Notes editor style options).
 
 ### `schedule_events`
 | Column | Type | Notes |
@@ -299,7 +300,7 @@ Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compli
 | `life:schedule` | Schedule | Full month calendar view, day selector, event list for selected day. Add/edit/delete events. Alarm toggle per event (Web Notifications + AudioContext beep). |
 | `life:commitments` | Commitments | Replaces the old Goals/Habits pages. Do's/Don'ts columns with daily check-off (backed by `goal_logs`, not a static `checked` flag) and drag-and-drop reordering. Compliance ring (today's %) plus a history card with **Day / Week / Month / Year** tabs (see below). |
 | `life:projects` | Projects | List of projects (filter: All/Active/On Hold/Done). Each card: name, description, status/deadline badges, progress bar (tasks done / total), expandable task list with check/edit/delete/assign-to-schedule, add task. |
-| `life:notes` | Notes | Grid/list view of note cards. Sort (Newest/Oldest/A-Z) and filter (All/Today/Week) dropdowns. New note → rich text editor (contenteditable, toolbar: H1/H2/H3/Normal/Bold/Italic/Bullet). Heading collapse toggle. Autosaves title+content debounced 1000ms. Relative timestamps. |
+| `life:notes` | Notes | Grid/list view of note cards. Sort (Newest/Oldest/A-Z) and filter (All/Today/Week) dropdowns. New note → rich text editor (contenteditable, Docs/Word-style toolbar: Style dropdown [Normal/Title/Subtitle/Heading 1-3 + Options flyout to save/use/reset a personal default style], Font family picker [10 fonts, click-to-expand weight variants], Font-size stepper [−/number/+  with a preset dropdown], Bold/Italic/Underline, Bullet/Numbered list, Text color + Highlight color swatches, Insert table). Heading collapse toggle. Autosaves title+content debounced 1000ms. Relative timestamps. |
 
 **Commitments — drag-and-drop reorder** (`renderCommitments`, `js/app.js`):
 - Each `.goal-item` card is `draggable="true"`. Hover shows `cursor: grab`; an active drag shows `cursor: grabbing` and `opacity: 0.4` on the source card (`.dragging` class).
@@ -410,3 +411,4 @@ These columns/tables are used in the code but **missing from both schema files**
 3. **`goal_logs` table** — entire table missing from schema. See columns above; needed for Commitments to track per-day check-off.
 4. **`projects` / `project_tasks` tables** — now added to `schema_fix.sql` (sections 11–12), including `project_tasks.completed_at`. **Run `schema_fix.sql` in the Supabase SQL editor** to create/patch these on the live DB — the app already reads/writes `completed_at` in code, so checking off a project task fails outright (Postgrest rejects the whole `UPDATE` when an unknown column is referenced) until this migration is run.
 5. **`goals.order_index`** — added to `schema.sql` and `schema_fix.sql` (section 13) to support Commitments drag-to-reorder. **Run this migration on the live DB** — until then, both loading goals (`.order('order_index')`) and inserting a new Do/Don't fail ("Sync failed" toast / empty Commitments list).
+6. **`profiles.note_default_style`** — added to `schema.sql` and `schema_fix.sql` (section 16) to support the Notes editor's "Save as my default style" / "Use my default style" options. **Run `schema_fix.sql` on the live DB** — until then, saving a default style fails outright (Postgrest rejects the `UPDATE` on the unknown column).
