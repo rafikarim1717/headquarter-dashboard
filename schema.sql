@@ -54,6 +54,8 @@ create table if not exists goals (
   text text not null,
   checked boolean not null default false,
   order_index integer not null default 0,
+  target_count integer not null default 1,
+  unit text,
   created_at timestamptz not null default now()
 );
 
@@ -63,6 +65,29 @@ create policy "Users can manage own goals"
   on goals for all using (auth.uid() = user_id);
 
 create index if not exists goals_user_id on goals(user_id);
+
+-- ============================================================
+-- GOAL LOGS
+-- One row per (goal_id, date). count tracks today's progress toward
+-- goals.target_count; checked is always kept in sync as
+-- (count >= target_count) and is what all compliance/history views read.
+-- ============================================================
+create table if not exists goal_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  goal_id uuid not null references goals(id) on delete cascade,
+  date date not null,
+  checked boolean not null default false,
+  count integer not null default 0,
+  unique (goal_id, date)
+);
+
+alter table goal_logs enable row level security;
+
+create policy "Users can manage own goal_logs"
+  on goal_logs for all using (auth.uid() = user_id);
+
+create index if not exists goal_logs_goal_date on goal_logs(goal_id, date);
 
 -- ============================================================
 -- HABITS

@@ -129,8 +129,8 @@ let draggedGoalId = null; // id of the goal/commitment card currently being drag
 let state = {
   profile: { name: 'Friend', noteDefaultStyle: null },
   schedule: {},   // { [iso-date]: [{id, time, title, sub}] }
-  goals: { dos: [], donts: [] },
-  goalLogs: [],   // [{id, goal_id, user_id, date, checked}]
+  goals: { dos: [], donts: [] },  // items: {id, text, target_count, unit} — target_count=1 renders as a checkbox, >1 renders as a +/- counter
+  goalLogs: [],   // [{id, goal_id, user_id, date, checked, count}] — checked is always (count >= goal.target_count)
   projects: [],       // [{id, name, status, deadline, tasks:[{id,text,description,checked,completed_at}]}]
   projectsFilter: 'all',
   expandedProjectIds: [],
@@ -577,12 +577,16 @@ function renderLifeHome() {
         ${allGoals.length === 0
           ? `<li class="list-item"><div class="item-sub">No commitments yet.</div></li>`
           : allGoals.map(g => {
-              const isChecked = getTodayLog(g.id)?.checked || false;
+              const log = getTodayLog(g.id);
+              const target = g.target_count || 1;
+              const count = log?.count || 0;
+              const isChecked = log?.checked || false;
               const isDo = (state.goals.dos || []).some(d => d.id === g.id);
+              const countSuffix = target > 1 ? ` <span class="commit-count-suffix" data-commit-count-suffix="${g.id}">(${count}/${target})</span>` : '';
               return `<li class="list-item" style="padding:8px 0;gap:10px;min-height:44px">
                 <span class="check ${isChecked ? 'checked' : ''}" data-toggle-today-goal="${g.id}" style="flex-shrink:0"></span>
                 <span class="commit-type-pill ${isDo ? 'do' : 'dont'}">${isDo ? 'DO' : 'DONT'}</span>
-                <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1" id="today-commit-text-${g.id}">${escapeHtml(g.text)}</span>
+                <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1" id="today-commit-text-${g.id}">${escapeHtml(g.text)}${countSuffix}</span>
               </li>`;
             }).join('')}
       </ul>
@@ -837,6 +841,13 @@ function renderCommitYearHeatmap(year, hasGoals) {
       }).join('')}
     </div>`;
 }
+function updateGoalHeaderCount(key) {
+  const header = document.querySelector(`[data-goal-count-header="${key}"]`);
+  if (!header) return;
+  const items = state.goals[key] || [];
+  const checked = items.filter(i => getTodayLog(i.id)?.checked).length;
+  header.textContent = `${checked} / ${items.length}`;
+}
 function computeDailyScore() {
   const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
   const totalGoals = allGoals.length;
@@ -899,15 +910,24 @@ function renderCommitments() {
   function col(title, items, key) {
     return `
       <div class="card" style="animation-delay:40ms">
-        <div class="section-title" style="margin-top:0">${title} <span class="meta">${items.filter(i => getTodayLog(i.id)?.checked).length} / ${items.length}</span></div>
+        <div class="section-title" style="margin-top:0">${title} <span class="meta" data-goal-count-header="${key}">${items.filter(i => getTodayLog(i.id)?.checked).length} / ${items.length}</span></div>
         <ul class="list" style="padding:0" data-goal-list="${key}">
           ${items.map(i => {
-            const isChecked = getTodayLog(i.id)?.checked || false;
+            const target = i.target_count || 1;
+            const log = getTodayLog(i.id);
+            const count = log?.count || 0;
+            const isDone = log?.checked || false;
+            const control = target > 1 ? `
+                <div class="goal-counter">
+                  <button type="button" class="goal-count-btn" data-goal-bump="-1|${key}|${i.id}" aria-label="Decrease">&#8722;</button>
+                  <span class="goal-count-val" data-goal-count-val="${i.id}">${count}/${target}${i.unit ? ' ' + escapeHtml(i.unit) : ''}</span>
+                  <button type="button" class="goal-count-btn" data-goal-bump="1|${key}|${i.id}" aria-label="Increase">&#43;</button>
+                </div>` : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal="${key}|${i.id}"></span>`;
             return `
-            <li class="goal-item" draggable="true" data-goal-drag="${i.id}">
+            <li class="goal-item${isDone ? ' goal-done' : ''}" draggable="true" data-goal-drag="${i.id}" data-goal-row="${i.id}">
               <div class="list-item" style="padding:10px 0;align-items:center">
-                <span class="check ${isChecked ? 'checked' : ''}" data-toggle-goal="${key}|${i.id}"></span>
-                <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
+                ${control}
+                <span class="check-label ${isDone ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
                 <div class="fin-acts">
                   <button class="fin-edit-btn" data-edit-goal="${key}|${i.id}">&#x270E;</button>
                   <button class="fin-del-btn" data-del-goal="${key}|${i.id}" title="Delete">${ICON_TRASH}</button>
@@ -930,12 +950,16 @@ function renderCommitments() {
     const dayLabel = isToday ? 'Today' : new Date(viewDay + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
     const dayPct   = totalGoals ? Math.round(getDayCompliancePct(viewDay)) : 0;
     const rows = allGoals.map(g => {
-      const isDo    = dos.includes(g);
-      const checked = getLogByDate(g.id, viewDay)?.checked || false;
+      const isDo   = dos.includes(g);
+      const target = g.target_count || 1;
+      const log    = getLogByDate(g.id, viewDay);
+      const checked = log?.checked || false;
+      const count   = log?.count || 0;
       return `
         <li class="commit-day-row${checked ? ' checked' : ''}">
           <span class="commit-day-icon">${checked ? '&#10003;' : '&#8211;'}</span>
           <span class="commit-day-text">${escapeHtml(g.text)}</span>
+          ${target > 1 ? `<span class="commit-day-count">${count}/${target}</span>` : ''}
           <span class="commit-day-type">${isDo ? "Do" : "Don't"}</span>
         </li>`;
     }).join('');
@@ -2370,26 +2394,31 @@ function bindMainEvents() {
     render();
   }));
 
-  // goal toggle → upsert goal_logs
+  // goal toggle → upsert goal_logs (target_count === 1 items only; counter items use data-goal-bump)
   main.querySelectorAll('[data-toggle-goal]').forEach(el => el.addEventListener('click', async () => {
     const [k, id] = el.dataset.toggleGoal.split('|');
     const g = (state.goals[k] || []).find(x => x.id === id);
     if (!g || !currentUser) return;
+    const target = g.target_count || 1;
     const today = todayISO();
     const existingLog = getTodayLog(id);
     const newChecked = existingLog ? !existingLog.checked : true;
+    const newCount = newChecked ? target : 0;
     if (existingLog) {
       existingLog.checked = newChecked;
+      existingLog.count = newCount;
     } else {
-      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked });
+      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount });
     }
     pulse(el);
     el.classList.toggle('checked', newChecked);
+    el.closest('.goal-item')?.classList.toggle('goal-done', newChecked);
     const labelEl = el.closest('.goal-item')?.querySelector('.check-label');
     if (labelEl) labelEl.classList.toggle('done', newChecked);
+    updateGoalHeaderCount(k);
     updateComplianceRing();
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
-      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked },
+      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount },
       { onConflict: 'goal_id,date' }
     ).select().single());
     if (data) {
@@ -2398,24 +2427,66 @@ function bindMainEvents() {
     }
   }));
 
-  // today page goal toggle → upsert goal_logs
+  // goal counter bump (+/-) → upsert goal_logs.count, derives checked = count >= target_count
+  main.querySelectorAll('[data-goal-bump]').forEach(el => el.addEventListener('click', async () => {
+    const [dirStr, k, id] = el.dataset.goalBump.split('|');
+    const dir = Number(dirStr);
+    const g = (state.goals[k] || []).find(x => x.id === id);
+    if (!g || !currentUser) return;
+    const target = g.target_count || 1;
+    const today = todayISO();
+    const existingLog = getTodayLog(id);
+    const prevCount = existingLog?.count || 0;
+    const newCount = Math.max(0, prevCount + dir);
+    const newChecked = newCount >= target;
+    if (existingLog) {
+      existingLog.count = newCount;
+      existingLog.checked = newChecked;
+    } else {
+      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount });
+    }
+    const valEl = document.querySelector(`[data-goal-count-val="${id}"]`);
+    if (valEl) valEl.textContent = `${newCount}/${target}${g.unit ? ' ' + g.unit : ''}`;
+    const rowEl = document.querySelector(`[data-goal-row="${id}"]`);
+    if (rowEl) rowEl.classList.toggle('goal-done', newChecked);
+    const labelEl = document.querySelector(`[data-goal-text="${id}"]`);
+    if (labelEl) labelEl.classList.toggle('done', newChecked);
+    updateGoalHeaderCount(k);
+    updateComplianceRing();
+    const { data } = await dbCall(() => sb.from('goal_logs').upsert(
+      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount },
+      { onConflict: 'goal_id,date' }
+    ).select().single());
+    if (data) {
+      const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
+      if (localLog && !localLog.id) localLog.id = data.id;
+    }
+  }));
+
+  // today page goal toggle → upsert goal_logs (counter items: tap = +1, wraps to 0 once target is hit)
   main.querySelectorAll('[data-toggle-today-goal]').forEach(el => el.addEventListener('click', async () => {
     const id = el.dataset.toggleTodayGoal;
     const allG = [...(state.goals.dos || []), ...(state.goals.donts || [])];
     const g = allG.find(x => x.id === id);
     if (!g || !currentUser) return;
+    const target = g.target_count || 1;
     const today = todayISO();
     const existingLog = getTodayLog(id);
-    const newChecked = existingLog ? !existingLog.checked : true;
+    const prevCount = existingLog?.count || 0;
+    const newCount = target > 1 ? (prevCount >= target ? 0 : prevCount + 1) : (prevCount >= 1 ? 0 : 1);
+    const newChecked = newCount >= target;
     if (existingLog) {
       existingLog.checked = newChecked;
+      existingLog.count = newCount;
     } else {
-      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked });
+      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount });
     }
     pulse(el);
     el.classList.toggle('checked', newChecked);
     const lbl = document.getElementById(`today-commit-text-${id}`);
     if (lbl) lbl.classList.toggle('done', newChecked);
+    const suffixEl = document.querySelector(`[data-commit-count-suffix="${id}"]`);
+    if (suffixEl) suffixEl.textContent = `(${newCount}/${target})`;
     updateComplianceRing();
     const newScore = computeDailyScore();
     const scoreEl = document.querySelector('.num[data-target]');
@@ -2434,7 +2505,7 @@ function bindMainEvents() {
       })(performance.now());
     }
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
-      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked },
+      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount },
       { onConflict: 'goal_id,date' }
     ).select().single());
     if (data) {
@@ -2575,15 +2646,22 @@ function bindMainEvents() {
     if (!g) return;
     showModal({
       title: 'Edit Commitment',
-      fields: [{ id: 'text', label: k === 'dos' ? "Do" : "Don't", type: 'text', value: g.text, placeholder: '...' }],
+      fields: [
+        { id: 'text', label: k === 'dos' ? "Do" : "Don't", type: 'text', value: g.text, placeholder: '...' },
+        { id: 'target_count', label: 'Times per day', type: 'number', value: g.target_count || 1, placeholder: '1' },
+        { id: 'unit', label: 'Unit (optional)', type: 'text', value: g.unit || '', placeholder: 'e.g. DM, halaman, menit' }
+      ],
       saveLabel: 'Save',
-      onSave: ({ text }) => {
+      onSave: ({ text, target_count, unit }) => {
         const trimmed = text.trim();
         if (!trimmed) return;
+        const targetVal = Math.max(1, Math.round(Number(target_count)) || 1);
+        const unitVal = unit.trim() || null;
         g.text = trimmed;
-        const textEl = document.querySelector(`[data-goal-text="${id}"]`);
-        if (textEl) textEl.textContent = trimmed;
-        dbCall(() => sb.from('goals').update({ text: trimmed }).eq('id', id));
+        g.target_count = targetVal;
+        g.unit = unitVal;
+        render();
+        dbCall(() => sb.from('goals').update({ text: trimmed, target_count: targetVal, unit: unitVal }).eq('id', id));
       }
     });
   }));
@@ -2647,15 +2725,21 @@ function bindMainEvents() {
     const isDo = key === 'dos';
     showModal({
       title: isDo ? 'Add Do' : "Add Don't",
-      fields: [{ id: 'text', label: isDo ? 'Do' : "Don't", type: 'text', value: '', placeholder: isDo ? 'e.g. Drink 2L water' : 'e.g. No phone in bed' }],
+      fields: [
+        { id: 'text', label: isDo ? 'Do' : "Don't", type: 'text', value: '', placeholder: isDo ? 'e.g. Drink 2L water' : 'e.g. No phone in bed' },
+        { id: 'target_count', label: 'Times per day', type: 'number', value: 1, placeholder: '1' },
+        { id: 'unit', label: 'Unit (optional)', type: 'text', value: '', placeholder: 'e.g. DM, halaman, menit' }
+      ],
       saveLabel: 'Add',
-      onSave: async ({ text }) => {
+      onSave: async ({ text, target_count, unit }) => {
         const trimmed = text.trim();
         if (!trimmed) return;
         const type = isDo ? 'do' : 'dont';
         const order_index = state.goals[key].length;
-        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text: trimmed, order_index }).select().single());
-        if (data) { state.goals[key].push({ id: data.id, text: trimmed }); render(); }
+        const targetVal = Math.max(1, Math.round(Number(target_count)) || 1);
+        const unitVal = unit.trim() || null;
+        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text: trimmed, order_index, target_count: targetVal, unit: unitVal }).select().single());
+        if (data) { state.goals[key].push({ id: data.id, text: trimmed, target_count: targetVal, unit: unitVal }); render(); }
       }
     });
   }));

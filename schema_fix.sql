@@ -608,7 +608,65 @@ END $$;
 
 
 -- ────────────────────────────────────────────────────────────
--- 16. profiles.note_default_style
+-- 16. goals.target_count / goals.unit / goal_logs table+count
+--     Lets a commitment require doing something N times a day
+--     (e.g. "Cold DM" target_count=3, unit='DM') instead of a
+--     single yes/no. goal_logs.count tracks today's progress
+--     toward target_count; goal_logs.checked is always kept in
+--     sync as (count >= target_count) — it's still what every
+--     compliance/history view (ring, week strip, month calendar,
+--     year heatmap, daily score) reads, so nothing else breaks.
+--     goal_logs itself was previously missing from both schema
+--     files entirely — this creates it if it doesn't exist yet.
+--     Safe to re-run.
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE goals ADD COLUMN IF NOT EXISTS target_count integer NOT NULL DEFAULT 1;
+ALTER TABLE goals ADD COLUMN IF NOT EXISTS unit text;
+
+CREATE TABLE IF NOT EXISTS goal_logs (
+  id       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id  uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  goal_id  uuid NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  date     date NOT NULL,
+  checked  boolean NOT NULL DEFAULT false,
+  count    integer NOT NULL DEFAULT 0,
+  UNIQUE (goal_id, date)
+);
+
+-- Safe to re-run on an already-existing goal_logs table that predates this column.
+ALTER TABLE goal_logs ADD COLUMN IF NOT EXISTS count integer NOT NULL DEFAULT 0;
+
+ALTER TABLE goal_logs ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "goal_logs_select" ON goal_logs
+    FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "goal_logs_insert" ON goal_logs
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "goal_logs_update" ON goal_logs
+    FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "goal_logs_delete" ON goal_logs
+    FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS goal_logs_goal_date ON goal_logs(goal_id, date);
+
+
+-- ────────────────────────────────────────────────────────────
+-- 17. profiles.note_default_style
 --     Lets the Notes editor's "Save as my default style" / "Use my
 --     default style" / "Reset styles" options sync across devices.
 --     Shape: { fontFamily, fontSize, fontWeight, color } or NULL.

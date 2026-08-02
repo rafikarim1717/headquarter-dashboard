@@ -132,20 +132,23 @@ Index on `(user_id, date)`.
 | `text` | text | Goal description |
 | `checked` | boolean | Default false — legacy column, no longer written to; per-day state now lives in `goal_logs` |
 | `order_index` | integer | Default 0. Manual sort position within its `type` (dos/donts ordered independently). Set on insert (`items.length`); reordered via native HTML5 drag-and-drop on the card itself (`draggable="true"` on `.goal-item`, `dragstart`/`dragover`/`drop`/`dragend` handlers in `bindMainEvents()` — no arrow buttons). Dropping a card splices it to its new array position, then re-syncs `order_index` for every item in that column. Load query orders by `order_index` then `created_at`. |
+| `target_count` | integer | Default 1. How many times/day this commitment must be logged to count as done. `1` (default) renders as a plain checkbox on Commitments/Home — no behavior change from before. `>1` (e.g. "Cold DM" = 3) renders as a `−`/count/`+` stepper instead (`.goal-counter` in `renderCommitments`'s `col()`), tapping bumps `goal_logs.count` for today. Set via the "Times per day" field on the Add Do/Don't and Edit Commitment modals. Added to `schema.sql`/`schema_fix.sql` (section 16); **run `schema_fix.sql` on the live DB**. |
+| `unit` | text | Nullable. Optional label shown next to the counter, e.g. `'DM'`, `'halaman'`, `'menit'` (Cold DM 2/3 DM). Set via the "Unit (optional)" field on the same modals. Added to `schema.sql`/`schema_fix.sql` (section 16); **run `schema_fix.sql` on the live DB**. |
 | `created_at` | timestamptz | |
 
 ### `goal_logs`
-**[MISSING FROM SCHEMA FILES]** — Referenced in `supabase.js` `loadFromSupabase()` and throughout the Commitments page logic in `app.js` (`getTodayLog`, `getDayCompliancePct`, `computeDailyScore`). One row per `(goal_id, date)`, written via upsert when a commitment is checked/unchecked for a given day. Inferred columns:
+One row per `(goal_id, date)`, written via upsert whenever a commitment's checkbox is toggled or its counter is bumped. Added to `schema.sql`/`schema_fix.sql` (section 16 of `schema_fix.sql`) — was previously entirely missing from both schema files; **run `schema_fix.sql` on the live DB**.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
 | `user_id` | uuid FK | → `auth.users` |
 | `goal_id` | uuid FK | → `goals(id)`, cascade delete |
 | `date` | date | Log date |
-| `checked` | boolean | Default false |
+| `checked` | boolean | Default false. **Always kept equal to `count >= goals.target_count`** — every write (checkbox toggle or counter bump, in `js/app.js` `bindMainEvents()`) recomputes and upserts both fields together, so this stays the single source of truth for every compliance/history view (ring, week strip, month calendar, year heatmap, daily score) without those views needing to know about `target_count` at all. |
+| `count` | integer | Default 0. Today's progress toward the parent goal's `target_count` (e.g. 2 of 3 cold DMs sent). Bumped by the `−`/`+` counter on Commitments, or by tapping the checkbox on Home (wraps back to 0 once it hits target). Added to `schema.sql`/`schema_fix.sql` (section 16); **run `schema_fix.sql` on the live DB**. |
 | UNIQUE | `(goal_id, date)` | Prevents duplicate log per day |
 
-Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compliance calendar, and Home's "Daily score".
+Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compliance calendar, year heatmap, and Home's "Daily score" — all still read only `checked`, never `count` or `target_count` directly.
 
 > Note: `habits`/`habit_logs`/`focus_board`/`focus_tasks` tables described in older versions of this doc are **no longer used by the app** — the Habits and Focus pages were replaced by Commitments and Projects. The tables may still exist in `schema_fix.sql`/the live DB as unused leftovers; safe to ignore or drop.
 
@@ -298,9 +301,17 @@ Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compli
 |---|---|---|
 | `life:home` | Today | Greeting + live clock, Daily score, Today's commitments preview, Today's schedule preview (5 items), "Active project" card (progress bar + activity heatmap + carousel if multiple active projects), optional quick-navigation pills. Layout togglable (Stacked / Hero). |
 | `life:schedule` | Schedule | Full month calendar view, day selector, event list for selected day. Add/edit/delete events. Alarm toggle per event (Web Notifications + AudioContext beep). |
-| `life:commitments` | Commitments | Replaces the old Goals/Habits pages. Do's/Don'ts columns with daily check-off (backed by `goal_logs`, not a static `checked` flag) and drag-and-drop reordering. Compliance ring (today's %) plus a history card with **Day / Week / Month / Year** tabs (see below). |
+| `life:commitments` | Commitments | Replaces the old Goals/Habits pages. Do's/Don'ts columns with daily check-off (backed by `goal_logs`, not a static `checked` flag) and drag-and-drop reordering. Commitments with `target_count` 1 (the default) render as a plain checkbox; `target_count` >1 (e.g. "Cold DM" 3×/day) render as a `−`/count/`+` stepper instead — see "Counter-based commitments" below. Compliance ring (today's %) plus a history card with **Day / Week / Month / Year** tabs (see below). |
 | `life:projects` | Projects | List of projects (filter: All/Active/On Hold/Done). Each card: name, description, status/deadline badges, progress bar (tasks done / total), expandable task list with check/edit/delete/assign-to-schedule, add task. |
 | `life:notes` | Notes | Grid/list view of note cards. Sort (Newest/Oldest/A-Z) and filter (All/Today/Week) dropdowns. New note → rich text editor (contenteditable, Docs/Word-style toolbar: Style dropdown [Normal/Title/Subtitle/Heading 1-3 + Options flyout to save/use/reset a personal default style], Font family picker [10 fonts, click-to-expand weight variants], Font-size stepper [−/number/+  with a preset dropdown], Bold/Italic/Underline, Bullet/Numbered list, Text color + Highlight color swatches, Insert table). Heading collapse toggle. Autosaves title+content debounced 1000ms. Relative timestamps. |
+
+**Commitments — counter-based commitments** (`renderCommitments`'s `col()`, `js/app.js`): lets a commitment require doing something N times a day (e.g. "Cold DM" `target_count: 3`, `unit: 'DM'`) instead of a single yes/no.
+- Set via the "Times per day" (+ optional "Unit") fields on the Add Do/Don't and Edit Commitment modals. `target_count` defaults to 1.
+- `target_count === 1` renders the original plain `.check` checkbox (`data-toggle-goal`) — zero behavior change for existing simple commitments.
+- `target_count > 1` renders a `.goal-counter` stepper (`−` / `count/target[ unit]` / `+`, `data-goal-bump="<dir>|<key>|<id>"`) instead. Each tap adjusts `goal_logs.count` for today (clamped ≥0, no upper clamp — overshooting past target is allowed).
+- On every write (checkbox toggle or counter bump), `goal_logs.checked` is recomputed as `count >= target_count` and upserted alongside `count` — this is what keeps the compliance ring, week strip, month calendar, year heatmap, and daily score working unmodified, since they only ever read `checked`.
+- Home's "Today's commitments" preview shows a `(count/target)` suffix next to the label for counter items; tapping its checkbox there does a quick +1 (wrapping back to 0 once target is hit) rather than opening the full stepper — fine-grained adjustment happens on the Commitments page itself.
+- The Day tab of the history card also shows `count/target` next to counter commitments for the viewed date.
 
 **Commitments — drag-and-drop reorder** (`renderCommitments`, `js/app.js`):
 - Each `.goal-item` card is `draggable="true"`. Hover shows `cursor: grab`; an active drag shows `cursor: grabbing` and `opacity: 0.4` on the source card (`.dragging` class).
@@ -371,7 +382,7 @@ Projects have a confirm modal before delete (cascades to its tasks). Most delete
   ↓ click → mutate state → pulse(el) → render()
   ↓ dbCall(() => sb.from(...).update({ checked: ... }).eq('id', id))
 ```
-Commitments also upsert `goal_logs` for the day. Project task toggle additionally sets/clears `completed_at` (`new Date().toISOString()` on check, `null` on uncheck) — this is what feeds the Home activity heatmap.
+Commitments also upsert `goal_logs` for the day — `{ checked, count }` together, where `checked` is always recomputed as `count >= goal.target_count` (see "Counter-based commitments" above). Project task toggle additionally sets/clears `completed_at` (`new Date().toISOString()` on check, `null` on uncheck) — this is what feeds the Home activity heatmap.
 
 ### Notes Autosave
 Title + content changes debounced 1000ms, then `sb.from('notes').update(...)`. Focus textarea changes debounced 600ms.
@@ -408,7 +419,8 @@ These columns/tables are used in the code but **missing from both schema files**
 
 1. **`notes` table** — entire table missing from schema. Create with: `id uuid PK, user_id uuid FK, title text, content text, created_at timestamptz, updated_at timestamptz`. Enable RLS.
 2. **`schedule_events.alarm_time` / `schedule_events.completed_at`** — now added to `schema.sql` and `schema_fix.sql` (section 2). **Run `schema_fix.sql` on the live DB** to backfill both columns — `alarm_time text` (used by the alarm toggle) and `completed_at timestamptz` (foundation column, not yet written to by any UI — reserved for a future schedule-completion visualization, parallel to `project_tasks.completed_at`).
-3. **`goal_logs` table** — entire table missing from schema. See columns above; needed for Commitments to track per-day check-off.
+3. **`goal_logs` table** — now added to `schema.sql` and `schema_fix.sql` (section 16), including `count`. **Run `schema_fix.sql` on the live DB** — needed for Commitments to track per-day check-off at all.
 4. **`projects` / `project_tasks` tables** — now added to `schema_fix.sql` (sections 11–12), including `project_tasks.completed_at`. **Run `schema_fix.sql` in the Supabase SQL editor** to create/patch these on the live DB — the app already reads/writes `completed_at` in code, so checking off a project task fails outright (Postgrest rejects the whole `UPDATE` when an unknown column is referenced) until this migration is run.
 5. **`goals.order_index`** — added to `schema.sql` and `schema_fix.sql` (section 13) to support Commitments drag-to-reorder. **Run this migration on the live DB** — until then, both loading goals (`.order('order_index')`) and inserting a new Do/Don't fail ("Sync failed" toast / empty Commitments list).
-6. **`profiles.note_default_style`** — added to `schema.sql` and `schema_fix.sql` (section 16) to support the Notes editor's "Save as my default style" / "Use my default style" options. **Run `schema_fix.sql` on the live DB** — until then, saving a default style fails outright (Postgrest rejects the `UPDATE` on the unknown column).
+6. **`profiles.note_default_style`** — added to `schema.sql` and `schema_fix.sql` (section 17) to support the Notes editor's "Save as my default style" / "Use my default style" options. **Run `schema_fix.sql` on the live DB** — until then, saving a default style fails outright (Postgrest rejects the `UPDATE` on the unknown column).
+7. **`goals.target_count` / `goals.unit` / `goal_logs.count`** — added to `schema.sql` and `schema_fix.sql` (section 16) to support counter-based commitments (e.g. "Cold DM" 3×/day) instead of only plain yes/no. **Run `schema_fix.sql` on the live DB** — until then, adding/editing a commitment fails outright (Postgrest rejects insert/update referencing the unknown `target_count`/`unit` columns).
