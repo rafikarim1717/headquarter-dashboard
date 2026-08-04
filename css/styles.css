@@ -358,7 +358,7 @@
   .section-title {
     font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
     font-weight: 500; color: var(--text-dim); margin: 22px 4px 10px;
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
   }
   .section-title .meta { color: var(--text-faint); letter-spacing: 0.06em; text-transform: none; font-weight: 400; }
 
@@ -731,6 +731,7 @@
     display: flex; justify-content: space-between; align-items: center; gap: 12px;
   }
   details.cat-card > summary::-webkit-details-marker { display: none; }
+  details.cat-card > summary .section-title { flex: 1; min-width: 0; }
   details.cat-card > summary:hover .section-title { color: var(--text); }
   .cat-head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .cat-progress-mini { width: 44px; height: 4px; background: #232323; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
