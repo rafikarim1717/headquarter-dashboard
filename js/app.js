@@ -768,6 +768,25 @@ function getDayCompliancePct(dateIso) {
   }).length;
   return (checked / allGoals.length) * 100;
 }
+const GOAL_CATEGORY_PRESET = ['Olahraga', 'Kerja', 'Bahasa', 'Spiritual', 'Personal & Mental'];
+function categoryItems(cat) {
+  return [...(state.goals.dos || []), ...(state.goals.donts || [])].filter(g => (g.category || 'General') === cat);
+}
+// Categories that currently have at least one commitment, in preset order then any custom ones alphabetically, 'General' last.
+function getGoalCategories() {
+  const used = new Set([...(state.goals.dos || []), ...(state.goals.donts || [])].map(g => g.category || 'General'));
+  const ordered = GOAL_CATEGORY_PRESET.filter(c => used.has(c));
+  const extra = [...used].filter(c => !GOAL_CATEGORY_PRESET.includes(c) && c !== 'General').sort();
+  const result = ordered.concat(extra);
+  if (used.has('General')) result.push('General');
+  return result;
+}
+// Full pickable category list for the Add/Edit modals — presets always offered, plus any custom ones already in use.
+function getCategoryOptions() {
+  const used = new Set([...(state.goals.dos || []), ...(state.goals.donts || [])].map(g => g.category || 'General'));
+  const extra = [...used].filter(c => !GOAL_CATEGORY_PRESET.includes(c)).sort();
+  return [...GOAL_CATEGORY_PRESET, ...extra];
+}
 function getMondayOf(dateIso) {
   const d = new Date(dateIso + 'T00:00:00');
   const dow = d.getDay();
@@ -841,12 +860,16 @@ function renderCommitYearHeatmap(year, hasGoals) {
       }).join('')}
     </div>`;
 }
-function updateGoalHeaderCount(key) {
-  const header = document.querySelector(`[data-goal-count-header="${key}"]`);
-  if (!header) return;
-  const items = state.goals[key] || [];
+function updateCategoryHeaderCount(cat) {
+  const items = categoryItems(cat);
   const checked = items.filter(i => getTodayLog(i.id)?.checked).length;
-  header.textContent = `${checked} / ${items.length}`;
+  const pct = items.length ? Math.round(checked / items.length * 100) : 0;
+  document.querySelectorAll('[data-goal-count-header]').forEach(el => {
+    if (el.dataset.goalCountHeader === cat) el.textContent = `${checked} / ${items.length}`;
+  });
+  document.querySelectorAll('[data-goal-progress-mini]').forEach(el => {
+    if (el.dataset.goalProgressMini === cat) el.style.width = pct + '%';
+  });
 }
 function computeDailyScore() {
   const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
@@ -872,26 +895,26 @@ function animateComplianceRing() {
 function updateComplianceRing() {
   const card = document.getElementById('commit-compliance-card');
   if (!card) return;
-  const dos      = state.goals.dos   || [];
-  const donts    = state.goals.donts || [];
-  const total    = dos.length + donts.length;
-  const dosChk   = dos.filter(g   => getTodayLog(g.id)?.checked).length;
-  const dontsChk = donts.filter(g => getTodayLog(g.id)?.checked).length;
-  const pct      = total ? Math.round((dosChk + dontsChk) / total * 100) : 0;
-  const dosPct   = dos.length   ? Math.round(dosChk   / dos.length   * 100) : 0;
-  const dontsPct = donts.length ? Math.round(dontsChk / donts.length * 100) : 0;
+  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const total    = allGoals.length;
+  const checked  = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
+  const pct      = total ? Math.round(checked / total * 100) : 0;
   card.querySelectorAll('.compliance-arc').forEach(arc => {
     const full = parseFloat(arc.getAttribute('stroke-dasharray') || 213.63);
     arc.style.strokeDashoffset = full - (pct / 100 * full);
     arc.dataset.pct = pct;
   });
   card.querySelectorAll('.compliance-pct-text').forEach(el => el.textContent = pct);
-  const fills  = card.querySelectorAll('.compliance-bar-fill');
-  if (fills[0])  fills[0].style.width  = dosPct + '%';
-  if (fills[1])  fills[1].style.width  = dontsPct + '%';
-  const counts = card.querySelectorAll('.compliance-bar-count');
-  if (counts[0]) counts[0].textContent = `${dosChk}/${dos.length}`;
-  if (counts[1]) counts[1].textContent = `${dontsChk}/${donts.length}`;
+  card.querySelectorAll('[data-compliance-fill]').forEach(el => {
+    const items = categoryItems(el.dataset.complianceFill);
+    const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
+    el.style.width = (items.length ? Math.round(chk / items.length * 100) : 0) + '%';
+  });
+  card.querySelectorAll('[data-compliance-count]').forEach(el => {
+    const items = categoryItems(el.dataset.complianceCount);
+    const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
+    el.textContent = `${chk}/${items.length}`;
+  });
 }
 
 function renderCommitments() {
@@ -901,43 +924,57 @@ function renderCommitments() {
   const allGoals  = [...dos, ...donts];
   const totalGoals = allGoals.length;
 
-  const dosChecked   = dos.filter(g => getTodayLog(g.id)?.checked).length;
-  const dontsChecked = donts.filter(g => getTodayLog(g.id)?.checked).length;
-  const overallPct   = totalGoals ? Math.round((dosChecked + dontsChecked) / totalGoals * 100) : 0;
-  const dosPct   = dos.length   ? Math.round(dosChecked   / dos.length   * 100) : 0;
-  const dontsPct = donts.length ? Math.round(dontsChecked / donts.length * 100) : 0;
+  const overallChecked = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
+  const overallPct     = totalGoals ? Math.round(overallChecked / totalGoals * 100) : 0;
+  const categories      = getGoalCategories();
 
-  function col(title, items, key) {
+  function goalRow(i, key) {
+    const target = i.target_count || 1;
+    const log = getTodayLog(i.id);
+    const count = log?.count || 0;
+    const isDone = log?.checked || false;
+    const control = target > 1 ? `
+        <div class="goal-counter">
+          <button type="button" class="goal-count-btn" data-goal-bump="-1|${key}|${i.id}" aria-label="Decrease">&#8722;</button>
+          <span class="goal-count-val" data-goal-count-val="${i.id}">${count}/${target}${i.unit ? ' ' + escapeHtml(i.unit) : ''}</span>
+          <button type="button" class="goal-count-btn" data-goal-bump="1|${key}|${i.id}" aria-label="Increase">&#43;</button>
+        </div>` : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal="${key}|${i.id}"></span>`;
+    const dontTag = key === 'donts' ? `<span class="dont-tag">Don't</span>` : '';
     return `
-      <div class="card" style="animation-delay:40ms">
-        <div class="section-title" style="margin-top:0">${title} <span class="meta" data-goal-count-header="${key}">${items.filter(i => getTodayLog(i.id)?.checked).length} / ${items.length}</span></div>
-        <ul class="list" style="padding:0" data-goal-list="${key}">
-          ${items.map(i => {
-            const target = i.target_count || 1;
-            const log = getTodayLog(i.id);
-            const count = log?.count || 0;
-            const isDone = log?.checked || false;
-            const control = target > 1 ? `
-                <div class="goal-counter">
-                  <button type="button" class="goal-count-btn" data-goal-bump="-1|${key}|${i.id}" aria-label="Decrease">&#8722;</button>
-                  <span class="goal-count-val" data-goal-count-val="${i.id}">${count}/${target}${i.unit ? ' ' + escapeHtml(i.unit) : ''}</span>
-                  <button type="button" class="goal-count-btn" data-goal-bump="1|${key}|${i.id}" aria-label="Increase">&#43;</button>
-                </div>` : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal="${key}|${i.id}"></span>`;
-            return `
-            <li class="goal-item${isDone ? ' goal-done' : ''}" draggable="true" data-goal-drag="${i.id}" data-goal-row="${i.id}">
-              <div class="list-item" style="padding:10px 0;align-items:center">
-                ${control}
-                <span class="check-label ${isDone ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
-                <div class="fin-acts">
-                  <button class="fin-edit-btn" data-edit-goal="${key}|${i.id}">&#x270E;</button>
-                  <button class="fin-del-btn" data-del-goal="${key}|${i.id}" title="Delete">${ICON_TRASH}</button>
-                </div>
-              </div>
-            </li>`;
-          }).join('')}
-        </ul>
-        <button class="add-btn" data-modal-add="goal-${key}" style="margin-top:14px"><span class="plus">+</span> Add</button>
-      </div>`;
+    <li class="goal-item${isDone ? ' goal-done' : ''}" draggable="true" data-goal-drag="${i.id}" data-goal-row="${i.id}">
+      <div class="list-item" style="padding:10px 0;align-items:center">
+        ${control}
+        <span class="check-label ${isDone ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
+        ${dontTag}
+        <div class="fin-acts">
+          <button class="fin-edit-btn" data-edit-goal="${key}|${i.id}">&#x270E;</button>
+          <button class="fin-del-btn" data-del-goal="${key}|${i.id}" title="Delete">${ICON_TRASH}</button>
+        </div>
+      </div>
+    </li>`;
+  }
+
+  function categoryCard(cat, idx) {
+    const dosInCat   = dos.filter(g => (g.category || 'General') === cat);
+    const dontsInCat = donts.filter(g => (g.category || 'General') === cat);
+    const itemsInCat = [...dosInCat, ...dontsInCat];
+    const checkedInCat = itemsInCat.filter(g => getTodayLog(g.id)?.checked).length;
+    const pctInCat = itemsInCat.length ? Math.round(checkedInCat / itemsInCat.length * 100) : 0;
+    return `
+      <details class="card cat-card" style="animation-delay:${40 + idx * 20}ms" open>
+        <summary>
+          <div class="section-title" style="margin:0">${escapeHtml(cat)} <span class="meta" data-goal-count-header="${escapeHtml(cat)}">${checkedInCat} / ${itemsInCat.length}</span></div>
+          <div class="cat-head-right">
+            <div class="cat-progress-mini"><div data-goal-progress-mini="${escapeHtml(cat)}" style="width:${pctInCat}%"></div></div>
+            <span class="chevron">&#8250;</span>
+          </div>
+        </summary>
+        <div class="cat-body">
+          ${dosInCat.length ? `<ul class="list" style="padding:0" data-goal-list="dos" data-goal-cat="${escapeHtml(cat)}">${dosInCat.map(i => goalRow(i, 'dos')).join('')}</ul>` : ''}
+          ${dontsInCat.length ? `<ul class="list" style="padding:0" data-goal-list="donts" data-goal-cat="${escapeHtml(cat)}">${dontsInCat.map(i => goalRow(i, 'donts')).join('')}</ul>` : ''}
+          <button class="add-btn" data-add-commit="${escapeHtml(cat)}" style="margin-top:14px"><span class="plus">+</span> Add to ${escapeHtml(cat)}</button>
+        </div>
+      </details>`;
   }
 
   // History tab content — Day / Week / Month / Year (all derived from goalLogs, already fully loaded)
@@ -1069,21 +1106,22 @@ function renderCommitments() {
         </svg>
         <div class="compliance-bars">
           <div class="compliance-label">TODAY'S COMPLIANCE</div>
+          ${categories.map(cat => {
+            const items = categoryItems(cat);
+            const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
+            const pct = items.length ? Math.round(chk / items.length * 100) : 0;
+            return `
           <div class="compliance-bar-row">
-            <span class="compliance-bar-lbl">DO'S</span>
-            <div class="compliance-bar-track"><div class="compliance-bar-fill" style="width:${dosPct}%"></div></div>
-            <span class="compliance-bar-count">${dosChecked}/${dos.length}</span>
-          </div>
-          <div class="compliance-bar-row">
-            <span class="compliance-bar-lbl">DON'TS</span>
-            <div class="compliance-bar-track"><div class="compliance-bar-fill" style="width:${dontsPct}%"></div></div>
-            <span class="compliance-bar-count">${dontsChecked}/${donts.length}</span>
-          </div>
+            <span class="compliance-bar-lbl" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>
+            <div class="compliance-bar-track"><div class="compliance-bar-fill" data-compliance-fill="${escapeHtml(cat)}" style="width:${pct}%"></div></div>
+            <span class="compliance-bar-count" data-compliance-count="${escapeHtml(cat)}">${chk}/${items.length}</span>
+          </div>`;
+          }).join('')}
         </div>
       </div>
     </div>
-    <div style="margin-top:16px">${col("Do's", dos, 'dos')}</div>
-    <div style="margin-top:16px">${col("Don'ts", donts, 'donts')}</div>
+    ${categories.map((cat, idx) => `<div style="margin-top:16px">${categoryCard(cat, idx)}</div>`).join('')}
+    <button class="add-btn" data-add-commit="" style="margin-top:16px;border-style:solid;justify-content:center"><span class="plus">+</span> New category</button>
     <div class="card" style="margin-top:16px;animation-delay:80ms">
       <div class="commit-preview-tabs">
         <button class="commit-tab-btn${tab === 'day'   ? ' active' : ''}" data-commit-tab="day">Day</button>
@@ -2415,7 +2453,7 @@ function bindMainEvents() {
     el.closest('.goal-item')?.classList.toggle('goal-done', newChecked);
     const labelEl = el.closest('.goal-item')?.querySelector('.check-label');
     if (labelEl) labelEl.classList.toggle('done', newChecked);
-    updateGoalHeaderCount(k);
+    updateCategoryHeaderCount(g.category || 'General');
     updateComplianceRing();
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
       { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount },
@@ -2451,7 +2489,7 @@ function bindMainEvents() {
     if (rowEl) rowEl.classList.toggle('goal-done', newChecked);
     const labelEl = document.querySelector(`[data-goal-text="${id}"]`);
     if (labelEl) labelEl.classList.toggle('done', newChecked);
-    updateGoalHeaderCount(k);
+    updateCategoryHeaderCount(g.category || 'General');
     updateComplianceRing();
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
       { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount },
@@ -2648,20 +2686,24 @@ function bindMainEvents() {
       title: 'Edit Commitment',
       fields: [
         { id: 'text', label: k === 'dos' ? "Do" : "Don't", type: 'text', value: g.text, placeholder: '...' },
+        { id: 'category', label: 'Category', type: 'select', value: g.category || 'General', options: getCategoryOptions() },
+        { id: 'newCategory', label: 'Or new category', type: 'text', value: '', placeholder: 'e.g. Reading' },
         { id: 'target_count', label: 'Times per day', type: 'number', value: g.target_count || 1, placeholder: '1' },
         { id: 'unit', label: 'Unit (optional)', type: 'text', value: g.unit || '', placeholder: 'e.g. DM, halaman, menit' }
       ],
       saveLabel: 'Save',
-      onSave: ({ text, target_count, unit }) => {
+      onSave: ({ text, category, newCategory, target_count, unit }) => {
         const trimmed = text.trim();
         if (!trimmed) return;
+        const categoryVal = newCategory.trim() || category || 'General';
         const targetVal = Math.max(1, Math.round(Number(target_count)) || 1);
         const unitVal = unit.trim() || null;
         g.text = trimmed;
+        g.category = categoryVal;
         g.target_count = targetVal;
         g.unit = unitVal;
         render();
-        dbCall(() => sb.from('goals').update({ text: trimmed, target_count: targetVal, unit: unitVal }).eq('id', id));
+        dbCall(() => sb.from('goals').update({ text: trimmed, category: categoryVal, target_count: targetVal, unit: unitVal }).eq('id', id));
       }
     });
   }));
@@ -2700,6 +2742,10 @@ function bindMainEvents() {
       const list = state.goals[key] || [];
       const fromIdx = list.findIndex(x => x.id === draggedGoalId);
       if (fromIdx === -1) return;
+      if (ul.dataset.goalCat && (list[fromIdx].category || 'General') !== ul.dataset.goalCat) {
+        draggedGoalId = null;
+        return;
+      }
 
       const li = e.target.closest('.goal-item');
       let toIdx = list.length - 1;
@@ -2720,26 +2766,30 @@ function bindMainEvents() {
     });
   });
 
-  main.querySelectorAll('[data-modal-add^="goal-"]').forEach(btn => btn.addEventListener('click', () => {
-    const key = btn.dataset.modalAdd.replace('goal-', '');
-    const isDo = key === 'dos';
+  main.querySelectorAll('[data-add-commit]').forEach(btn => btn.addEventListener('click', () => {
+    const presetCat = btn.dataset.addCommit || '';
+    const catOptions = getCategoryOptions();
     showModal({
-      title: isDo ? 'Add Do' : "Add Don't",
+      title: presetCat ? `Add to ${presetCat}` : 'New Commitment',
       fields: [
-        { id: 'text', label: isDo ? 'Do' : "Don't", type: 'text', value: '', placeholder: isDo ? 'e.g. Drink 2L water' : 'e.g. No phone in bed' },
+        { id: 'type', label: 'Type', type: 'select', value: 'do', options: [{ value: 'do', label: 'Do' }, { value: 'dont', label: "Don't" }] },
+        { id: 'text', label: 'Commitment', type: 'text', value: '', placeholder: 'e.g. Push Up' },
+        { id: 'category', label: 'Category', type: 'select', value: presetCat || catOptions[0], options: catOptions },
+        { id: 'newCategory', label: 'Or new category', type: 'text', value: '', placeholder: 'e.g. Reading' },
         { id: 'target_count', label: 'Times per day', type: 'number', value: 1, placeholder: '1' },
         { id: 'unit', label: 'Unit (optional)', type: 'text', value: '', placeholder: 'e.g. DM, halaman, menit' }
       ],
       saveLabel: 'Add',
-      onSave: async ({ text, target_count, unit }) => {
+      onSave: async ({ type, text, category, newCategory, target_count, unit }) => {
         const trimmed = text.trim();
         if (!trimmed) return;
-        const type = isDo ? 'do' : 'dont';
+        const key = type === 'dont' ? 'donts' : 'dos';
+        const categoryVal = newCategory.trim() || category || 'General';
         const order_index = state.goals[key].length;
         const targetVal = Math.max(1, Math.round(Number(target_count)) || 1);
         const unitVal = unit.trim() || null;
-        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text: trimmed, order_index, target_count: targetVal, unit: unitVal }).select().single());
-        if (data) { state.goals[key].push({ id: data.id, text: trimmed, target_count: targetVal, unit: unitVal }); render(); }
+        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text: trimmed, category: categoryVal, order_index, target_count: targetVal, unit: unitVal }).select().single());
+        if (data) { state.goals[key].push({ id: data.id, text: trimmed, category: categoryVal, target_count: targetVal, unit: unitVal }); render(); }
       }
     });
   }));

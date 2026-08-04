@@ -93,8 +93,8 @@ async function loadFromSupabase(userId) {
   });
 
   // Goals
-  state.goals.dos   = (goalsRes.data || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null }));
-  state.goals.donts = (goalsRes.data || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null }));
+  state.goals.dos   = (goalsRes.data || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General' }));
+  state.goals.donts = (goalsRes.data || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General' }));
   state.goalLogs    = (goalLogsRes.data || []).map(l => ({ id: l.id, goal_id: l.goal_id, user_id: l.user_id, date: l.date, checked: l.checked, count: l.count || 0 }));
 
   // Projects
@@ -175,8 +175,8 @@ async function seedSampleData(userId) {
     ...def.goals.donts.map((g, i) => ({ user_id: userId, type: 'dont', text: g.text, order_index: i }))
   ];
   const { data: goalData } = await sb.from('goals').insert(goalRows).select();
-  state.goals.dos   = (goalData || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null }));
-  state.goals.donts = (goalData || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null }));
+  state.goals.dos   = (goalData || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General' }));
+  state.goals.donts = (goalData || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General' }));
 
   // Goal logs — seed today's checked state from defaultState
   const today = todayISO();

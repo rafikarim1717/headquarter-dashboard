@@ -673,3 +673,14 @@ CREATE INDEX IF NOT EXISTS goal_logs_goal_date ON goal_logs(goal_id, date);
 --     Safe to re-run on an existing profiles table that predates this column.
 -- ────────────────────────────────────────────────────────────
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS note_default_style jsonb;
+
+
+-- ────────────────────────────────────────────────────────────
+-- 18. goals.category
+--     Groups commitments by life area (Olahraga, Kerja, Bahasa,
+--     Spiritual, Personal & Mental, or any custom category) instead
+--     of only a flat Do's/Don'ts split. Existing rows default to
+--     'General' until re-categorized via the Edit Commitment modal.
+--     Safe to re-run on an existing goals table that predates this column.
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE goals ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'General';

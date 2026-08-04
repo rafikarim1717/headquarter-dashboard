@@ -56,6 +56,7 @@ create table if not exists goals (
   order_index integer not null default 0,
   target_count integer not null default 1,
   unit text,
+  category text not null default 'General',
   created_at timestamptz not null default now()
 );
 
