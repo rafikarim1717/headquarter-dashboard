@@ -1120,6 +1120,7 @@ function renderCommitments() {
         </div>
       </div>
     </div>
+    <div class="commit-quest-label">&#9876;&#65039; Main Quest</div>
     ${categories.map((cat, idx) => `<div style="margin-top:16px">${categoryCard(cat, idx)}</div>`).join('')}
     <button class="add-btn" data-add-commit="" style="margin-top:16px;border-style:solid;justify-content:center"><span class="plus">+</span> New category</button>
     <div class="card" style="margin-top:16px;animation-delay:80ms">

@@ -739,6 +739,12 @@
   details.cat-card[open] > summary .chevron { transform: rotate(90deg); }
   details.cat-card .cat-body { padding: 0 var(--pad-card) var(--pad-card); }
 
+  /* ---- commitment category section label ---- */
+  .commit-quest-label {
+    font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 500;
+    color: var(--accent); margin: 22px 4px 10px; display: flex; align-items: center; gap: 6px;
+  }
+
   /* ---- "Don't"-type commitment tag (shown inline within a category card) ---- */
   .dont-tag {
     font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--danger);
