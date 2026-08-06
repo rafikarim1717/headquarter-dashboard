@@ -570,26 +570,26 @@ function renderLifeHome() {
   const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
   const totalGoals = allGoals.length;
   const checkedTodayCount = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
+  const homeCommitCats = getGoalCategories();
   const commitmentsBlock = (delay) => `
     <div class="card" style="animation-delay:${delay}ms">
       <div class="section-title" style="margin-top:0">Commitments <span class="meta" data-go="life:commitments" style="cursor:pointer">View all →</span></div>
-      <ul class="list" style="padding:0">
-        ${allGoals.length === 0
-          ? `<li class="list-item"><div class="item-sub">No commitments yet.</div></li>`
-          : allGoals.map(g => {
-              const log = getTodayLog(g.id);
-              const target = g.target_count || 1;
-              const count = log?.count || 0;
-              const isChecked = log?.checked || false;
-              const isDo = (state.goals.dos || []).some(d => d.id === g.id);
-              const countSuffix = target > 1 ? ` <span class="commit-count-suffix" data-commit-count-suffix="${g.id}">(${count}/${target})</span>` : '';
-              return `<li class="list-item" style="padding:8px 0;gap:10px;min-height:44px">
-                <span class="check ${isChecked ? 'checked' : ''}" data-toggle-today-goal="${g.id}" style="flex-shrink:0"></span>
-                <span class="commit-type-pill ${isDo ? 'do' : 'dont'}">${isDo ? 'DO' : 'DONT'}</span>
-                <span class="check-label ${isChecked ? 'done' : ''}" style="flex:1" id="today-commit-text-${g.id}">${escapeHtml(g.text)}${countSuffix}</span>
-              </li>`;
+      ${totalGoals === 0
+        ? `<div class="item-sub" style="margin-top:4px">No commitments yet.</div>`
+        : `<div style="margin-top:4px">
+            ${homeCommitCats.map(cat => {
+              const items = categoryItems(cat);
+              const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
+              const pct = items.length ? Math.round(chk / items.length * 100) : 0;
+              return `
+            <div class="compliance-bar-row" data-go="life:commitments" style="cursor:pointer">
+              <span class="compliance-bar-lbl" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>
+              <div class="compliance-bar-track"><div class="compliance-bar-fill" style="width:${pct}%"></div></div>
+              <span class="compliance-bar-count">${chk}/${items.length}</span>
+            </div>`;
             }).join('')}
-      </ul>
+          </div>`
+      }
       <div style="font-size:12px;color:var(--text-faint);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">${checkedTodayCount} of ${totalGoals} done today</div>
     </div>`;
 
@@ -2492,57 +2492,6 @@ function bindMainEvents() {
     if (labelEl) labelEl.classList.toggle('done', newChecked);
     updateCategoryHeaderCount(g.category || 'General');
     updateComplianceRing();
-    const { data } = await dbCall(() => sb.from('goal_logs').upsert(
-      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount },
-      { onConflict: 'goal_id,date' }
-    ).select().single());
-    if (data) {
-      const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
-      if (localLog && !localLog.id) localLog.id = data.id;
-    }
-  }));
-
-  // today page goal toggle → upsert goal_logs (counter items: tap = +1, wraps to 0 once target is hit)
-  main.querySelectorAll('[data-toggle-today-goal]').forEach(el => el.addEventListener('click', async () => {
-    const id = el.dataset.toggleTodayGoal;
-    const allG = [...(state.goals.dos || []), ...(state.goals.donts || [])];
-    const g = allG.find(x => x.id === id);
-    if (!g || !currentUser) return;
-    const target = g.target_count || 1;
-    const today = todayISO();
-    const existingLog = getTodayLog(id);
-    const prevCount = existingLog?.count || 0;
-    const newCount = target > 1 ? (prevCount >= target ? 0 : prevCount + 1) : (prevCount >= 1 ? 0 : 1);
-    const newChecked = newCount >= target;
-    if (existingLog) {
-      existingLog.checked = newChecked;
-      existingLog.count = newCount;
-    } else {
-      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount });
-    }
-    pulse(el);
-    el.classList.toggle('checked', newChecked);
-    const lbl = document.getElementById(`today-commit-text-${id}`);
-    if (lbl) lbl.classList.toggle('done', newChecked);
-    const suffixEl = document.querySelector(`[data-commit-count-suffix="${id}"]`);
-    if (suffixEl) suffixEl.textContent = `(${newCount}/${target})`;
-    updateComplianceRing();
-    const newScore = computeDailyScore();
-    const scoreEl = document.querySelector('.num[data-target]');
-    if (scoreEl) {
-      scoreEl.dataset.target = newScore;
-      const sc = newScore >= 70 ? 'var(--accent)' : newScore >= 40 ? '#c8a850' : 'var(--danger)';
-      scoreEl.style.color = sc;
-      const prefix = scoreEl.dataset.prefix || '';
-      const fmt = n => prefix + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-      const prev = Number(scoreEl.textContent.replace(/\D/g,'')) || 0;
-      const start = performance.now();
-      (function step(now) {
-        const t = Math.min(1, (now - start) / 400);
-        scoreEl.textContent = fmt(prev + (newScore - prev) * (1 - Math.pow(1 - t, 3)));
-        if (t < 1) requestAnimationFrame(step);
-      })(performance.now());
-    }
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
       { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount },
       { onConflict: 'goal_id,date' }

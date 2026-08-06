@@ -23,7 +23,17 @@
       "Artifact",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(grep -n \"\\\\.list \\\\|\\\\.list{\\\\|\\\\.list {\\\\|\\\\.list,\\\\|class=\\\\\"list\\\\\"\\\\|\\\\.list\\\\b\" css/styles.css)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8917/repro.html)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8917/css/styles.css)",
+      "Bash(node *)",
+      "Bash(curl -s -o /dev/null -w \"html:%{http_code}\\\\n\" http://localhost:8917/repro.html)",
+      "Bash(curl -s -o /dev/null -w \"css:%{http_code}\\\\n\" http://localhost:8917/css/styles.css)",
+      "Bash(curl -s -o /dev/null -w \"html:%{http_code}\\\\n\" http://localhost:8918/repro.html)",
+      "Bash(curl -s -o /dev/null -w \"css:%{http_code}\\\\n\" http://localhost:8918/css/styles.css)",
+      "Bash(curl -s -o /dev/null -w \"repro2:%{http_code}\\\\n\" http://localhost:8918/repro2.html)"
     ]
   }
 }

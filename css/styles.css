@@ -447,7 +447,11 @@
   /* ============ ADD BUTTON / FORMS ============ */
   .add-btn {
     display: flex; align-items: center; gap: 10px; padding: 14px 16px;
-    border: 1px dashed var(--border-strong); border-radius: var(--r-sm);
+    /* 2px, not 1px: at fractional device-pixel-ratio zoom (e.g. Windows 150% scaling),
+       a 1px dashed border rounds to a sub-pixel stroke that Chromium anti-aliases away
+       on the top edge specifically, making it look "cut off" while the other 3 sides
+       still render. 2px always resolves to a full device pixel on every edge. */
+    border: 2px dashed var(--border-strong); border-radius: var(--r-sm);
     color: var(--text-dim); width: 100%;
     transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
     font-size: 12px;
@@ -752,8 +756,6 @@
     border: 1px solid color-mix(in oklab, var(--danger) 50%, var(--border));
     border-radius: var(--r-pill); padding: 2px 7px; flex-shrink: 0;
   }
-
-  .commit-count-suffix { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
   /* ============ SCHEDULE EDIT ============ */
   .sched-item { display: block; border-bottom: 1px solid var(--border); }
@@ -1518,23 +1520,6 @@
   @media (max-width: 768px) {
     .fin-item .fin-acts { opacity: 1; }
     .fin-row { padding: 10px 0; }
-  }
-
-  /* today page — commitment type pills */
-  .commit-type-pill {
-    font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
-    font-weight: 600; border-radius: var(--r-pill); padding: 2px 6px;
-    border: 1px solid; flex-shrink: 0;
-  }
-  .commit-type-pill.do {
-    color: var(--good);
-    border-color: color-mix(in oklab, var(--good) 40%, var(--border));
-    background: color-mix(in oklab, var(--good) 10%, transparent);
-  }
-  .commit-type-pill.dont {
-    color: var(--danger);
-    border-color: color-mix(in oklab, var(--danger) 40%, var(--border));
-    background: color-mix(in oklab, var(--danger) 10%, transparent);
   }
 
   /* ============ PAGINATION ============ */
