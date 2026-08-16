@@ -64,3 +64,4 @@ Then add `http://localhost:8080` to your Google OAuth **Authorised JavaScript or
 - **Errors**: If a sync fails, a toast appears at the bottom of the screen and the call is retried once automatically.
 - **First login**: Sample data is auto-inserted so the dashboard isn't empty on first use.
 - **UI preferences** (active tab, selected day, tweaks) are stored in `localStorage` per device — they don't need to sync across devices.
+

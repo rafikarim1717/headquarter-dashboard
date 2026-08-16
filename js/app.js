@@ -1024,8 +1024,8 @@ function renderCommitments() {
       const isToday  = iso === today;
       if (isFuture) return `<div class="week-day"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle future">–</div><div class="week-pct">–</div></div>`;
       const pct = getDayCompliancePct(iso);
-      const cls  = pct >= 80 ? 'full' : pct >= 40 ? 'half' : 'low';
-      const char = pct >= 80 ? '●' : pct >= 40 ? '◐' : '○';
+      const cls  = pct >= 80 ? 'full' : pct >= 40 ? 'half' : pct > 0 ? 'low' : 'zero';
+      const char = pct >= 80 ? '●' : pct >= 40 ? '◐' : pct > 0 ? '◔' : '○';
       return `<div class="week-day${isToday ? ' today' : ''}"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle ${cls}">${char}</div><div class="week-pct">${Math.round(pct)}%</div></div>`;
     }).join('');
     tabBodyHtml = `
@@ -2009,6 +2009,12 @@ function renderDebts() {
           </li>`;
         }).join('') || `<li class="list-item"><div class="item-sub">No debts recorded.</div></li>`}
       </ul>
+      ${totalPages > 1 ? `
+      <div class="debts-pager">
+        <button class="proj-nav-btn" data-debts-page-nav="-1" ${page<=1?'disabled':''} title="Previous page">&#x2039;</button>
+        <span class="debts-pager-label">Page ${page} of ${totalPages}</span>
+        <button class="proj-nav-btn" data-debts-page-nav="1" ${page>=totalPages?'disabled':''} title="Next page">&#x203A;</button>
+      </div>` : ''}
       <button class="add-btn" data-modal-add="debt" style="margin-top:14px"><span class="plus">+</span> Add debt</button>
     </div>
   `;
@@ -2259,6 +2265,15 @@ function bindMainEvents() {
     const activeProjects = (state.projects || []).filter(p => p.status === 'active');
     if (!activeProjects.length) return;
     state.homeProjectIndex = ((state.homeProjectIndex || 0) + dir + activeProjects.length) % activeProjects.length;
+    render();
+  }));
+
+  // debts: prev/next page
+  main.querySelectorAll('[data-debts-page-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.debtsPageNav);
+    const PAGE_SIZE = 7;
+    const totalPages = Math.max(1, Math.ceil(state.debts.length / PAGE_SIZE));
+    state.debtsPage = Math.min(totalPages, Math.max(1, (state.debtsPage || 1) + dir));
     render();
   }));
 

@@ -554,6 +554,15 @@
     transition: background 150ms ease, color 150ms ease;
   }
   .proj-nav-btn:hover { background: var(--border); color: var(--text); }
+  .proj-nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .proj-nav-btn:disabled:hover { background: var(--card-2); color: var(--text-dim); }
+
+  /* ---- debts list pager ---- */
+  .debts-pager {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    margin-top: 14px;
+  }
+  .debts-pager-label { font-size: 12px; color: var(--text-dim); }
 
   /* ---- habit delete ---- */
   .habit { position: relative; }
@@ -1369,7 +1378,8 @@
   }
   .week-circle.full  { background: var(--accent); border-color: var(--accent); color: var(--bg); }
   .week-circle.half  { background: color-mix(in oklab, var(--accent) 28%, transparent); border-color: var(--accent); color: var(--accent); }
-  .week-circle.low   { color: var(--text-faint); }
+  .week-circle.low   { background: color-mix(in oklab, var(--danger) 28%, transparent); border-color: var(--danger); color: var(--danger); }
+  .week-circle.zero  { color: var(--text-faint); }
   .week-circle.future { opacity: 0.3; border-style: dashed; }
   .week-pct { font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
   .week-day.today .week-pct { color: var(--text-dim); }
