@@ -95,7 +95,7 @@ async function loadFromSupabase(userId) {
   // Goals
   state.goals.dos   = (goalsRes.data || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General' }));
   state.goals.donts = (goalsRes.data || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General' }));
-  state.goalLogs    = (goalLogsRes.data || []).map(l => ({ id: l.id, goal_id: l.goal_id, user_id: l.user_id, date: l.date, checked: l.checked, count: l.count || 0 }));
+  state.goalLogs    = (goalLogsRes.data || []).map(l => ({ id: l.id, goal_id: l.goal_id, user_id: l.user_id, date: l.date, checked: l.checked, count: l.count || 0, completed_at: l.completed_at || null }));
 
   // Projects
   const allProjectTasks = projectTasksRes.data || [];
@@ -186,12 +186,12 @@ async function seedSampleData(userId) {
   (goalData || []).forEach(g => {
     const defList = g.type === 'do' ? defDos : defDonts;
     const defGoal = defList.find(d => d.text === g.text);
-    if (defGoal && defGoal.done) goalLogRows.push({ user_id: userId, goal_id: g.id, date: today, checked: true, count: g.target_count || 1 });
+    if (defGoal && defGoal.done) goalLogRows.push({ user_id: userId, goal_id: g.id, date: today, checked: true, count: g.target_count || 1, completed_at: new Date().toISOString() });
   });
   const { data: glData } = goalLogRows.length
     ? await sb.from('goal_logs').insert(goalLogRows).select()
     : { data: [] };
-  state.goalLogs = (glData || []).map(l => ({ id: l.id, goal_id: l.goal_id, user_id: l.user_id, date: l.date, checked: l.checked, count: l.count || 0 }));
+  state.goalLogs = (glData || []).map(l => ({ id: l.id, goal_id: l.goal_id, user_id: l.user_id, date: l.date, checked: l.checked, count: l.count || 0, completed_at: l.completed_at || null }));
 
   // Projects
   const now = new Date().toISOString();

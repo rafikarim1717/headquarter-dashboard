@@ -80,6 +80,7 @@ create table if not exists goal_logs (
   date date not null,
   checked boolean not null default false,
   count integer not null default 0,
+  completed_at timestamptz,
   unique (goal_id, date)
 );
 

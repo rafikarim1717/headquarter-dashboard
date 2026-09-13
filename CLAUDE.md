@@ -147,9 +147,10 @@ One row per `(goal_id, date)`, written via upsert whenever a commitment's checkb
 | `date` | date | Log date |
 | `checked` | boolean | Default false. **Always kept equal to `count >= goals.target_count`** — every write (checkbox toggle or counter bump, in `js/app.js` `bindMainEvents()`) recomputes and upserts both fields together, so this stays the single source of truth for every compliance/history view (ring, week strip, month calendar, year heatmap, daily score) without those views needing to know about `target_count` at all. |
 | `count` | integer | Default 0. Today's progress toward the parent goal's `target_count` (e.g. 2 of 3 cold DMs sent). Bumped by the `−`/`+` counter on Commitments, or by tapping the checkbox on Home (wraps back to 0 once it hits target). Added to `schema.sql`/`schema_fix.sql` (section 16); **run `schema_fix.sql` on the live DB**. |
+| `completed_at` | timestamptz | Nullable. Set to `now()` on the transition into `checked = true`, cleared to `NULL` on the transition back to `false` (mirrors `project_tasks.completed_at`) — bumping a counter that doesn't cross the checked/unchecked boundary leaves it untouched. Feeds Home's combined "Activity" heatmap + chronological activity feed (see "Home — Activity heatmap" below). Rows written before this column existed have no timestamp; the app falls back to midday on their `date` so they still appear in the feed. Added to `schema.sql`/`schema_fix.sql` (section 19); **run `schema_fix.sql` on the live DB**. |
 | UNIQUE | `(goal_id, date)` | Prevents duplicate log per day |
 
-Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compliance calendar, year heatmap, and Home's "Daily score" — all still read only `checked`, never `count` or `target_count` directly.
+Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compliance calendar, year heatmap, Home's "Daily score", and (via `completed_at`) Home's Activity heatmap/feed. The compliance-percentage views (ring, strips, calendars) still read only `checked`, never `count`/`target_count`/`completed_at` directly.
 
 > Note: `habits`/`habit_logs`/`focus_board`/`focus_tasks` tables described in older versions of this doc are **no longer used by the app** — the Habits and Focus pages were replaced by Commitments and Projects. The tables may still exist in `schema_fix.sql`/the live DB as unused leftovers; safe to ignore or drop.
 
@@ -176,7 +177,7 @@ Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compli
 | `text` | text | Task title |
 | `description` | text | Optional |
 | `checked` | boolean | Default false |
-| `completed_at` | timestamptz | Set to `now()` when `checked` flips to `true`, cleared to `NULL` on uncheck. Drives the GitHub-style activity heatmap on the Home "Active project" card — a day is "green" if any task in that project has `completed_at` on that date. |
+| `completed_at` | timestamptz | Set to `now()` when `checked` flips to `true`, cleared to `NULL` on uncheck. Feeds Home's combined "Activity" heatmap/feed (see "Home — Activity heatmap" below) — 1 task completed that day = 1 activity. |
 | `created_at` | timestamptz | |
 
 ### `income_entries`
@@ -300,7 +301,7 @@ Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compli
 
 | Route | Page | Description |
 |---|---|---|
-| `life:home` | Today | Greeting + live clock, Daily score, Today's commitments preview, Today's schedule preview (5 items), "Active project" card (progress bar + activity heatmap + carousel if multiple active projects), optional quick-navigation pills. Layout togglable (Stacked / Hero). |
+| `life:home` | Today | Greeting + live clock, Daily score, Today's commitments preview, Today's schedule preview (5 items), "Active project" card (progress bar + carousel if multiple active projects), a combined "Activity" heatmap + chronological activity feed (see "Home — Activity heatmap" below), optional quick-navigation pills. Layout togglable (Stacked / Hero). |
 | `life:schedule` | Schedule | Full month calendar view, day selector, event list for selected day. Add/edit/delete events. Alarm toggle per event (Web Notifications + AudioContext beep). |
 | `life:commitments` | Commitments | Replaces the old Goals/Habits pages. Commitments are grouped into collapsible **category** cards (Olahraga, Kerja, Bahasa, Spiritual, Personal & Mental, or any custom category — see "Commitments — categories" below) instead of a flat Do's/Don'ts split; daily check-off is backed by `goal_logs`, not a static `checked` flag, and each category card supports drag-and-drop reordering. Commitments with `target_count` 1 (the default) render as a plain checkbox; `target_count` >1 (e.g. "Cold DM" 3×/day) render as a `−`/count/`+` stepper instead — see "Counter-based commitments" below. Compliance ring (today's %) plus per-category compliance bars, plus a history card with **Day / Week / Month / Year** tabs (see below). |
 | `life:projects` | Projects | List of projects (filter: All/Active/On Hold/Done). Each card: name, description, status/deadline badges, progress bar (tasks done / total), expandable task list with check/edit/delete/assign-to-schedule, add task. |
@@ -332,13 +333,20 @@ Drives: daily compliance ring (Home + Commitments), weekly strip, monthly compli
 - **Day** — the only per-commitment drill-down: ‹/› step one date at a time (+ a "Today" jump button), shows that date's overall % plus a checked/unchecked row for every Do/Don't (`getLogByDate(goalId, date)`).
 - **Week** — the old "weekly strip" (7 circles, Mon–Sun), now navigable to any past week via `getMondayOf()` / `getWeekDays()` instead of being locked to the current week.
 - **Month** — the old compliance calendar grid, now navigable to any past month instead of being locked to the current month.
-- **Year** — new: a GitHub-style contribution heatmap (`buildCommitYearHeatmapData()` / `renderCommitYearHeatmap()`, reuses the `.proj-heatmap`/`.heatmap-cell` CSS from the Projects heatmap) — one cell per day, intensity = that day's compliance %.
+- **Year** — a GitHub-style contribution heatmap (`buildCommitYearHeatmapData()` / `renderCommitYearHeatmap()`, reuses the shared `.proj-heatmap`/`.heatmap-cell` CSS) — one cell per day, intensity = that day's compliance %. Distinct from Home's Activity heatmap below: this one measures pass/fail compliance (so its levels mix in `--danger`), Home's measures raw activity volume (all `--accent` tints).
 - Shared color rule (Week circles, Month cells, Year cells): **≥80% → `--accent` full, ≥40% → `--accent` ~30-40% mix, >0% → `--danger` ~30-40% mix, 0%/no data → default dark**.
 
 **Home "Active project" card details** (`projectsBlock` inside `renderLifeHome`, `js/app.js`):
 - Shows one active project at a time from `state.projects.filter(p => p.status === 'active')`, indexed by `state.homeProjectIndex`.
-- If more than one active project exists, `‹`/`›` nav buttons (`data-home-proj-nav="-1"|"1"`) cycle through them — bound in `bindMainEvents()`, must call `e.stopPropagation()` since the whole card has `data-go="life:projects"`.
-- Below the progress bar: `renderProjectHeatmap(tasks)` renders a 7-row × N-week GitHub-style contribution grid (`.proj-heatmap`, CSS `grid-auto-flow: column`). A cell is "active" (green) if any task in the project has `completed_at` on that date — computed by `buildProjectHeatmapCells()`.
+- If more than one active project exists, `‹`/`›` nav buttons (`data-home-proj-nav="-1"|"1"`) cycle through them — bound in `bindMainEvents()`, must call `e.stopPropagation()` since the whole card has `data-open-project="<id>"` (jumps to Projects, expanded on that project).
+- Its own card — no heatmap inside it. The Activity heatmap lives in a separate card immediately below (see next).
+
+**Home — Activity heatmap** (`renderHomeActivityHeatmap()` + `buildHomeActivityEvents()` / `buildHomeActivityData()`, `js/app.js`; own `.card`, rendered right after the "Active project" card in both Stacked and Hero layouts): a single GitHub-style contribution grid combining **project tasks completed** and **commitments checked**, plus a chronological feed of the underlying events below it. Replaced the older per-project-only `renderProjectHeatmap()`.
+- **Counting rule** (`buildHomeActivityEvents()`): 1 activity = 1 completed `project_tasks` row (`completed_at` on that day) **or** 1 `goal_logs` row with `checked = true` on that day — a counter commitment (e.g. "Cold DM" 3×/day) still counts as exactly **1** activity once it crosses its `target_count`, not 3. `Don't`-type commitments count the same as `Do`-type when checked. Recomputed from current state on every render (not an append-only event log), so unchecking something the same day removes it from that day's count automatically.
+- **Intensity**: 4 shades of `--accent` (`.act-low`/`.act-mid`/`.act-high`/`.act-max`, via `activityLevelClass()`), bucketed relative to that year's single busiest day — mirrors GitHub's own relative (not absolute) shading.
+- **Year selector**: `<select data-heatmap-year-select>` (`.hm-year-select`) lists every year from the earliest activity through the current year, most recent first — replaced the old ‹/› arrow-button nav. Changing it also clears any active day filter (see next). Selected year lives in `state.heatmapYear`.
+- **Activity feed**: below the grid, a chronological list (`.act-feed-list`) of every event in the selected year — project tasks tagged `Project` (`--accent`), commitments tagged `Do` (`--good`) or `Don't` (`--danger`) — newest first, each row showing title, source (project name / commitment category), and a relative timestamp. `goal_logs` rows written before `completed_at` existed fall back to midday on their `date` so they still appear (just without an exact time).
+- **Click-to-filter**: clicking a heatmap cell with activity (`data-act-day="<iso>"`) sets `state.homeActivityDayFilter` to that date and narrows the feed to just that day (click the same cell again, or the `× <date>` clear pill, to reset). Selected cell gets a `.act-selected` outline.
 
 ### Finance Tab
 
@@ -391,7 +399,7 @@ Projects have a confirm modal before delete (cascades to its tasks). Most delete
   ↓ click → mutate state → pulse(el) → render()
   ↓ dbCall(() => sb.from(...).update({ checked: ... }).eq('id', id))
 ```
-Commitments also upsert `goal_logs` for the day — `{ checked, count }` together, where `checked` is always recomputed as `count >= goal.target_count` (see "Counter-based commitments" above). Project task toggle additionally sets/clears `completed_at` (`new Date().toISOString()` on check, `null` on uncheck) — this is what feeds the Home activity heatmap.
+Commitments also upsert `goal_logs` for the day — `{ checked, count, completed_at }` together, where `checked` is always recomputed as `count >= goal.target_count` (see "Counter-based commitments" above) and `completed_at` is stamped `new Date().toISOString()` only on the transition into checked, cleared to `null` only on the transition back out (a counter bump that doesn't cross that boundary leaves it as-is). Project task toggle likewise sets/clears its own `completed_at`. Both feed Home's combined Activity heatmap/feed (see "Home — Activity heatmap" above).
 
 ### Notes Autosave
 Title + content changes debounced 1000ms, then `sb.from('notes').update(...)`. Focus textarea changes debounced 600ms.
@@ -434,3 +442,4 @@ These columns/tables are used in the code but **missing from both schema files**
 6. **`profiles.note_default_style`** — added to `schema.sql` and `schema_fix.sql` (section 17) to support the Notes editor's "Save as my default style" / "Use my default style" options. **Run `schema_fix.sql` on the live DB** — until then, saving a default style fails outright (Postgrest rejects the `UPDATE` on the unknown column).
 7. **`goals.target_count` / `goals.unit` / `goal_logs.count`** — added to `schema.sql` and `schema_fix.sql` (section 16) to support counter-based commitments (e.g. "Cold DM" 3×/day) instead of only plain yes/no. **Run `schema_fix.sql` on the live DB** — until then, adding/editing a commitment fails outright (Postgrest rejects insert/update referencing the unknown `target_count`/`unit` columns).
 8. **`goals.category`** — added to `schema.sql` and `schema_fix.sql` (section 18) to support grouping Commitments by life area (Olahraga, Kerja, Bahasa, Spiritual, Personal & Mental, or custom) instead of only a flat Do's/Don'ts split. **Run `schema_fix.sql` on the live DB** — until then, adding/editing a commitment fails outright (Postgrest rejects insert/update referencing the unknown `category` column). Existing rows default to `'General'` once the migration runs; re-categorize them via the Edit Commitment modal.
+9. **`goal_logs.completed_at`** — added to `schema.sql` and `schema_fix.sql` (section 19) so commitments can feed Home's combined Activity heatmap/feed alongside project tasks (see "Home — Activity heatmap" above). **Run `schema_fix.sql` on the live DB** — until then, checking off a commitment fails outright (Postgrest rejects the `UPDATE`/upsert referencing the unknown `completed_at` column).

@@ -49,17 +49,48 @@ function escapeHtml(s) {
 }
 
 /* =========================================================
-   PROJECT ACTIVITY HEATMAP (GitHub-style yearly contribution grid)
+   HOME ACTIVITY HEATMAP (GitHub-style yearly contribution grid)
+   Combines project tasks completed + commitments checked into a
+   single per-day "activity" count, plus a chronological feed of
+   the underlying events. See buildHomeActivityEvents() for the
+   exact counting rule: 1 completed project task = 1 activity,
+   1 commitment marked done that day (do or don't, checkbox or
+   counter reaching its target) = 1 activity — regardless of
+   target_count, so a 3x/day counter still counts once.
 ========================================================= */
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-function buildYearHeatmapData(tasks, year) {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const counts = {};
-  (tasks || []).filter(t => t.completed_at).forEach(t => {
-    const iso = isoLocal(new Date(t.completed_at));
-    counts[iso] = (counts[iso] || 0) + 1;
+// One entry per completed project task + per "checked" goal_logs row.
+// ts is used only for the activity feed's ordering/relative-time display;
+// iso (calendar day) is what the heatmap buckets on.
+function buildHomeActivityEvents() {
+  const events = [];
+  (state.projects || []).forEach(p => {
+    (p.tasks || []).forEach(t => {
+      if (!t.completed_at) return;
+      const d = new Date(t.completed_at);
+      events.push({ ts: d.getTime(), iso: isoLocal(d), title: t.text, sub: p.name, kind: 'project' });
+    });
   });
+  const allGoals = [
+    ...(state.goals.dos   || []).map(g => ({ ...g, kind: 'do' })),
+    ...(state.goals.donts || []).map(g => ({ ...g, kind: 'dont' }))
+  ];
+  allGoals.forEach(g => {
+    state.goalLogs.filter(l => l.goal_id === g.id && l.checked).forEach(l => {
+      // Logs written before goal_logs.completed_at existed have no timestamp —
+      // fall back to midday on their date so they still show up in the feed.
+      const ts = l.completed_at ? new Date(l.completed_at).getTime() : new Date(l.date + 'T12:00:00').getTime();
+      events.push({ ts, iso: l.date, title: g.text, sub: g.category || 'General', kind: g.kind });
+    });
+  });
+  return events;
+}
+
+function buildHomeActivityData(events, year) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const counts = {};
+  events.forEach(e => { counts[e.iso] = (counts[e.iso] || 0) + 1; });
   // Start: Sunday of week containing Jan 1
   const jan1 = new Date(year, 0, 1);
   const start = new Date(year, 0, 1 - jan1.getDay());
@@ -67,41 +98,83 @@ function buildYearHeatmapData(tasks, year) {
   const yearEnd = year < today.getFullYear() ? new Date(year, 11, 31) : today;
   const end = new Date(yearEnd.getFullYear(), yearEnd.getMonth(), yearEnd.getDate() + (6 - yearEnd.getDay()));
   const cells = [], monthLabels = [];
-  let col = 0, prevMonth = -1, d = new Date(start);
+  let col = 0, prevMonth = -1, d = new Date(start), maxCount = 0;
   while (d <= end) {
     for (let row = 0; row < 7; row++) {
       const iso = isoLocal(d);
       const inYear = d.getFullYear() === year;
       const m = d.getMonth();
       if (row === 0 && inYear && m !== prevMonth) { monthLabels.push({ month: m, col }); prevMonth = m; }
-      cells.push({ iso, count: counts[iso] || 0, active: inYear && !!counts[iso], isFuture: d > today, isOut: !inYear });
+      const count = counts[iso] || 0;
+      if (inYear && count > maxCount) maxCount = count;
+      cells.push({ iso, count, isFuture: d > today, isOut: !inYear });
       d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
     }
     col++;
   }
   const total = Object.entries(counts).filter(([iso]) => iso.startsWith(String(year))).reduce((s,[,n]) => s + n, 0);
-  return { cells, monthLabels, totalCols: col, total };
+  return { cells, monthLabels, totalCols: col, total, maxCount };
 }
 
-function getEarliestHeatmapYear(tasks) {
-  const years = (tasks || []).filter(t => t.completed_at).map(t => new Date(t.completed_at).getFullYear());
+function getEarliestHomeActivityYear(events) {
+  const years = events.map(e => Number(e.iso.slice(0, 4)));
   return years.length ? Math.min(...years) : new Date().getFullYear();
 }
 
-function renderProjectHeatmap(tasks, year) {
-  const { cells, monthLabels, totalCols, total } = buildYearHeatmapData(tasks, year);
+// 4-shade intensity relative to this year's busiest day (GitHub-style) — all
+// tints of --accent since this is a volume metric, not a compliance/pass-fail one.
+function activityLevelClass(count, maxCount) {
+  if (!count) return '';
+  const pct = count / maxCount;
+  if (pct >= 0.75) return ' act-max';
+  if (pct >= 0.5)  return ' act-high';
+  if (pct >= 0.25) return ' act-mid';
+  return ' act-low';
+}
+
+const ACT_KIND_LABEL = { project: 'Project', do: 'Do', dont: "Don't" };
+
+const HOME_ACTIVITY_FEED_CAP = 10;
+
+function renderHomeActivityHeatmap(year, dayFilter, showAll) {
+  const events = buildHomeActivityEvents();
+  const { cells, monthLabels, totalCols, total, maxCount } = buildHomeActivityData(events, year);
   const todayYear = new Date().getFullYear();
-  const earliestYear = getEarliestHeatmapYear(tasks);
+  const earliestYear = getEarliestHomeActivityYear(events);
+  const yearOptions = [];
+  for (let y = todayYear; y >= earliestYear; y--) yearOptions.push(y);
   const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
   const cols = `24px repeat(${totalCols},1fr)`;
+
+  const feedEvents = events
+    .filter(e => e.iso.startsWith(String(year)) && (!dayFilter || e.iso === dayFilter))
+    .sort((a, b) => b.ts - a.ts);
+  const capped = !showAll && feedEvents.length > HOME_ACTIVITY_FEED_CAP;
+  const visibleEvents = capped ? feedEvents.slice(0, HOME_ACTIVITY_FEED_CAP) : feedEvents;
+
+  const feedHtml = visibleEvents.length ? `
+    <ul class="list act-feed-list">
+      ${visibleEvents.map(e => `
+        <li class="list-item act-feed-item">
+          <span class="act-feed-tag act-feed-tag-${e.kind}">${ACT_KIND_LABEL[e.kind]}</span>
+          <div class="item-main">
+            <div class="item-title">${escapeHtml(e.title)}</div>
+            <div class="item-sub">${escapeHtml(e.sub)}</div>
+          </div>
+          <div class="act-feed-time">${relativeTime(e.ts)}</div>
+        </li>`).join('')}
+    </ul>
+    ${capped ? `<button class="act-feed-toggle" data-act-feed-toggle>Show all ${feedEvents.length} activities</button>` : ''}
+    ${!capped && showAll && feedEvents.length > HOME_ACTIVITY_FEED_CAP ? `<button class="act-feed-toggle" data-act-feed-toggle>Show less</button>` : ''}
+  ` : `<div style="font-size:12px;color:var(--text-faint);padding:10px 2px">${dayFilter ? 'Nothing done that day.' : 'No activity yet.'}</div>`;
+
   return `
+    <div class="section-title" style="margin-top:0">Activity</div>
     <div class="heatmap-header">
-      <span class="heatmap-total">${total} task${total !== 1 ? 's' : ''} completed in ${year}</span>
-      <div class="heatmap-year-nav">
-        <button class="proj-nav-btn" data-heatmap-year="-1" title="Previous year"${year <= earliestYear ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#x2039;</button>
-        <span style="font-size:11px;color:var(--text-faint)">${year}</span>
-        <button class="proj-nav-btn" data-heatmap-year="1" title="Next year"${year >= todayYear ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#x203A;</button>
-      </div>
+      <span class="heatmap-total">${total} activit${total !== 1 ? 'ies' : 'y'} in ${year}</span>
+      <select class="hm-year-select" data-heatmap-year-select aria-label="Select year">
+        ${yearOptions.map(y => `<option value="${y}"${y === year ? ' selected' : ''}>${y}</option>`).join('')}
+      </select>
     </div>
     <div class="heatmap-month-row" style="grid-template-columns:${cols}">
       <span></span>
@@ -110,10 +183,17 @@ function renderProjectHeatmap(tasks, year) {
     <div class="proj-heatmap" style="grid-template-columns:${cols};grid-template-rows:repeat(7,1fr)">
       ${DAY_LABELS.map(l => `<span class="hm-day-lbl">${l}</span>`).join('')}
       ${cells.map(c => {
-        const cls = c.isOut || c.isFuture ? 'heatmap-cell empty' : c.active ? 'heatmap-cell active' : 'heatmap-cell';
-        return `<div class="${cls}" title="${c.iso}${c.count ? ` · ${c.count} task${c.count > 1 ? 's' : ''} done` : ''}"></div>`;
+        if (c.isOut || c.isFuture) return `<div class="heatmap-cell empty"></div>`;
+        const cls = 'heatmap-cell' + activityLevelClass(c.count, maxCount) + (c.iso === dayFilter ? ' act-selected' : '');
+        const clickAttr = c.count ? ` data-act-day="${c.iso}"` : '';
+        return `<div class="${cls}"${clickAttr} title="${c.iso}${c.count ? ` · ${c.count} activit${c.count > 1 ? 'ies' : 'y'}` : ''}"></div>`;
       }).join('')}
-    </div>`;
+    </div>
+    <div class="act-feed-header">
+      <span class="section-title" style="margin:0">Recent activity</span>
+      ${dayFilter ? `<button class="act-feed-clear" data-act-day-clear>${fmtDate(dayFilter)} &times;</button>` : ''}
+    </div>
+    ${feedHtml}`;
 }
 
 /* =========================================================
@@ -130,7 +210,7 @@ let state = {
   profile: { name: 'Friend', noteDefaultStyle: null },
   schedule: {},   // { [iso-date]: [{id, time, title, sub}] }
   goals: { dos: [], donts: [] },  // items: {id, text, target_count, unit} — target_count=1 renders as a checkbox, >1 renders as a +/- counter
-  goalLogs: [],   // [{id, goal_id, user_id, date, checked, count}] — checked is always (count >= goal.target_count)
+  goalLogs: [],   // [{id, goal_id, user_id, date, checked, count, completed_at}] — checked is always (count >= goal.target_count); completed_at is set/cleared alongside checked and feeds Home's activity list
   projects: [],       // [{id, name, status, deadline, tasks:[{id,text,description,checked,completed_at}]}]
   projectsFilter: 'all',
   expandedProjectIds: [],
@@ -159,7 +239,9 @@ let state = {
   debtsPage: 1,
   incomeFilter: 'month',
   incomePickedDate: null,
-  heatmapYear: new Date().getFullYear()
+  heatmapYear: new Date().getFullYear(),  // year shown in Home's "Activity" heatmap
+  homeActivityDayFilter: null,            // iso date; clicking a heatmap cell filters the activity feed to that day
+  homeActivityShowAll: false              // false = feed capped at 10 rows + "Show all activities" button
 };
 
 /* =========================================================
@@ -653,10 +735,9 @@ function renderLifeHome() {
       <button class="pill" data-go="life:projects">Projects</button>
     </div>` : '';
 
-  const allTasks = (state.projects || []).flatMap(p => p.tasks || []);
   const heatmapBlock = `
     <div class="card" style="animation-delay:240ms">
-      ${renderProjectHeatmap(allTasks, state.heatmapYear)}
+      ${renderHomeActivityHeatmap(state.heatmapYear, state.homeActivityDayFilter, state.homeActivityShowAll)}
     </div>`;
 
   const stacked = scheduleBlock(60) + commitmentsBlock(120) + projectsBlock(180) + heatmapBlock;
@@ -2246,17 +2327,39 @@ function bindMainEvents() {
     }
   }));
 
-  // heatmap: year nav
-  main.querySelectorAll('[data-heatmap-year]').forEach(el => el.addEventListener('click', (e) => {
+  // home activity heatmap: year dropdown
+  const heatmapYearSelect = main.querySelector('[data-heatmap-year-select]');
+  if (heatmapYearSelect) heatmapYearSelect.addEventListener('change', (e) => {
     e.stopPropagation();
-    const dir = Number(el.dataset.heatmapYear);
-    const todayYear = new Date().getFullYear();
-    const allTasks = (state.projects || []).flatMap(p => p.tasks || []);
-    const earliestYear = getEarliestHeatmapYear(allTasks);
-    const nextYear = (state.heatmapYear || todayYear) + dir;
-    state.heatmapYear = Math.min(todayYear, Math.max(earliestYear, nextYear));
+    state.heatmapYear = Number(heatmapYearSelect.value);
+    state.homeActivityDayFilter = null; // switching year clears any day filter from the previous year
+    state.homeActivityShowAll = false;
+    render();
+  });
+
+  // home activity heatmap: click a day to filter the feed below to just that day (click again / clear button to reset)
+  main.querySelectorAll('[data-act-day]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const iso = el.dataset.actDay;
+    state.homeActivityDayFilter = state.homeActivityDayFilter === iso ? null : iso;
+    state.homeActivityShowAll = false;
     render();
   }));
+  const actDayClear = main.querySelector('[data-act-day-clear]');
+  if (actDayClear) actDayClear.addEventListener('click', (e) => {
+    e.stopPropagation();
+    state.homeActivityDayFilter = null;
+    state.homeActivityShowAll = false;
+    render();
+  });
+
+  // home activity heatmap: "Show all activities" / "Show less" toggle for the feed
+  const actFeedToggle = main.querySelector('[data-act-feed-toggle]');
+  if (actFeedToggle) actFeedToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    state.homeActivityShowAll = !state.homeActivityShowAll;
+    render();
+  });
 
   // home: cycle through active projects
   main.querySelectorAll('[data-home-proj-nav]').forEach(el => el.addEventListener('click', (e) => {
@@ -2458,11 +2561,13 @@ function bindMainEvents() {
     const existingLog = getTodayLog(id);
     const newChecked = existingLog ? !existingLog.checked : true;
     const newCount = newChecked ? target : 0;
+    const newCompletedAt = newChecked ? new Date().toISOString() : null; // feeds Home's activity heatmap/feed
     if (existingLog) {
       existingLog.checked = newChecked;
       existingLog.count = newCount;
+      existingLog.completed_at = newCompletedAt;
     } else {
-      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount });
+      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt });
     }
     pulse(el);
     el.classList.toggle('checked', newChecked);
@@ -2472,7 +2577,7 @@ function bindMainEvents() {
     updateCategoryHeaderCount(g.category || 'General');
     updateComplianceRing();
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
-      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount },
+      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
       { onConflict: 'goal_id,date' }
     ).select().single());
     if (data) {
@@ -2491,13 +2596,18 @@ function bindMainEvents() {
     const today = todayISO();
     const existingLog = getTodayLog(id);
     const prevCount = existingLog?.count || 0;
+    const wasChecked = existingLog?.checked || false;
     const newCount = Math.max(0, prevCount + dir);
     const newChecked = newCount >= target;
+    // Only stamp/clear completed_at on an actual checked transition — bumping the
+    // counter further up/down while already done (or already not done) shouldn't move it.
+    const newCompletedAt = newChecked === wasChecked ? (existingLog?.completed_at || null) : (newChecked ? new Date().toISOString() : null);
     if (existingLog) {
       existingLog.count = newCount;
       existingLog.checked = newChecked;
+      existingLog.completed_at = newCompletedAt;
     } else {
-      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount });
+      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt });
     }
     const valEl = document.querySelector(`[data-goal-count-val="${id}"]`);
     if (valEl) valEl.textContent = `${newCount}/${target}${g.unit ? ' ' + g.unit : ''}`;
@@ -2508,7 +2618,7 @@ function bindMainEvents() {
     updateCategoryHeaderCount(g.category || 'General');
     updateComplianceRing();
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
-      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount },
+      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
       { onConflict: 'goal_id,date' }
     ).select().single());
     if (data) {

@@ -533,7 +533,7 @@
   .habit-grid-7 .cell { aspect-ratio: 1 / 1; border-radius: 4px; background: #232323; }
   .habit-grid-7 .cell.on { background: var(--accent); }
 
-  /* ---- project activity heatmap (GitHub-style yearly) ---- */
+  /* ---- home/commitments activity heatmaps (GitHub-style yearly) ---- */
   .heatmap-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .heatmap-total { font-size: 12px; color: var(--text-dim); font-weight: 500; }
   .heatmap-year-nav { display: flex; align-items: center; gap: 6px; }
@@ -541,9 +541,61 @@
   .heatmap-month-lbl { font-size: 9px; color: var(--text-faint); line-height: 1; white-space: nowrap; }
   .proj-heatmap { display: grid; grid-auto-flow: column; gap: 2px; width: 100%; }
   .heatmap-cell { aspect-ratio: 1; border-radius: 2px; background: #232323; min-width: 0; }
-  .heatmap-cell.active { background: var(--accent); }
   .heatmap-cell.empty { background: transparent; }
   .hm-day-lbl { font-size: 9px; color: var(--text-faint); display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; line-height: 1; min-width: 0; }
+
+  /* home activity heatmap — 4-shade intensity (volume, not pass/fail — always tints of --accent) */
+  .heatmap-cell.act-low  { background: color-mix(in oklab, var(--accent) 30%, transparent); cursor: pointer; }
+  .heatmap-cell.act-mid  { background: color-mix(in oklab, var(--accent) 55%, transparent); cursor: pointer; }
+  .heatmap-cell.act-high { background: color-mix(in oklab, var(--accent) 80%, transparent); cursor: pointer; }
+  .heatmap-cell.act-max  { background: var(--accent); cursor: pointer; }
+  .heatmap-cell.act-selected { outline: 1.5px solid var(--text); outline-offset: 1px; }
+
+  /* home activity heatmap — year dropdown (replaces prev/next arrows) */
+  .hm-year-select {
+    appearance: none; -webkit-appearance: none;
+    background: var(--card-2); border: 1px solid var(--border); color: var(--text);
+    font-size: 11px; font-family: inherit; border-radius: 6px; cursor: pointer; outline: none;
+    padding: 4px 22px 4px 10px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%239a9a9a' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+  .hm-year-select:hover { border-color: var(--border-strong); }
+  .hm-year-select:focus { border-color: var(--accent); }
+
+  /* home activity heatmap — chronological feed below the grid */
+  .act-feed-header { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .act-feed-clear {
+    background: none; border: 1px solid var(--border); border-radius: var(--r-pill);
+    color: var(--text-faint); font-size: 11px; padding: 3px 10px; cursor: pointer;
+    transition: color 150ms ease, border-color 150ms ease;
+  }
+  .act-feed-clear:hover { color: var(--text); border-color: var(--border-strong); }
+  .act-feed-list {
+    margin-top: 8px; max-height: 320px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent;
+  }
+  .act-feed-list::-webkit-scrollbar { width: 6px; }
+  .act-feed-list::-webkit-scrollbar-track { background: transparent; }
+  .act-feed-list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 10px; }
+  .act-feed-list::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+  .act-feed-toggle {
+    width: 100%; margin-top: 10px; padding: 10px;
+    background: var(--card-2); border: 1px solid var(--border); border-radius: var(--r-sm);
+    color: var(--text-dim); font-size: 12px; font-family: inherit; cursor: pointer;
+    transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .act-feed-toggle:hover { color: var(--text); border-color: var(--border-strong); }
+  .act-feed-item { gap: 10px; }
+  .act-feed-tag {
+    flex-shrink: 0; font-size: 10px; font-weight: 600; line-height: 1;
+    padding: 4px 7px; border-radius: var(--r-pill); color: #111;
+    background: var(--text-dim);
+  }
+  .act-feed-tag-project { background: var(--accent); }
+  .act-feed-tag-do { background: var(--good); }
+  .act-feed-tag-dont { background: var(--danger); }
+  .act-feed-time { flex-shrink: 0; font-size: 11px; color: var(--text-faint); white-space: nowrap; }
 
   /* ---- home active-project carousel nav ---- */
   .proj-nav-btn {

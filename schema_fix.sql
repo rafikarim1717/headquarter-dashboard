@@ -684,3 +684,18 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS note_default_style jsonb;
 --     Safe to re-run on an existing goals table that predates this column.
 -- ────────────────────────────────────────────────────────────
 ALTER TABLE goals ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'General';
+
+
+-- ────────────────────────────────────────────────────────────
+-- 19. goal_logs.completed_at
+--     Timestamp of the moment a commitment was last marked done
+--     (set on the checked/counter-reaching-target transition,
+--     cleared to NULL on uncheck — mirrors project_tasks.completed_at).
+--     Feeds Home's combined "Activity" heatmap + chronological
+--     activity feed, which also counts completed project tasks.
+--     Rows written before this column existed have no timestamp —
+--     the app falls back to midday on their `date` so they still
+--     appear in the feed, just without an exact time.
+--     Safe to re-run on an existing goal_logs table that predates this column.
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE goal_logs ADD COLUMN IF NOT EXISTS completed_at timestamptz;
