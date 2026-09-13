@@ -1,0 +1,662 @@
+/* =========================================================
+   Life — Commitments
+   (split from js/app.js — see CLAUDE.md for the page map)
+========================================================= */
+
+/* ---- LIFE: COMMITMENTS — helpers ---- */
+function getTodayLog(goalId) {
+  const t = todayISO();
+  return state.goalLogs.find(l => l.goal_id === goalId && l.date === t) || null;
+}
+function getLogByDate(goalId, date) {
+  return state.goalLogs.find(l => l.goal_id === goalId && l.date === date) || null;
+}
+function getDayCompliancePct(dateIso) {
+  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  if (!allGoals.length) return 0;
+  const checked = allGoals.filter(g => {
+    const log = state.goalLogs.find(l => l.goal_id === g.id && l.date === dateIso);
+    return log && log.checked;
+  }).length;
+  return (checked / allGoals.length) * 100;
+}
+const GOAL_CATEGORY_PRESET = ['Olahraga', 'Kerja', 'Bahasa', 'Spiritual', 'Personal & Mental'];
+function categoryItems(cat) {
+  return [...(state.goals.dos || []), ...(state.goals.donts || [])].filter(g => (g.category || 'General') === cat);
+}
+// Categories that currently have at least one commitment, in preset order then any custom ones alphabetically, 'General' last.
+function getGoalCategories() {
+  const used = new Set([...(state.goals.dos || []), ...(state.goals.donts || [])].map(g => g.category || 'General'));
+  const ordered = GOAL_CATEGORY_PRESET.filter(c => used.has(c));
+  const extra = [...used].filter(c => !GOAL_CATEGORY_PRESET.includes(c) && c !== 'General').sort();
+  const result = ordered.concat(extra);
+  if (used.has('General')) result.push('General');
+  return result;
+}
+// Full pickable category list for the Add/Edit modals — presets always offered, plus any custom ones already in use.
+function getCategoryOptions() {
+  const used = new Set([...(state.goals.dos || []), ...(state.goals.donts || [])].map(g => g.category || 'General'));
+  const extra = [...used].filter(c => !GOAL_CATEGORY_PRESET.includes(c)).sort();
+  return [...GOAL_CATEGORY_PRESET, ...extra];
+}
+function getMondayOf(dateIso) {
+  const d = new Date(dateIso + 'T00:00:00');
+  const dow = d.getDay();
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+  return isoLocal(d);
+}
+function getWeekDays(mondayIso) {
+  const monday = new Date(mondayIso + 'T00:00:00');
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+function buildCommitYearHeatmapData(year) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const jan1 = new Date(year, 0, 1);
+  const start = new Date(year, 0, 1 - jan1.getDay());
+  const yearEnd = year < today.getFullYear() ? new Date(year, 11, 31) : today;
+  const end = new Date(yearEnd.getFullYear(), yearEnd.getMonth(), yearEnd.getDate() + (6 - yearEnd.getDay()));
+  const cells = [], monthLabels = [];
+  let col = 0, prevMonth = -1, d = new Date(start);
+  let sum = 0, dayCount = 0;
+  while (d <= end) {
+    for (let row = 0; row < 7; row++) {
+      const iso = isoLocal(d);
+      const inYear = d.getFullYear() === year;
+      const m = d.getMonth();
+      const isFuture = d > today;
+      if (row === 0 && inYear && m !== prevMonth) { monthLabels.push({ month: m, col }); prevMonth = m; }
+      let pct = 0;
+      if (inYear && !isFuture) {
+        pct = getDayCompliancePct(iso);
+        sum += pct; dayCount++;
+      }
+      cells.push({ iso, pct, isFuture, isOut: !inYear });
+      d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    }
+    col++;
+  }
+  const avgPct = dayCount ? Math.round(sum / dayCount) : 0;
+  return { cells, monthLabels, totalCols: col, avgPct };
+}
+function renderCommitYearHeatmap(year, hasGoals) {
+  const { cells, monthLabels, totalCols, avgPct } = buildCommitYearHeatmapData(year);
+  const todayYear = new Date().getFullYear();
+  const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+  const cols = `24px repeat(${totalCols},1fr)`;
+  return `
+    <div class="heatmap-header">
+      <span class="heatmap-total">${hasGoals ? avgPct + '% average compliance in ' + year : 'No commitments yet'}</span>
+      <div class="heatmap-year-nav">
+        <button class="proj-nav-btn" data-commit-year-nav="-1" title="Previous year">&#8249;</button>
+        <span style="font-size:11px;color:var(--text-faint)">${year}</span>
+        <button class="proj-nav-btn" data-commit-year-nav="1" title="Next year"${year >= todayYear ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
+      </div>
+    </div>
+    <div class="heatmap-month-row" style="grid-template-columns:${cols}">
+      <span></span>
+      ${monthLabels.map(({month, col}) => `<span class="heatmap-month-lbl" style="grid-column:${col + 2}">${MONTH_NAMES[month]}</span>`).join('')}
+    </div>
+    <div class="proj-heatmap" style="grid-template-columns:${cols};grid-template-rows:repeat(7,1fr)">
+      ${DAY_LABELS.map(l => `<span class="hm-day-lbl">${l}</span>`).join('')}
+      ${cells.map(c => {
+        if (c.isOut || c.isFuture) return `<div class="heatmap-cell empty"></div>`;
+        const lvl = c.pct >= 80 ? 'high' : c.pct >= 40 ? 'mid' : c.pct > 0 ? 'low' : '';
+        const cls = lvl ? `heatmap-cell lvl-${lvl}` : 'heatmap-cell';
+        return `<div class="${cls}" title="${c.iso} · ${Math.round(c.pct)}%"></div>`;
+      }).join('')}
+    </div>`;
+}
+function updateCategoryHeaderCount(cat) {
+  const items = categoryItems(cat);
+  const checked = items.filter(i => getTodayLog(i.id)?.checked).length;
+  const pct = items.length ? Math.round(checked / items.length * 100) : 0;
+  document.querySelectorAll('[data-goal-count-header]').forEach(el => {
+    if (el.dataset.goalCountHeader === cat) el.textContent = `${checked} / ${items.length}`;
+  });
+  document.querySelectorAll('[data-goal-progress-mini]').forEach(el => {
+    if (el.dataset.goalProgressMini === cat) el.style.width = pct + '%';
+  });
+}
+function computeDailyScore() {
+  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const totalGoals = allGoals.length;
+  if (!totalGoals) return 0;
+  const checkedToday = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
+  return Math.round((checkedToday / totalGoals) * 100);
+}
+
+function animateComplianceRing() {
+  const card = document.getElementById('commit-compliance-card');
+  if (!card) return;
+  card.querySelectorAll('.compliance-arc').forEach(arc => {
+    const full = parseFloat(arc.dataset.full || arc.getAttribute('stroke-dasharray') || 213.63);
+    const pct  = parseFloat(arc.dataset.pct || 0);
+    arc.style.strokeDashoffset = full - (pct / 100 * full);
+  });
+  const firstArc = card.querySelector('.compliance-arc');
+  const pct = firstArc ? parseFloat(firstArc.dataset.pct || 0) : 0;
+  card.querySelectorAll('.compliance-pct-text').forEach(el => el.textContent = Math.round(pct));
+}
+
+function updateComplianceRing() {
+  const card = document.getElementById('commit-compliance-card');
+  if (!card) return;
+  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const total    = allGoals.length;
+  const checked  = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
+  const pct      = total ? Math.round(checked / total * 100) : 0;
+  card.querySelectorAll('.compliance-arc').forEach(arc => {
+    const full = parseFloat(arc.getAttribute('stroke-dasharray') || 213.63);
+    arc.style.strokeDashoffset = full - (pct / 100 * full);
+    arc.dataset.pct = pct;
+  });
+  card.querySelectorAll('.compliance-pct-text').forEach(el => el.textContent = pct);
+  card.querySelectorAll('[data-compliance-fill]').forEach(el => {
+    const items = categoryItems(el.dataset.complianceFill);
+    const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
+    el.style.width = (items.length ? Math.round(chk / items.length * 100) : 0) + '%';
+  });
+  card.querySelectorAll('[data-compliance-count]').forEach(el => {
+    const items = categoryItems(el.dataset.complianceCount);
+    const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
+    el.textContent = `${chk}/${items.length}`;
+  });
+}
+
+function renderCommitments() {
+  const today = todayISO();
+  const dos   = state.goals.dos   || [];
+  const donts = state.goals.donts || [];
+  const allGoals  = [...dos, ...donts];
+  const totalGoals = allGoals.length;
+
+  const overallChecked = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
+  const overallPct     = totalGoals ? Math.round(overallChecked / totalGoals * 100) : 0;
+  const categories      = getGoalCategories();
+
+  function goalRow(i, key) {
+    const target = i.target_count || 1;
+    const log = getTodayLog(i.id);
+    const count = log?.count || 0;
+    const isDone = log?.checked || false;
+    const control = target > 1 ? `
+        <div class="goal-counter">
+          <button type="button" class="goal-count-btn" data-goal-bump="-1|${key}|${i.id}" aria-label="Decrease">&#8722;</button>
+          <span class="goal-count-val" data-goal-count-val="${i.id}">${count}/${target}${i.unit ? ' ' + escapeHtml(i.unit) : ''}</span>
+          <button type="button" class="goal-count-btn" data-goal-bump="1|${key}|${i.id}" aria-label="Increase">&#43;</button>
+        </div>` : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal="${key}|${i.id}"></span>`;
+    const dontTag = key === 'donts' ? `<span class="dont-tag">Don't</span>` : '';
+    return `
+    <li class="goal-item${isDone ? ' goal-done' : ''}" draggable="true" data-goal-drag="${i.id}" data-goal-row="${i.id}">
+      <div class="list-item" style="padding:10px 0;align-items:center">
+        ${control}
+        <span class="check-label ${isDone ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
+        ${dontTag}
+        <div class="fin-acts">
+          <button class="fin-edit-btn" data-edit-goal="${key}|${i.id}">&#x270E;</button>
+          <button class="fin-del-btn" data-del-goal="${key}|${i.id}" title="Delete">${ICON_TRASH}</button>
+        </div>
+      </div>
+    </li>`;
+  }
+
+  function categoryCard(cat, idx) {
+    const dosInCat   = dos.filter(g => (g.category || 'General') === cat);
+    const dontsInCat = donts.filter(g => (g.category || 'General') === cat);
+    const itemsInCat = [...dosInCat, ...dontsInCat];
+    const checkedInCat = itemsInCat.filter(g => getTodayLog(g.id)?.checked).length;
+    const pctInCat = itemsInCat.length ? Math.round(checkedInCat / itemsInCat.length * 100) : 0;
+    return `
+      <details class="card cat-card" style="animation-delay:${40 + idx * 20}ms" open>
+        <summary>
+          <div class="section-title" style="margin:0">${escapeHtml(cat)} <span class="meta" data-goal-count-header="${escapeHtml(cat)}">${checkedInCat} / ${itemsInCat.length}</span></div>
+          <div class="cat-head-right">
+            <div class="cat-progress-mini"><div data-goal-progress-mini="${escapeHtml(cat)}" style="width:${pctInCat}%"></div></div>
+            <span class="chevron">&#8250;</span>
+          </div>
+        </summary>
+        <div class="cat-body">
+          ${dosInCat.length ? `<ul class="list" style="padding:0" data-goal-list="dos" data-goal-cat="${escapeHtml(cat)}">${dosInCat.map(i => goalRow(i, 'dos')).join('')}</ul>` : ''}
+          ${dontsInCat.length ? `<ul class="list" style="padding:0" data-goal-list="donts" data-goal-cat="${escapeHtml(cat)}">${dontsInCat.map(i => goalRow(i, 'donts')).join('')}</ul>` : ''}
+          <button class="add-btn" data-add-commit="${escapeHtml(cat)}" style="margin-top:14px"><span class="plus">+</span> Add to ${escapeHtml(cat)}</button>
+        </div>
+      </details>`;
+  }
+
+  // History tab content — Day / Week / Month / Year (all derived from goalLogs, already fully loaded)
+  const tab = state.commitPreviewTab;
+  let tabBodyHtml = '';
+
+  if (tab === 'day') {
+    const viewDay  = state.commitViewDay || today;
+    const isToday  = viewDay === today;
+    const dayLabel = isToday ? 'Today' : new Date(viewDay + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    const dayPct   = totalGoals ? Math.round(getDayCompliancePct(viewDay)) : 0;
+    const rows = allGoals.map(g => {
+      const isDo   = dos.includes(g);
+      const target = g.target_count || 1;
+      const log    = getLogByDate(g.id, viewDay);
+      const checked = log?.checked || false;
+      const count   = log?.count || 0;
+      return `
+        <li class="commit-day-row${checked ? ' checked' : ''}">
+          <span class="commit-day-icon">${checked ? '&#10003;' : '&#8211;'}</span>
+          <span class="commit-day-text">${escapeHtml(g.text)}</span>
+          ${target > 1 ? `<span class="commit-day-count">${count}/${target}</span>` : ''}
+          <span class="commit-day-type">${isDo ? "Do" : "Don't"}</span>
+        </li>`;
+    }).join('');
+    tabBodyHtml = `
+      <div class="commit-day-nav">
+        <button class="proj-nav-btn" data-commit-day-nav="-1" title="Previous day">&#8249;</button>
+        <span class="commit-day-label">${dayLabel}</span>
+        <button class="proj-nav-btn" data-commit-day-nav="1" title="Next day"${isToday ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
+        ${!isToday ? `<button class="commit-tab-btn" data-commit-day-today>Today</button>` : ''}
+      </div>
+      ${totalGoals
+        ? `<div class="commit-day-pct">${dayPct}% compliance</div><ul class="commit-day-list">${rows}</ul>`
+        : `<div class="commit-day-pct" style="color:var(--text-faint)">No commitments yet.</div>`
+      }`;
+
+  } else if (tab === 'week') {
+    const weekDayNames  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const weekMonday    = state.commitViewWeekStart || getMondayOf(today);
+    const isCurrentWeek = weekMonday === getMondayOf(today);
+    const weekDays      = getWeekDays(weekMonday);
+    const weekRangeLabel = `${fmtDate(weekDays[0])} – ${fmtDate(weekDays[6])}`;
+    const weeklyHtml = weekDays.map((d, i) => {
+      const iso = isoLocal(d);
+      const isFuture = iso > today;
+      const isToday  = iso === today;
+      if (isFuture) return `<div class="week-day"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle future">–</div><div class="week-pct">–</div></div>`;
+      const pct = getDayCompliancePct(iso);
+      const cls  = pct >= 80 ? 'full' : pct >= 40 ? 'half' : pct > 0 ? 'low' : 'zero';
+      const char = pct >= 80 ? '●' : pct >= 40 ? '◐' : pct > 0 ? '◔' : '○';
+      return `<div class="week-day${isToday ? ' today' : ''}"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle ${cls}">${char}</div><div class="week-pct">${Math.round(pct)}%</div></div>`;
+    }).join('');
+    tabBodyHtml = `
+      <div class="commit-day-nav">
+        <button class="proj-nav-btn" data-commit-week-nav="-1" title="Previous week">&#8249;</button>
+        <span class="commit-day-label">${weekRangeLabel}</span>
+        <button class="proj-nav-btn" data-commit-week-nav="1" title="Next week"${isCurrentWeek ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
+        ${!isCurrentWeek ? `<button class="commit-tab-btn" data-commit-week-today>This week</button>` : ''}
+      </div>
+      <div class="week-strip" style="margin-top:12px">${weeklyHtml}</div>`;
+
+  } else if (tab === 'month') {
+    const viewMonthStr   = state.commitViewMonth || today.slice(0, 7);
+    const [vy, vm]       = viewMonthStr.split('-').map(Number);
+    const monthLabel     = new Date(vy, vm - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    const isCurrentMonth = viewMonthStr === today.slice(0, 7);
+    const firstDow       = new Date(vy, vm - 1, 1).getDay();
+    const daysInMonth    = new Date(vy, vm, 0).getDate();
+    const calDows = ['S','M','T','W','T','F','S'];
+    let monthCalHtml = calDows.map(d => `<div class="commit-cal-dow">${d}</div>`).join('');
+    for (let i = 0; i < firstDow; i++) monthCalHtml += `<div class="commit-cal-cell other"></div>`;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const iso = `${String(vy).padStart(4,'0')}-${String(vm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      const isToday  = iso === today;
+      const isFuture = iso > today;
+      let bg = '';
+      let tt = '';
+      if (!isFuture && totalGoals > 0) {
+        const pct = getDayCompliancePct(iso);
+        if (pct >= 80)      bg = `background:color-mix(in oklab, var(--accent) 80%, transparent);`;
+        else if (pct >= 40) bg = `background:color-mix(in oklab, var(--accent) 30%, transparent);`;
+        else if (pct > 0)   bg = `background:color-mix(in oklab, var(--danger) 30%, transparent);`;
+        if (pct > 0) tt = `title="${Math.round(pct)}%"`;
+      }
+      monthCalHtml += `<div class="commit-cal-cell${isToday ? ' today' : ''}${isFuture ? ' future' : ''}" style="${bg}" ${tt}>${day}</div>`;
+    }
+    tabBodyHtml = `
+      <div class="commit-day-nav">
+        <button class="proj-nav-btn" data-commit-month-nav="-1" title="Previous month">&#8249;</button>
+        <span class="commit-day-label">${monthLabel}</span>
+        <button class="proj-nav-btn" data-commit-month-nav="1" title="Next month"${isCurrentMonth ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
+        ${!isCurrentMonth ? `<button class="commit-tab-btn" data-commit-month-today>This month</button>` : ''}
+      </div>
+      <div class="commit-cal-grid">${monthCalHtml}</div>`;
+
+  } else {
+    tabBodyHtml = renderCommitYearHeatmap(state.commitHeatmapYear, totalGoals > 0);
+  }
+
+  return `
+    ${topbar()}
+    <h1 class="page-title">Commitments</h1>
+    <div class="card commit-compliance-card" id="commit-compliance-card" style="animation-delay:0ms">
+      <div class="compliance-inner">
+        <svg class="compliance-ring-desktop" width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+          <circle cx="40" cy="40" r="34" fill="none" stroke="#2a2a2a" stroke-width="6"/>
+          <circle class="compliance-arc" cx="40" cy="40" r="34" fill="none"
+            stroke="var(--accent)" stroke-width="6" stroke-linecap="round"
+            stroke-dasharray="213.63"
+            style="stroke-dashoffset:213.63;transform:rotate(-90deg);transform-origin:40px 40px"
+            data-pct="${overallPct}" data-full="213.63"/>
+          <text x="40" y="40" text-anchor="middle" dominant-baseline="middle"
+            font-size="18" font-weight="300" fill="var(--accent)"
+            class="compliance-pct-text">0</text>
+        </svg>
+        <svg class="compliance-ring-mobile" width="100" height="100" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="#2a2a2a" stroke-width="7"/>
+          <circle class="compliance-arc" cx="50" cy="50" r="42" fill="none"
+            stroke="var(--accent)" stroke-width="7" stroke-linecap="round"
+            stroke-dasharray="263.89"
+            style="stroke-dashoffset:263.89;transform:rotate(-90deg);transform-origin:50px 50px"
+            data-pct="${overallPct}" data-full="263.89"/>
+          <text x="50" y="46" text-anchor="middle" dominant-baseline="middle"
+            font-size="20" font-weight="300" fill="var(--accent)"
+            class="compliance-pct-text">0</text>
+          <text x="50" y="64" text-anchor="middle" dominant-baseline="middle"
+            font-size="9" fill="#6a6a6a">today</text>
+        </svg>
+        <div class="compliance-bars">
+          <div class="compliance-label">TODAY'S COMPLIANCE</div>
+          ${categories.map(cat => {
+            const items = categoryItems(cat);
+            const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
+            const pct = items.length ? Math.round(chk / items.length * 100) : 0;
+            return `
+          <div class="compliance-bar-row">
+            <span class="compliance-bar-lbl" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>
+            <div class="compliance-bar-track"><div class="compliance-bar-fill" data-compliance-fill="${escapeHtml(cat)}" style="width:${pct}%"></div></div>
+            <span class="compliance-bar-count" data-compliance-count="${escapeHtml(cat)}">${chk}/${items.length}</span>
+          </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="commit-quest-label">&#9876;&#65039; Main Quest</div>
+    ${categories.map((cat, idx) => `<div style="margin-top:16px">${categoryCard(cat, idx)}</div>`).join('')}
+    <button class="add-btn" data-add-commit="" style="margin-top:16px;border-style:solid;justify-content:center"><span class="plus">+</span> New category</button>
+    <div class="card" style="margin-top:16px;animation-delay:80ms">
+      <div class="commit-preview-tabs">
+        <button class="commit-tab-btn${tab === 'day'   ? ' active' : ''}" data-commit-tab="day">Day</button>
+        <button class="commit-tab-btn${tab === 'week'  ? ' active' : ''}" data-commit-tab="week">Week</button>
+        <button class="commit-tab-btn${tab === 'month' ? ' active' : ''}" data-commit-tab="month">Month</button>
+        <button class="commit-tab-btn${tab === 'year'  ? ' active' : ''}" data-commit-tab="year">Year</button>
+      </div>
+      ${tabBodyHtml}
+    </div>
+  `;
+}
+
+
+/* ---- COMMIT: event binding ---- */
+
+function bindCommitmentsEvents() {
+  // commitments preview tab switch
+  main.querySelectorAll('[data-commit-tab]').forEach(el => el.addEventListener('click', () => {
+    state.commitPreviewTab = el.dataset.commitTab;
+    render();
+  }));
+
+
+  // commitments history nav — Day
+  main.querySelectorAll('[data-commit-day-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.commitDayNav);
+    const d = new Date((state.commitViewDay || todayISO()) + 'T00:00:00');
+    d.setDate(d.getDate() + dir);
+    const iso = isoLocal(d);
+    if (iso > todayISO()) return;
+    state.commitViewDay = iso;
+    render();
+  }));
+  const commitDayToday = main.querySelector('[data-commit-day-today]');
+  if (commitDayToday) commitDayToday.addEventListener('click', () => { state.commitViewDay = todayISO(); render(); });
+
+
+  // commitments history nav — Week
+  main.querySelectorAll('[data-commit-week-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.commitWeekNav);
+    const monday = state.commitViewWeekStart || getMondayOf(todayISO());
+    const d = new Date(monday + 'T00:00:00');
+    d.setDate(d.getDate() + dir * 7);
+    const iso = isoLocal(d);
+    if (iso > getMondayOf(todayISO())) return;
+    state.commitViewWeekStart = iso;
+    render();
+  }));
+  const commitWeekToday = main.querySelector('[data-commit-week-today]');
+  if (commitWeekToday) commitWeekToday.addEventListener('click', () => { state.commitViewWeekStart = null; render(); });
+
+
+  // commitments history nav — Month
+  main.querySelectorAll('[data-commit-month-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.commitMonthNav);
+    const [y, m] = (state.commitViewMonth || todayISO().slice(0, 7)).split('-').map(Number);
+    const next = ymLocal(new Date(y, m - 1 + dir, 1));
+    if (next > todayISO().slice(0, 7)) return;
+    state.commitViewMonth = next;
+    render();
+  }));
+  const commitMonthToday = main.querySelector('[data-commit-month-today]');
+  if (commitMonthToday) commitMonthToday.addEventListener('click', () => { state.commitViewMonth = todayISO().slice(0, 7); render(); });
+
+
+  // commitments history nav — Year
+  main.querySelectorAll('[data-commit-year-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.commitYearNav);
+    const todayYear = new Date().getFullYear();
+    state.commitHeatmapYear = Math.min(todayYear, (state.commitHeatmapYear || todayYear) + dir);
+    render();
+  }));
+
+
+  // goal toggle → upsert goal_logs (target_count === 1 items only; counter items use data-goal-bump)
+  main.querySelectorAll('[data-toggle-goal]').forEach(el => el.addEventListener('click', async () => {
+    const [k, id] = el.dataset.toggleGoal.split('|');
+    const g = (state.goals[k] || []).find(x => x.id === id);
+    if (!g || !currentUser) return;
+    const target = g.target_count || 1;
+    const today = todayISO();
+    const existingLog = getTodayLog(id);
+    const newChecked = existingLog ? !existingLog.checked : true;
+    const newCount = newChecked ? target : 0;
+    const newCompletedAt = newChecked ? new Date().toISOString() : null; // feeds Home's activity heatmap/feed
+    if (existingLog) {
+      existingLog.checked = newChecked;
+      existingLog.count = newCount;
+      existingLog.completed_at = newCompletedAt;
+    } else {
+      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt });
+    }
+    pulse(el);
+    el.classList.toggle('checked', newChecked);
+    el.closest('.goal-item')?.classList.toggle('goal-done', newChecked);
+    const labelEl = el.closest('.goal-item')?.querySelector('.check-label');
+    if (labelEl) labelEl.classList.toggle('done', newChecked);
+    updateCategoryHeaderCount(g.category || 'General');
+    updateComplianceRing();
+    const { data } = await dbCall(() => sb.from('goal_logs').upsert(
+      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
+      { onConflict: 'goal_id,date' }
+    ).select().single());
+    if (data) {
+      const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
+      if (localLog && !localLog.id) localLog.id = data.id;
+    }
+  }));
+
+
+  // goal counter bump (+/-) → upsert goal_logs.count, derives checked = count >= target_count
+  main.querySelectorAll('[data-goal-bump]').forEach(el => el.addEventListener('click', async () => {
+    const [dirStr, k, id] = el.dataset.goalBump.split('|');
+    const dir = Number(dirStr);
+    const g = (state.goals[k] || []).find(x => x.id === id);
+    if (!g || !currentUser) return;
+    const target = g.target_count || 1;
+    const today = todayISO();
+    const existingLog = getTodayLog(id);
+    const prevCount = existingLog?.count || 0;
+    const wasChecked = existingLog?.checked || false;
+    const newCount = Math.max(0, prevCount + dir);
+    const newChecked = newCount >= target;
+    // Only stamp/clear completed_at on an actual checked transition — bumping the
+    // counter further up/down while already done (or already not done) shouldn't move it.
+    const newCompletedAt = newChecked === wasChecked ? (existingLog?.completed_at || null) : (newChecked ? new Date().toISOString() : null);
+    if (existingLog) {
+      existingLog.count = newCount;
+      existingLog.checked = newChecked;
+      existingLog.completed_at = newCompletedAt;
+    } else {
+      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt });
+    }
+    const valEl = document.querySelector(`[data-goal-count-val="${id}"]`);
+    if (valEl) valEl.textContent = `${newCount}/${target}${g.unit ? ' ' + g.unit : ''}`;
+    const rowEl = document.querySelector(`[data-goal-row="${id}"]`);
+    if (rowEl) rowEl.classList.toggle('goal-done', newChecked);
+    const labelEl = document.querySelector(`[data-goal-text="${id}"]`);
+    if (labelEl) labelEl.classList.toggle('done', newChecked);
+    updateCategoryHeaderCount(g.category || 'General');
+    updateComplianceRing();
+    const { data } = await dbCall(() => sb.from('goal_logs').upsert(
+      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
+      { onConflict: 'goal_id,date' }
+    ).select().single());
+    if (data) {
+      const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
+      if (localLog && !localLog.id) localLog.id = data.id;
+    }
+  }));
+
+
+  // ---- COMMITMENTS ----
+  main.querySelectorAll('[data-del-goal]').forEach(el => el.addEventListener('click', () => {
+    const [k, id] = el.dataset.delGoal.split('|');
+    showConfirmModal({
+      title: 'Delete Commitment?',
+      message: 'Remove this from your commitments?',
+      onConfirm: () => {
+        state.goals[k] = state.goals[k].filter(x => x.id !== id);
+        render();
+        dbCall(() => sb.from('goals').delete().eq('id', id));
+      }
+    });
+  }));
+
+  main.querySelectorAll('[data-edit-goal]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const [k, id] = el.dataset.editGoal.split('|');
+    const g = (state.goals[k] || []).find(x => x.id === id);
+    if (!g) return;
+    showModal({
+      title: 'Edit Commitment',
+      fields: [
+        { id: 'text', label: k === 'dos' ? "Do" : "Don't", type: 'text', value: g.text, placeholder: '...' },
+        { id: 'category', label: 'Category', type: 'select', value: g.category || 'General', options: getCategoryOptions() },
+        { id: 'newCategory', label: 'Or new category', type: 'text', value: '', placeholder: 'e.g. Reading' },
+        { id: 'target_count', label: 'Times per day', type: 'number', value: g.target_count || 1, placeholder: '1' },
+        { id: 'unit', label: 'Unit (optional)', type: 'text', value: g.unit || '', placeholder: 'e.g. DM, halaman, menit' }
+      ],
+      saveLabel: 'Save',
+      onSave: ({ text, category, newCategory, target_count, unit }) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const categoryVal = newCategory.trim() || category || 'General';
+        const targetVal = Math.max(1, Math.round(Number(target_count)) || 1);
+        const unitVal = unit.trim() || null;
+        g.text = trimmed;
+        g.category = categoryVal;
+        g.target_count = targetVal;
+        g.unit = unitVal;
+        render();
+        dbCall(() => sb.from('goals').update({ text: trimmed, category: categoryVal, target_count: targetVal, unit: unitVal }).eq('id', id));
+      }
+    });
+  }));
+
+  main.querySelectorAll('[data-goal-list]').forEach(ul => {
+    const key = ul.dataset.goalList;
+
+    ul.addEventListener('dragstart', e => {
+      const li = e.target.closest('.goal-item');
+      if (!li) return;
+      draggedGoalId = li.dataset.goalDrag;
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => li.classList.add('dragging'));
+    });
+
+    ul.addEventListener('dragend', () => {
+      ul.querySelectorAll('.goal-item').forEach(x => x.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom'));
+      draggedGoalId = null;
+    });
+
+    ul.addEventListener('dragover', e => {
+      if (!draggedGoalId) return;
+      e.preventDefault();
+      const li = e.target.closest('.goal-item');
+      ul.querySelectorAll('.goal-item').forEach(x => x.classList.remove('drag-over-top', 'drag-over-bottom'));
+      if (li && li.dataset.goalDrag !== draggedGoalId) {
+        const rect = li.getBoundingClientRect();
+        const before = e.clientY - rect.top < rect.height / 2;
+        li.classList.add(before ? 'drag-over-top' : 'drag-over-bottom');
+      }
+    });
+
+    ul.addEventListener('drop', e => {
+      if (!draggedGoalId) return;
+      e.preventDefault();
+      const list = state.goals[key] || [];
+      const fromIdx = list.findIndex(x => x.id === draggedGoalId);
+      if (fromIdx === -1) return;
+      if (ul.dataset.goalCat && (list[fromIdx].category || 'General') !== ul.dataset.goalCat) {
+        draggedGoalId = null;
+        return;
+      }
+
+      const li = e.target.closest('.goal-item');
+      let toIdx = list.length - 1;
+      if (li && li.dataset.goalDrag !== draggedGoalId) {
+        const targetIdx = list.findIndex(x => x.id === li.dataset.goalDrag);
+        const rect = li.getBoundingClientRect();
+        const before = e.clientY - rect.top < rect.height / 2;
+        toIdx = targetIdx + (before ? 0 : 1);
+        if (toIdx > fromIdx) toIdx--;
+      }
+      if (toIdx === fromIdx) return;
+
+      const [moved] = list.splice(fromIdx, 1);
+      list.splice(toIdx, 0, moved);
+      draggedGoalId = null;
+      render();
+      list.forEach((g, idx) => dbCall(() => sb.from('goals').update({ order_index: idx }).eq('id', g.id)));
+    });
+  });
+
+  main.querySelectorAll('[data-add-commit]').forEach(btn => btn.addEventListener('click', () => {
+    const presetCat = btn.dataset.addCommit || '';
+    const catOptions = getCategoryOptions();
+    showModal({
+      title: presetCat ? `Add to ${presetCat}` : 'New Commitment',
+      fields: [
+        { id: 'type', label: 'Type', type: 'select', value: 'do', options: [{ value: 'do', label: 'Do' }, { value: 'dont', label: "Don't" }] },
+        { id: 'text', label: 'Commitment', type: 'text', value: '', placeholder: 'e.g. Push Up' },
+        { id: 'category', label: 'Category', type: 'select', value: presetCat || catOptions[0], options: catOptions },
+        { id: 'newCategory', label: 'Or new category', type: 'text', value: '', placeholder: 'e.g. Reading' },
+        { id: 'target_count', label: 'Times per day', type: 'number', value: 1, placeholder: '1' },
+        { id: 'unit', label: 'Unit (optional)', type: 'text', value: '', placeholder: 'e.g. DM, halaman, menit' }
+      ],
+      saveLabel: 'Add',
+      onSave: async ({ type, text, category, newCategory, target_count, unit }) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const key = type === 'dont' ? 'donts' : 'dos';
+        const categoryVal = newCategory.trim() || category || 'General';
+        const order_index = state.goals[key].length;
+        const targetVal = Math.max(1, Math.round(Number(target_count)) || 1);
+        const unitVal = unit.trim() || null;
+        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text: trimmed, category: categoryVal, order_index, target_count: targetVal, unit: unitVal }).select().single());
+        if (data) { state.goals[key].push({ id: data.id, text: trimmed, category: categoryVal, target_count: targetVal, unit: unitVal }); render(); }
+      }
+    });
+  }));
+
+}
+

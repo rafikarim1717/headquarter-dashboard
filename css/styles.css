@@ -376,6 +376,11 @@
   .metric-grid > .card { margin-top: 0; display: flex; flex-direction: column; justify-content: space-between; }
   @media (max-width: 520px) { .metric-grid { grid-template-columns: 1fr; } }
   .metric .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Home's Finance snapshot card — compact 2-up version of .metric-grid */
+  .fin-snapshot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); margin-top: 4px; }
+  .fin-snapshot-grid .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fin-snapshot-grid .num { font-weight: var(--num-weight, 300); margin-top: 6px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .metric .num { font-size: 32px; font-weight: var(--num-weight, 300); letter-spacing: -0.02em; margin-top: 10px; font-variant-numeric: tabular-nums; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .metric .sub { margin-top: 6px; font-size: 12px; color: #555; white-space: nowrap; }
 
@@ -960,6 +965,16 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Home's "Up Next" row — the next event today, highlighted with a live countdown */
+  .list-item.up-next {
+    background: rgba(245,240,232,0.05); border-radius: var(--r-sm);
+    margin: 0 -8px; padding-left: 8px; padding-right: 8px;
+  }
+  .up-next-countdown {
+    flex-shrink: 0; font-size: 11px; color: var(--accent);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+
   /* ============ TOAST ============ */
   #toast {
     position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
@@ -974,6 +989,35 @@
   #toast.toast-success { background: #17241a; color: #a9d6a5; border-color: #2e4a32; }
   #toast.toast-error { background: #2a1215; color: #ff8a80; border-color: #5c2b2e; }
   @media (min-width: 900px) { #toast { bottom: 24px; } }
+
+  /* ============ ALARM BANNER (persistent — stays until dismissed/snoozed) ============ */
+  .alarm-banner {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%) translateY(-20px);
+    display: flex; align-items: center; gap: 12px;
+    max-width: calc(100% - 32px); width: 380px;
+    background: #2a1215; border: 1px solid #5c2b2e; border-radius: var(--r-sm);
+    padding: 12px 14px; z-index: 10000;
+    opacity: 0; pointer-events: none;
+    transition: opacity 200ms ease, transform 200ms ease;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .alarm-banner.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .alarm-banner-icon { font-size: 18px; flex-shrink: 0; }
+  .alarm-banner-body { flex: 1; min-width: 0; }
+  .alarm-banner-title { font-size: 13px; font-weight: 500; color: var(--text); }
+  .alarm-banner-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .alarm-banner-snooze {
+    flex-shrink: 0; background: transparent; border: 1px solid #5c2b2e; color: #ff8a80;
+    border-radius: var(--r-pill); padding: 6px 12px; font-size: 11px; cursor: pointer;
+    transition: background var(--t-fast);
+  }
+  .alarm-banner-snooze:hover { background: rgba(255,138,128,0.1); }
+  .alarm-banner-dismiss {
+    flex-shrink: 0; background: transparent; border: none; color: var(--text-faint);
+    font-size: 13px; cursor: pointer; padding: 4px;
+  }
+  .alarm-banner-dismiss:hover { color: var(--text); }
+  @media (min-width: 900px) { .alarm-banner { top: 24px; } }
 
   /* ============ LOADING OVERLAY ============ */
   #app-loading {

@@ -34,6 +34,8 @@ create table if not exists schedule_events (
   note text not null default '',
   alarm_time text,
   completed_at timestamptz,
+  repeat text not null default 'none',
+  series_id uuid,
   created_at timestamptz not null default now()
 );
 
@@ -43,6 +45,7 @@ create policy "Users can manage own schedule_events"
   on schedule_events for all using (auth.uid() = user_id);
 
 create index if not exists schedule_events_user_date on schedule_events(user_id, date);
+create index if not exists schedule_events_series on schedule_events(series_id);
 
 -- ============================================================
 -- GOALS
