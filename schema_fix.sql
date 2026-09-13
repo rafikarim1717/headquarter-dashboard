@@ -699,3 +699,24 @@ ALTER TABLE goals ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'Gener
 --     Safe to re-run on an existing goal_logs table that predates this column.
 -- ────────────────────────────────────────────────────────────
 ALTER TABLE goal_logs ADD COLUMN IF NOT EXISTS completed_at timestamptz;
+
+
+-- ────────────────────────────────────────────────────────────
+-- 20. schedule_events.repeat / schedule_events.series_id
+--     Recurring events (daily / weekdays / weekly) for the Schedule
+--     page's "Level 1" reminder work — the app materializes real rows
+--     for each occurrence up front (90 days ahead for daily/weekdays,
+--     26 occurrences for weekly) rather than expanding a rule at
+--     render time, so each occurrence stays independently editable.
+--     All rows in one recurring series share the same series_id
+--     (NULL for non-recurring events); `repeat` is stored per-row too
+--     so an occurrence still shows its 🔁 tag if looked up on its own.
+--     Deleting one occurrence never deletes the series — the app asks
+--     separately, as an opt-in second step, whether to also delete the
+--     rest of the series (upcoming occurrences only, via series_id).
+--     Safe to re-run on an existing schedule_events table that
+--     predates these columns.
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS repeat text NOT NULL DEFAULT 'none';
+ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS series_id uuid;
+CREATE INDEX IF NOT EXISTS schedule_events_series ON schedule_events(series_id);

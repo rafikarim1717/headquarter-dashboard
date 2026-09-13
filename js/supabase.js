@@ -89,7 +89,7 @@ async function loadFromSupabase(userId) {
   (eventsRes.data || []).forEach(e => {
     const d = e.date;
     if (!state.schedule[d]) state.schedule[d] = [];
-    state.schedule[d].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '', alarm_time: e.alarm_time || null, completed_at: e.completed_at || null });
+    state.schedule[d].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '', alarm_time: e.alarm_time || null, completed_at: e.completed_at || null, repeat: e.repeat || 'none', series_id: e.series_id || null });
   });
 
   // Goals
