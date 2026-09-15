@@ -6,17 +6,19 @@
 
 /* =========================================================
    HOME ACTIVITY HEATMAP (GitHub-style yearly contribution grid)
-   Combines project tasks completed + commitments checked into a
-   single per-day "activity" count, plus a chronological feed of
-   the underlying events. See buildHomeActivityEvents() for the
-   exact counting rule: 1 completed project task = 1 activity,
-   1 commitment marked done that day (do or don't, checkbox or
-   counter reaching its target) = 1 activity — regardless of
-   target_count, so a 3x/day counter still counts once.
+   Combines project tasks completed + commitments checked + schedule
+   blocks checked done into a single per-day "activity" count, plus a
+   chronological feed of the underlying events. See
+   buildHomeActivityEvents() for the exact counting rule: 1 completed
+   project task = 1 activity, 1 commitment marked done that day (do or
+   don't, checkbox or counter reaching its target) = 1 activity —
+   regardless of target_count, so a 3x/day counter still counts once —
+   and 1 schedule block checked done = 1 activity.
 ========================================================= */
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-// One entry per completed project task + per "checked" goal_logs row.
+// One entry per completed project task + per "checked" goal_logs row +
+// per schedule block marked done (schedule_events.completed_at).
 // ts is used only for the activity feed's ordering/relative-time display;
 // iso (calendar day) is what the heatmap buckets on.
 function buildHomeActivityEvents() {
@@ -26,6 +28,13 @@ function buildHomeActivityEvents() {
       if (!t.completed_at) return;
       const d = new Date(t.completed_at);
       events.push({ ts: d.getTime(), iso: isoLocal(d), title: t.text, sub: p.name, kind: 'project' });
+    });
+  });
+  Object.keys(state.schedule || {}).forEach(day => {
+    (state.schedule[day] || []).forEach(s => {
+      if (!s.completed_at) return;
+      const d = new Date(s.completed_at);
+      events.push({ ts: d.getTime(), iso: isoLocal(d), title: s.title, sub: 'Schedule', kind: 'schedule' });
     });
   });
   const allGoals = [
@@ -88,7 +97,7 @@ function activityLevelClass(count, maxCount) {
   return ' act-low';
 }
 
-const ACT_KIND_LABEL = { project: 'Project', do: 'Do', dont: "Don't" };
+const ACT_KIND_LABEL = { project: 'Project', do: 'Do', dont: "Don't", schedule: 'Schedule' };
 
 const HOME_ACTIVITY_FEED_CAP = 10;
 
@@ -125,7 +134,6 @@ function renderHomeActivityHeatmap(year, dayFilter, showAll) {
   ` : `<div style="font-size:12px;color:var(--text-faint);padding:10px 2px">${dayFilter ? 'Nothing done that day.' : 'No activity yet.'}</div>`;
 
   return `
-    <div class="section-title" style="margin-top:0">Activity</div>
     <div class="heatmap-header">
       <span class="heatmap-total">${total} activit${total !== 1 ? 'ies' : 'y'} in ${year}</span>
       <select class="hm-year-select" data-heatmap-year-select aria-label="Select year">
@@ -180,55 +188,65 @@ function renderLifeHome() {
 
   const focusItems = state.todayFocus || [];
   const focusBlock = (delay) => `
-    <div class="card" style="animation-delay:${delay}ms">
-      <div class="section-title" style="margin-top:0">Today's focus</div>
-      <div class="tf-add-row">
-        <input type="text" class="tf-input" id="tf-input" placeholder="Add a priority..." aria-label="Add a focus item" autocomplete="off"/>
-        <button class="tf-add-btn" id="tf-add-btn">Add</button>
+    <details class="card cat-card" style="animation-delay:${delay}ms" open>
+      <summary>
+        <div class="section-title" style="margin:0">Today's focus</div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body">
+        <div class="tf-add-row">
+          <input type="text" class="tf-input" id="tf-input" placeholder="Add a priority..." aria-label="Add a focus item" autocomplete="off"/>
+          <button class="tf-add-btn" id="tf-add-btn">Add</button>
+        </div>
+        <div class="tf-divider"></div>
+        ${focusItems.length ? `
+          <ul class="list tf-list">
+            ${focusItems.map(it => `
+              <li class="list-item tf-item" data-tf-id="${it.id}">
+                <span class="check ${it.checked ? 'checked' : ''}" data-toggle-tf="${it.id}" style="flex-shrink:0"></span>
+                <span class="check-label ${it.checked ? 'done' : ''}" style="flex:1;min-width:0">${escapeHtml(it.text)}</span>
+                <button class="tf-del-btn" data-del-tf="${it.id}" title="Delete" aria-label="Delete focus item">${ICON_TRASH}</button>
+              </li>
+            `).join('')}
+          </ul>
+        ` : `<div style="font-size:12px;color:var(--text-faint);padding:4px 0 2px">No focus items yet. Add one above.</div>`}
       </div>
-      <div class="tf-divider"></div>
-      ${focusItems.length ? `
-        <ul class="list tf-list">
-          ${focusItems.map(it => `
-            <li class="list-item tf-item" data-tf-id="${it.id}">
-              <span class="check ${it.checked ? 'checked' : ''}" data-toggle-tf="${it.id}" style="flex-shrink:0"></span>
-              <span class="check-label ${it.checked ? 'done' : ''}" style="flex:1;min-width:0">${escapeHtml(it.text)}</span>
-              <button class="tf-del-btn" data-del-tf="${it.id}" title="Delete" aria-label="Delete focus item">${ICON_TRASH}</button>
-            </li>
-          `).join('')}
-        </ul>
-      ` : `<div style="font-size:12px;color:var(--text-faint);padding:4px 0 2px">No focus items yet. Add one above.</div>`}
-    </div>`;
+    </details>`;
 
   const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
   const totalGoals = allGoals.length;
   const checkedTodayCount = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
   const homeCommitCats = getGoalCategories();
   const commitmentsBlock = (delay) => `
-    <div class="card" style="animation-delay:${delay}ms">
-      <div class="section-title" style="margin-top:0;display:flex;align-items:center;gap:10px">
-        ${scoreRingHtml}
-        <span style="flex:1">Commitments</span>
-        <span class="meta" data-go="life:commitments" style="cursor:pointer">View all →</span>
+    <details class="card cat-card" style="animation-delay:${delay}ms" open>
+      <summary>
+        <div class="section-title" style="margin:0;display:flex;align-items:center;gap:10px">
+          ${scoreRingHtml}
+          <span style="flex:1">Commitments</span>
+          <span class="meta" data-go="life:commitments" style="cursor:pointer">View all →</span>
+        </div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body">
+        ${totalGoals === 0
+          ? `<div class="item-sub" style="margin-top:4px">No commitments yet.</div>`
+          : `<div style="margin-top:4px">
+              ${homeCommitCats.map(cat => {
+                const items = categoryItems(cat);
+                const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
+                const pct = items.length ? Math.round(chk / items.length * 100) : 0;
+                return `
+              <div class="compliance-bar-row" data-go="life:commitments" style="cursor:pointer">
+                <span class="compliance-bar-lbl" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>
+                <div class="compliance-bar-track"><div class="compliance-bar-fill" style="width:${pct}%"></div></div>
+                <span class="compliance-bar-count">${chk}/${items.length}</span>
+              </div>`;
+              }).join('')}
+            </div>`
+        }
+        <div style="font-size:12px;color:var(--text-faint);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">${checkedTodayCount} of ${totalGoals} done today</div>
       </div>
-      ${totalGoals === 0
-        ? `<div class="item-sub" style="margin-top:4px">No commitments yet.</div>`
-        : `<div style="margin-top:4px">
-            ${homeCommitCats.map(cat => {
-              const items = categoryItems(cat);
-              const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
-              const pct = items.length ? Math.round(chk / items.length * 100) : 0;
-              return `
-            <div class="compliance-bar-row" data-go="life:commitments" style="cursor:pointer">
-              <span class="compliance-bar-lbl" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>
-              <div class="compliance-bar-track"><div class="compliance-bar-fill" style="width:${pct}%"></div></div>
-              <span class="compliance-bar-count">${chk}/${items.length}</span>
-            </div>`;
-            }).join('')}
-          </div>`
-      }
-      <div style="font-size:12px;color:var(--text-faint);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">${checkedTodayCount} of ${totalGoals} done today</div>
-    </div>`;
+    </details>`;
 
   // Finance snapshot — spent today, income this month, nearest debt due.
   // Home's only daily touchpoint for Finance (previously had none at all).
@@ -237,25 +255,30 @@ function renderLifeHome() {
   const homeIncomeMonth = thisMonthIncome();
   const homeNextDebt = state.debts.filter(d => !d.paid).slice().sort((a, b) => daysUntil(a.due) - daysUntil(b.due))[0] || null;
   const financeBlock = (delay) => `
-    <div class="card" style="animation-delay:${delay}ms">
-      <div class="section-title" style="margin-top:0">Finance <span class="meta" data-go="finance:overview" style="cursor:pointer">View all →</span></div>
-      <div class="fin-snapshot-grid">
-        <div>
-          <div class="label">Spent today</div>
-          <div class="num" data-target="${homeSpentToday}" data-prefix="${pfxHome}" style="font-size:20px">${fmtMoney(0)}</div>
+    <details class="card cat-card" style="animation-delay:${delay}ms" open>
+      <summary>
+        <div class="section-title" style="margin:0">Finance <span class="meta" data-go="finance:overview" style="cursor:pointer">View all →</span></div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body">
+        <div class="fin-snapshot-grid">
+          <div>
+            <div class="label">Spent today</div>
+            <div class="num" data-target="${homeSpentToday}" data-prefix="${pfxHome}" style="font-size:20px">${fmtMoney(0)}</div>
+          </div>
+          <div>
+            <div class="label">Income this month</div>
+            <div class="num" data-target="${homeIncomeMonth}" data-prefix="${pfxHome}" style="font-size:20px">${fmtMoney(0)}</div>
+          </div>
         </div>
-        <div>
-          <div class="label">Income this month</div>
-          <div class="num" data-target="${homeIncomeMonth}" data-prefix="${pfxHome}" style="font-size:20px">${fmtMoney(0)}</div>
-        </div>
+        ${homeNextDebt ? (() => {
+            const n = daysUntil(homeNextDebt.due);
+            const overdue = n < 0;
+            return `<div style="font-size:12px;color:${overdue ? 'var(--danger)' : 'var(--text-faint)'};margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">${overdue ? `⚠ ${escapeHtml(homeNextDebt.creditor)} overdue by ${Math.abs(n)}d` : `${escapeHtml(homeNextDebt.creditor)} due in ${n}d`}</div>`;
+          })()
+          : ''}
       </div>
-      ${homeNextDebt ? (() => {
-          const n = daysUntil(homeNextDebt.due);
-          const overdue = n < 0;
-          return `<div style="font-size:12px;color:${overdue ? 'var(--danger)' : 'var(--text-faint)'};margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">${overdue ? `⚠ ${escapeHtml(homeNextDebt.creditor)} overdue by ${Math.abs(n)}d` : `${escapeHtml(homeNextDebt.creditor)} due in ${n}d`}</div>`;
-        })()
-        : ''}
-    </div>`;
+    </details>`;
 
   const activeProjects = (state.projects || []).filter(p => p.status === 'active');
   if (!(state.homeProjectIndex >= 0 && state.homeProjectIndex < activeProjects.length)) state.homeProjectIndex = 0;
@@ -265,56 +288,69 @@ function renderLifeHome() {
   const projTotal = current ? current.tasks.length : 0;
   const projPct   = projTotal ? Math.round(projDone / projTotal * 100) : 0;
   const projectsBlock = (delay) => `
-    <div class="card" style="animation-delay:${delay}ms;cursor:pointer" data-open-project="${current ? current.id : ''}">
-      <div class="section-title" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">
-        <span>Active project</span>
-        ${activeProjects.length > 1 ? `
-          <span style="display:flex;align-items:center;gap:6px">
-            <button class="proj-nav-btn" data-home-proj-nav="-1" title="Previous project">&#x2039;</button>
-            <span style="font-size:11px;color:var(--text-faint)">${homeProjIdx + 1}/${activeProjects.length}</span>
-            <button class="proj-nav-btn" data-home-proj-nav="1" title="Next project">&#x203A;</button>
-          </span>
-        ` : ''}
+    <details class="card cat-card" style="animation-delay:${delay}ms" open>
+      <summary>
+        <div class="section-title" style="margin:0;display:flex;align-items:center;justify-content:space-between;flex:1">
+          <span>Active project</span>
+          ${activeProjects.length > 1 ? `
+            <span style="display:flex;align-items:center;gap:6px">
+              <button class="proj-nav-btn" data-home-proj-nav="-1" title="Previous project">&#x2039;</button>
+              <span style="font-size:11px;color:var(--text-faint)">${homeProjIdx + 1}/${activeProjects.length}</span>
+              <button class="proj-nav-btn" data-home-proj-nav="1" title="Next project">&#x203A;</button>
+            </span>
+          ` : ''}
+        </div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body" style="cursor:pointer" data-open-project="${current ? current.id : ''}">
+        ${current ? `
+          <div style="font-size:${layout === 'hero' ? '18px' : '15px'};font-weight:500;line-height:1.35">${escapeHtml(current.name)}</div>
+          ${projTotal > 0 ? `
+            <div class="proj-progress">
+              <div class="proj-progress-meta"><span>${projDone} / ${projTotal} tasks done</span><span>${projPct}%</span></div>
+              <div class="progress"><div class="bar" style="width:${projPct}%"></div></div>
+            </div>
+            <ul class="list" style="margin-top:12px;${current.tasks.length > 5 ? 'max-height:190px;overflow-y:auto' : ''}">
+              ${current.tasks.map(t => `
+                <li class="list-item" style="padding:8px 0">
+                  <span class="check ${t.checked ? 'checked' : ''}" data-toggle-proj-task="${current.id}|${t.id}"></span>
+                  <span class="check-label ${t.checked ? 'done' : ''}">${escapeHtml(t.text)}</span>
+                </li>
+              `).join('')}
+            </ul>
+          ` : '<div style="font-size:12px;color:var(--text-faint);margin-top:8px">No tasks yet.</div>'}
+        ` : `<div style="font-size:12px;color:var(--text-faint)">No active projects.</div>`}
       </div>
-      ${current ? `
-        <div style="font-size:${layout === 'hero' ? '18px' : '15px'};font-weight:500;line-height:1.35">${escapeHtml(current.name)}</div>
-        ${projTotal > 0 ? `
-          <div class="proj-progress">
-            <div class="proj-progress-meta"><span>${projDone} / ${projTotal} tasks done</span><span>${projPct}%</span></div>
-            <div class="progress"><div class="bar" style="width:${projPct}%"></div></div>
-          </div>
-          <ul class="list" style="margin-top:12px;${current.tasks.length > 5 ? 'max-height:190px;overflow-y:auto' : ''}">
-            ${current.tasks.map(t => `
-              <li class="list-item" style="padding:8px 0">
-                <span class="check ${t.checked ? 'checked' : ''}" data-toggle-proj-task="${current.id}|${t.id}"></span>
-                <span class="check-label ${t.checked ? 'done' : ''}">${escapeHtml(t.text)}</span>
-              </li>
-            `).join('')}
-          </ul>
-        ` : '<div style="font-size:12px;color:var(--text-faint);margin-top:8px">No tasks yet.</div>'}
-      ` : `<div style="font-size:12px;color:var(--text-faint)">No active projects.</div>`}
-    </div>`;
+    </details>`;
 
   const nowHHMM = fmtClock().slice(0, 5); // "HH:MM" in the visitor's local time, same as event.time
   const upNextEvent = sched.find(s => s.time >= nowHHMM) || null;
   const scheduleBlock = (delay) => `
-    <div class="card" style="animation-delay:${delay}ms">
-      <div class="section-title" style="margin-top:0">Today's schedule <span class="meta">${sched.length} blocks</span></div>
-      <ul class="list">
-        ${sched.map(s => {
-          const isUpNext = upNextEvent && s.id === upNextEvent.id;
-          return `
-          <li class="list-item${isUpNext ? ' up-next' : ''}">
-            <div class="time-col">${s.time}</div>
-            <div class="item-main">
-              <div class="item-title">${escapeHtml(s.title)}${s.alarm_time ? `<span class="alarm-tag">⏰ ${s.alarm_time}</span>` : ''}</div>
-              ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
-            </div>
-            ${isUpNext ? `<div class="up-next-countdown" id="up-next-countdown" data-target-time="${s.time}">now</div>` : ''}
-          </li>`;
-        }).join('') || `<li class="list-item"><div class="item-sub">Nothing scheduled. Take it easy.</div></li>`}
-      </ul>
-    </div>`;
+    <details class="card cat-card" style="animation-delay:${delay}ms" open>
+      <summary>
+        <div class="section-title" style="margin:0">Today's schedule <span class="meta">${sched.length} blocks</span></div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body">
+        <ul class="list">
+          ${sched.map(s => {
+            const isUpNext = upNextEvent && s.id === upNextEvent.id;
+            const isDone = !!s.completed_at;
+            const isMissed = !isDone && s.time < nowHHMM;
+            return `
+            <li class="list-item${isUpNext ? ' up-next' : ''}">
+              <span class="check ${isDone ? 'checked' : ''}" data-toggle-sched-done="${s.id}" title="${isDone ? 'Mark not done' : 'Mark done'}"></span>
+              <div class="time-col">${s.time}</div>
+              <div class="item-main">
+                <div class="item-title${isDone ? ' done' : ''}">${escapeHtml(s.title)}${s.alarm_time ? `<span class="alarm-tag">⏰ ${s.alarm_time}</span>` : ''}${isMissed ? `<span class="missed-tag">Missed</span>` : ''}</div>
+                ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
+              </div>
+              ${isUpNext ? `<div class="up-next-countdown" id="up-next-countdown" data-target-time="${s.time}">now</div>` : ''}
+            </li>`;
+          }).join('') || `<li class="list-item"><div class="item-sub">Nothing scheduled. Take it easy.</div></li>`}
+        </ul>
+      </div>
+    </details>`;
 
   const pillsBlock = showPills ? `
     <div class="pills" style="margin:18px 4px 4px">
@@ -324,9 +360,15 @@ function renderLifeHome() {
     </div>` : '';
 
   const heatmapBlock = `
-    <div class="card" style="animation-delay:300ms">
-      ${renderHomeActivityHeatmap(state.heatmapYear, state.homeActivityDayFilter, state.homeActivityShowAll)}
-    </div>`;
+    <details class="card cat-card" style="animation-delay:300ms" open>
+      <summary>
+        <div class="section-title" style="margin:0">Activity</div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body">
+        ${renderHomeActivityHeatmap(state.heatmapYear, state.homeActivityDayFilter, state.homeActivityShowAll)}
+      </div>
+    </details>`;
 
   // Ordered by urgency/actionability, not by feature category: what's
   // time-critical (Schedule/Up Next) leads, same-day action items (Focus,
@@ -356,8 +398,15 @@ function bindHomeEvents() {
     if (countdownEl) {
       const [th, tm] = countdownEl.dataset.targetTime.split(':').map(Number);
       const now = new Date();
-      const diffMin = Math.round((th * 60 + tm - (now.getHours() * 60 + now.getMinutes())) - now.getSeconds() / 60);
-      countdownEl.textContent = diffMin <= 0 ? 'now' : diffMin < 60 ? `in ${diffMin}m` : `in ${Math.floor(diffMin / 60)}h ${diffMin % 60}m`;
+      const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), th, tm, 0, 0);
+      const diffSec = Math.round((target - now) / 1000);
+      const h = Math.floor(diffSec / 3600);
+      const m = Math.floor((diffSec % 3600) / 60);
+      const s = diffSec % 60;
+      countdownEl.textContent = diffSec <= 0 ? 'now'
+        : h > 0 ? `in ${h}h ${m}m ${s}s`
+        : m > 0 ? `in ${m}m ${s}s`
+        : `in ${s}s`;
     }
   };
   if (clockEl || countdownEl) {

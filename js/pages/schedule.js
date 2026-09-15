@@ -100,6 +100,8 @@ function renderSchedule() {
   Object.keys(state.schedule || {}).forEach(k => { eventCount[k] = (state.schedule[k] || []).length; });
   const list = (state.schedule[sel] || []).slice().sort((a, b) => a.time.localeCompare(b.time));
   const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const nowHHMM = fmtClock().slice(0, 5); // "HH:MM", same as event.time — used to flag missed blocks
+  const isPastDay = sel < todayIso;
 
   return `
     ${topbar()}
@@ -133,12 +135,16 @@ function renderSchedule() {
     <div class="card" style="animation-delay:100ms">
       <div class="section-title" style="margin-top:0">${selDate.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'})}<span class="meta">${list.length} ${list.length===1?'block':'blocks'}</span></div>
       <ul class="list" id="sched-list">
-        ${list.map(s => `
+        ${list.map(s => {
+          const isDone = !!s.completed_at;
+          const isMissed = !isDone && (isPastDay || (sel === todayIso && s.time < nowHHMM));
+          return `
           <li class="sched-item" data-id="${s.id}">
             <div class="list-item row-wrap">
+              <span class="check ${isDone ? 'checked' : ''}" data-toggle-sched-done="${s.id}" title="${isDone ? 'Mark not done' : 'Mark done'}"></span>
               <div class="time-col">${s.time}</div>
               <div class="item-main">
-                <div class="item-title">${escapeHtml(s.title)}${s.alarm_time ? `<span class="alarm-tag">⏰ ${s.alarm_time}</span>` : ''}${s.repeat && s.repeat !== 'none' ? `<span class="alarm-tag" title="${REPEAT_LABEL[s.repeat] || s.repeat}">🔁</span>` : ''}</div>
+                <div class="item-title${isDone ? ' done' : ''}">${escapeHtml(s.title)}${s.alarm_time ? `<span class="alarm-tag">⏰ ${s.alarm_time}</span>` : ''}${s.repeat && s.repeat !== 'none' ? `<span class="alarm-tag" title="${REPEAT_LABEL[s.repeat] || s.repeat}">🔁</span>` : ''}${isMissed ? `<span class="missed-tag">Missed</span>` : ''}</div>
                 ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
               </div>
               <div class="sched-acts">
@@ -146,11 +152,32 @@ function renderSchedule() {
                 <button class="fin-del-btn" data-del-sched="${s.id}" title="Delete">${ICON_TRASH}</button>
               </div>
             </div>
-          </li>`).join('') || `<li class="list-item"><div class="item-sub">No events. Add one below.</div></li>`}
+          </li>`;
+        }).join('') || `<li class="list-item"><div class="item-sub">No events. Add one below.</div></li>`}
       </ul>
       <button class="add-btn" id="add-sched-btn" style="margin-top:14px"><span class="plus">+</span> Add event</button>
     </div>
   `;
+}
+
+
+/* ---- SCHEDULE: mark a block done/not-done ----
+   Shared by both the Schedule page's list and Home's Today's-schedule
+   card (both render the same [data-toggle-sched-done] checkbox). Looks
+   the event up by id across every date in state.schedule rather than
+   requiring the caller to know which day it's on. Feeds Home's Activity
+   heatmap/feed via completed_at, same as project_tasks/goal_logs. */
+function toggleScheduleDone(id, el) {
+  let ev = null;
+  for (const day in state.schedule) {
+    ev = (state.schedule[day] || []).find(s => s.id === id);
+    if (ev) break;
+  }
+  if (!ev) return;
+  ev.completed_at = ev.completed_at ? null : new Date().toISOString();
+  if (el) pulse(el);
+  render();
+  dbCall(() => sb.from('schedule_events').update({ completed_at: ev.completed_at }).eq('id', id));
 }
 
 
@@ -182,6 +209,14 @@ function bindScheduleEvents() {
 
 
   // ---- SCHEDULE ----
+  // "Done" checkbox — toggles schedule_events.completed_at. Bound once here
+  // but picks up the same checkboxes rendered by Home's Today's-schedule
+  // card too (bindMainEvents runs every page's bind*Events() on every
+  // render regardless of which route is active — see toggleScheduleDone()).
+  main.querySelectorAll('[data-toggle-sched-done]').forEach(el => el.addEventListener('click', () => {
+    toggleScheduleDone(el.dataset.toggleSchedDone, el);
+  }));
+
   main.querySelectorAll('[data-del-sched]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.delSched;
     const day = state.selectedDay;
