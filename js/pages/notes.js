@@ -88,6 +88,7 @@ function renderNotesList() {
     <div class="notes-header">
       <h1 class="page-title" style="margin:0">Notes</h1>
       <div class="notes-controls">
+        <button class="add-btn-inline" id="add-note-btn">+ Add</button>
         <div class="notes-ctrl-wrap">
           <button class="notes-ctrl-btn" id="notes-sort-btn">
             ${sortLabels[state.notesSort]}<span class="caret">▾</span>
@@ -126,7 +127,6 @@ function renderNotesList() {
         </div>`;
       }).join('') || `<div style="color:var(--text-faint);font-size:13px;padding:20px 0">No notes yet.</div>`}
     </div>
-    <button class="add-btn" id="add-note-btn" style="margin-top:18px"><span class="plus">+</span> New note</button>
   `;
 }
 

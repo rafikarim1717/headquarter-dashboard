@@ -920,6 +920,15 @@
   #tweaks-panel .seg button:last-child { border-right: 0; }
   #tweaks-panel .seg button.active { background: var(--accent); color: #111; }
   #tweaks-panel .x { background: none; color: var(--text-faint); font-size: 14px; }
+  #tweaks-panel .tw-hint { font-size: 10px; line-height: 1.5; color: var(--text-faint); text-transform: none; letter-spacing: 0; margin-top: -2px; }
+  #tweaks-panel .tw-custom-station { flex-direction: row; align-items: center; gap: 6px; }
+  #tweaks-panel .tw-custom-station input { flex: 1; min-width: 0; }
+  #tweaks-panel .tw-custom-del {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-faint); transition: color var(--t-fast) ease;
+  }
+  #tweaks-panel .tw-custom-del:hover { color: var(--danger); }
 
   /* density */
   body[data-density="compact"] { --pad-card: 18px; --gap: 12px; }
@@ -1394,12 +1403,15 @@
     display: flex; align-items: center; gap: 2px; flex-shrink: 0;
   }
   .proj-expand-btn {
-    display: flex; align-items: center; gap: 6px;
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
     padding: 10px 0 2px; width: 100%; color: var(--text-faint);
     font-size: 12px; background: none; border: none; cursor: pointer;
     transition: color var(--t-fast) ease; text-align: left; font-family: inherit;
+    list-style: none;
   }
+  .proj-expand-btn::-webkit-details-marker { display: none; }
   .proj-expand-btn:hover { color: var(--text-dim); }
+  details.proj-tasks-details[open] > .proj-expand-btn .chevron { transform: rotate(90deg); }
   .proj-tasks { margin-top: 4px; }
   .proj-tasks .inline-form.open { max-height: 280px; }
   .proj-desc {
@@ -1785,6 +1797,25 @@
   @keyframes eq {
     from { height: 4px; }
     to   { height: 14px; }
+  }
+
+  .music-wrap { position: relative; display: inline-flex; align-items: center; }
+  .music-caret-btn {
+    width: 18px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+    color: rgba(255, 255, 255, 0.5); font-size: 8px; transition: color var(--t-fast) ease;
+  }
+  .music-caret-btn:hover { color: rgba(255, 255, 255, 0.9); }
+  .music-caret-btn.playing { color: var(--accent); }
+  .music-dropdown { min-width: 200px; max-width: 260px; }
+  .music-dropdown button { display: flex; align-items: center; gap: 8px; }
+  .music-dropdown .music-dd-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    border: 1px solid var(--text-faint); background: transparent;
+  }
+  .music-dropdown button.sel .music-dd-dot { background: var(--accent); border-color: var(--accent); }
+  .music-dropdown .music-dd-sep { border-top: 1px solid var(--border); margin: 4px 0; }
+  .music-dropdown .music-dd-hint {
+    padding: 9px 14px; font-size: 11px; color: var(--text-faint); line-height: 1.4; white-space: normal;
   }
 
   /* ============ MODAL SYSTEM ============ */

@@ -27,58 +27,64 @@ function renderProjectCard(p, i) {
   const statusBadge  = `<span class="proj-badge proj-badge-${p.status}">${statusLabels[p.status]}</span>`;
 
   return `
-    <div class="card proj-card" style="animation-delay:${i*60}ms" data-proj-id="${p.id}">
-      <div class="proj-card-header">
-        <div class="proj-card-title-row">
-          <div class="proj-name${isDone?' done':''}">${escapeHtml(p.name)}</div>
-          <div class="proj-meta-row">
-            ${statusBadge}
-            ${deadlineHtml}
+    <details class="card cat-card proj-card" style="animation-delay:${i*60}ms" data-proj-id="${p.id}" open>
+      <summary>
+        <div class="proj-card-header" style="flex:1;min-width:0">
+          <div class="proj-card-title-row">
+            <div class="proj-name${isDone?' done':''}">${escapeHtml(p.name)}</div>
+            <div class="proj-meta-row">
+              ${statusBadge}
+              ${deadlineHtml}
+              ${totalTasks > 0 ? `<span class="proj-deadline">${doneTasks}/${totalTasks} tasks · ${pct}%</span>` : ''}
+            </div>
+          </div>
+          <div class="proj-card-acts">
+            <button class="fin-edit-btn" data-edit-proj="${p.id}" title="Edit">&#x270E;</button>
+            <button class="fin-del-btn" data-del-proj="${p.id}" title="Delete">${ICON_TRASH}</button>
+            <span class="chevron" style="margin-left:8px">&#8250;</span>
           </div>
         </div>
-        <div class="proj-card-acts">
-          <button class="fin-edit-btn" data-edit-proj="${p.id}" title="Edit">&#x270E;</button>
-          <button class="fin-del-btn" data-del-proj="${p.id}" title="Delete">${ICON_TRASH}</button>
-        </div>
+      </summary>
+      <div class="cat-body">
+        ${p.description ? `<div class="proj-desc">${escapeHtml(p.description.length > 120 ? p.description.slice(0, 120) + '...' : p.description)}</div>` : ''}
+        ${totalTasks > 0 ? `
+          <div class="proj-progress">
+            <div class="proj-progress-meta">
+              <span>${doneTasks} / ${totalTasks} tasks done</span>
+              <span>${pct}%</span>
+            </div>
+            <div class="progress"><div class="bar" style="width:${pct}%"></div></div>
+          </div>
+        ` : ''}
+        <details class="proj-tasks-details" data-proj-tasks="${p.id}" ${isExpanded ? 'open' : ''}>
+          <summary class="proj-expand-btn">
+            <span>${totalTasks ? `Tasks (${doneTasks}/${totalTasks})` : 'Tasks'}</span>
+            <span class="chevron">&#8250;</span>
+          </summary>
+          <div class="proj-tasks" id="proj-tasks-${p.id}">
+            <ul class="list" style="margin-top:4px">
+              ${p.tasks.map(t => `
+                <li class="focus-task-item" data-id="${t.id}">
+                  <div class="list-item row-wrap" style="padding:10px 0; align-items:flex-start">
+                    <span class="check ${t.checked?'checked':''}" data-toggle-proj-task="${p.id}|${t.id}" style="margin-top:2px;flex-shrink:0"></span>
+                    <div class="check-label ${t.checked?'done':''}" style="flex:1;min-width:0">
+                      <div>${escapeHtml(t.text)}</div>
+                      ${t.description ? `<div class="task-desc-text">${escapeHtml(t.description.length>80?t.description.slice(0,80)+'...':t.description)}</div>` : ''}
+                    </div>
+                    <div class="focus-task-acts">
+                      <button class="fin-assign-btn" data-assign-proj-task="${p.id}|${t.id}" title="Assign to today's schedule">&#x1F4C5;</button>
+                      <button class="fin-edit-btn" data-edit-proj-task="${p.id}|${t.id}">&#x270E;</button>
+                      <button class="fin-del-btn" data-del-proj-task="${p.id}|${t.id}" title="Delete">${ICON_TRASH}</button>
+                    </div>
+                  </div>
+                </li>
+              `).join('')}
+            </ul>
+            <button class="add-btn" data-modal-add="proj-task" data-proj-id="${p.id}" style="margin-top:10px"><span class="plus">+</span> Add task</button>
+          </div>
+        </details>
       </div>
-      ${p.description ? `<div class="proj-desc">${escapeHtml(p.description.length > 120 ? p.description.slice(0, 120) + '...' : p.description)}</div>` : ''}
-      ${totalTasks > 0 ? `
-        <div class="proj-progress">
-          <div class="proj-progress-meta">
-            <span>${doneTasks} / ${totalTasks} tasks done</span>
-            <span>${pct}%</span>
-          </div>
-          <div class="progress"><div class="bar" style="width:${pct}%"></div></div>
-        </div>
-      ` : ''}
-      <button class="proj-expand-btn" data-toggle-proj-expand="${p.id}">
-        <span>${isExpanded?'▼':'▶'}</span>
-        <span>${isExpanded?'Hide tasks':'Show tasks'}</span>
-      </button>
-      ${isExpanded ? `
-        <div class="proj-tasks" id="proj-tasks-${p.id}">
-          <ul class="list" style="margin-top:4px">
-            ${p.tasks.map(t => `
-              <li class="focus-task-item" data-id="${t.id}">
-                <div class="list-item row-wrap" style="padding:10px 0; align-items:flex-start">
-                  <span class="check ${t.checked?'checked':''}" data-toggle-proj-task="${p.id}|${t.id}" style="margin-top:2px;flex-shrink:0"></span>
-                  <div class="check-label ${t.checked?'done':''}" style="flex:1;min-width:0">
-                    <div>${escapeHtml(t.text)}</div>
-                    ${t.description ? `<div class="task-desc-text">${escapeHtml(t.description.length>80?t.description.slice(0,80)+'...':t.description)}</div>` : ''}
-                  </div>
-                  <div class="focus-task-acts">
-                    <button class="fin-assign-btn" data-assign-proj-task="${p.id}|${t.id}" title="Assign to today's schedule">&#x1F4C5;</button>
-                    <button class="fin-edit-btn" data-edit-proj-task="${p.id}|${t.id}">&#x270E;</button>
-                    <button class="fin-del-btn" data-del-proj-task="${p.id}|${t.id}" title="Delete">${ICON_TRASH}</button>
-                  </div>
-                </div>
-              </li>
-            `).join('')}
-          </ul>
-          <button class="add-btn" data-modal-add="proj-task" data-proj-id="${p.id}" style="margin-top:10px"><span class="plus">+</span> Add task</button>
-        </div>
-      ` : ''}
-    </div>`;
+    </details>`;
 }
 
 function renderProjects() {
@@ -116,14 +122,16 @@ function bindProjectsEvents() {
   }));
 
 
-  // project expand/collapse
-  main.querySelectorAll('[data-toggle-proj-expand]').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const id = el.dataset.toggleProjExpand;
+  // project expand/collapse — native <details> handles the actual show/hide
+  // instantly on its own; this just keeps expandedProjectIds in sync for
+  // persistence (e.g. Home's "jump to project" deep-link opens it pre-expanded).
+  // No render() call needed, unlike the old button+state+full-rerender version —
+  // expanding one project's tasks no longer replays every other card's animations.
+  main.querySelectorAll('[data-proj-tasks]').forEach(el => el.addEventListener('toggle', () => {
+    const id = el.dataset.projTasks;
     const idx = state.expandedProjectIds.indexOf(id);
-    if (idx === -1) state.expandedProjectIds.push(id);
-    else state.expandedProjectIds.splice(idx, 1);
-    render();
+    if (el.open && idx === -1) state.expandedProjectIds.push(id);
+    else if (!el.open && idx !== -1) state.expandedProjectIds.splice(idx, 1);
   }));
 
 
@@ -143,7 +151,8 @@ function bindProjectsEvents() {
 
 
   // project delete
-  main.querySelectorAll('[data-del-proj]').forEach(el => el.addEventListener('click', () => {
+  main.querySelectorAll('[data-del-proj]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation(); // now sits inside the card's <summary> — without this, clicking it would also toggle the card collapsed/open
     const id = el.dataset.delProj;
     const proj = state.projects.find(p => p.id === id);
     showConfirmModal({

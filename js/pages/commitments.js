@@ -157,6 +157,8 @@ function updateComplianceRing() {
     arc.dataset.pct = pct;
   });
   card.querySelectorAll('.compliance-pct-text').forEach(el => el.textContent = pct);
+  const summaryPct = card.querySelector('[data-compliance-summary-pct]');
+  if (summaryPct) summaryPct.textContent = pct + '%'; // kept in sync so the score still shows while the card is collapsed
   card.querySelectorAll('[data-compliance-fill]').forEach(el => {
     const items = categoryItems(el.dataset.complianceFill);
     const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
@@ -330,52 +332,61 @@ function renderCommitments() {
   return `
     ${topbar()}
     <h1 class="page-title">Commitments</h1>
-    <div class="card commit-compliance-card" id="commit-compliance-card" style="animation-delay:0ms">
-      <div class="compliance-inner">
-        <svg class="compliance-ring-desktop" width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
-          <circle cx="40" cy="40" r="34" fill="none" stroke="#2a2a2a" stroke-width="6"/>
-          <circle class="compliance-arc" cx="40" cy="40" r="34" fill="none"
-            stroke="var(--accent)" stroke-width="6" stroke-linecap="round"
-            stroke-dasharray="213.63"
-            style="stroke-dashoffset:213.63;transform:rotate(-90deg);transform-origin:40px 40px"
-            data-pct="${overallPct}" data-full="213.63"/>
-          <text x="40" y="40" text-anchor="middle" dominant-baseline="middle"
-            font-size="18" font-weight="300" fill="var(--accent)"
-            class="compliance-pct-text">0</text>
-        </svg>
-        <svg class="compliance-ring-mobile" width="100" height="100" viewBox="0 0 100 100" aria-hidden="true">
-          <circle cx="50" cy="50" r="42" fill="none" stroke="#2a2a2a" stroke-width="7"/>
-          <circle class="compliance-arc" cx="50" cy="50" r="42" fill="none"
-            stroke="var(--accent)" stroke-width="7" stroke-linecap="round"
-            stroke-dasharray="263.89"
-            style="stroke-dashoffset:263.89;transform:rotate(-90deg);transform-origin:50px 50px"
-            data-pct="${overallPct}" data-full="263.89"/>
-          <text x="50" y="46" text-anchor="middle" dominant-baseline="middle"
-            font-size="20" font-weight="300" fill="var(--accent)"
-            class="compliance-pct-text">0</text>
-          <text x="50" y="64" text-anchor="middle" dominant-baseline="middle"
-            font-size="9" fill="#6a6a6a">today</text>
-        </svg>
-        <div class="compliance-bars">
-          <div class="compliance-label">TODAY'S COMPLIANCE</div>
-          ${categories.map(cat => {
-            const items = categoryItems(cat);
-            const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
-            const pct = items.length ? Math.round(chk / items.length * 100) : 0;
-            return `
-          <div class="compliance-bar-row">
-            <span class="compliance-bar-lbl" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>
-            <div class="compliance-bar-track"><div class="compliance-bar-fill" data-compliance-fill="${escapeHtml(cat)}" style="width:${pct}%"></div></div>
-            <span class="compliance-bar-count" data-compliance-count="${escapeHtml(cat)}">${chk}/${items.length}</span>
-          </div>`;
-          }).join('')}
+    <details class="card cat-card commit-compliance-card" id="commit-compliance-card" style="animation-delay:0ms" open>
+      <summary>
+        <div class="section-title" style="margin:0">Today's Compliance <span class="meta" data-compliance-summary-pct>${overallPct}%</span></div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body">
+        <div class="compliance-inner">
+          <svg class="compliance-ring-desktop" width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+            <circle cx="40" cy="40" r="34" fill="none" stroke="#2a2a2a" stroke-width="6"/>
+            <circle class="compliance-arc" cx="40" cy="40" r="34" fill="none"
+              stroke="var(--accent)" stroke-width="6" stroke-linecap="round"
+              stroke-dasharray="213.63"
+              style="stroke-dashoffset:213.63;transform:rotate(-90deg);transform-origin:40px 40px"
+              data-pct="${overallPct}" data-full="213.63"/>
+            <text x="40" y="40" text-anchor="middle" dominant-baseline="middle"
+              font-size="18" font-weight="300" fill="var(--accent)"
+              class="compliance-pct-text">0</text>
+          </svg>
+          <svg class="compliance-ring-mobile" width="100" height="100" viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#2a2a2a" stroke-width="7"/>
+            <circle class="compliance-arc" cx="50" cy="50" r="42" fill="none"
+              stroke="var(--accent)" stroke-width="7" stroke-linecap="round"
+              stroke-dasharray="263.89"
+              style="stroke-dashoffset:263.89;transform:rotate(-90deg);transform-origin:50px 50px"
+              data-pct="${overallPct}" data-full="263.89"/>
+            <text x="50" y="46" text-anchor="middle" dominant-baseline="middle"
+              font-size="20" font-weight="300" fill="var(--accent)"
+              class="compliance-pct-text">0</text>
+            <text x="50" y="64" text-anchor="middle" dominant-baseline="middle"
+              font-size="9" fill="#6a6a6a">today</text>
+          </svg>
+          <div class="compliance-bars">
+            <div class="compliance-label">TODAY'S COMPLIANCE</div>
+            ${categories.map(cat => {
+              const items = categoryItems(cat);
+              const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
+              const pct = items.length ? Math.round(chk / items.length * 100) : 0;
+              return `
+            <div class="compliance-bar-row">
+              <span class="compliance-bar-lbl" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>
+              <div class="compliance-bar-track"><div class="compliance-bar-fill" data-compliance-fill="${escapeHtml(cat)}" style="width:${pct}%"></div></div>
+              <span class="compliance-bar-count" data-compliance-count="${escapeHtml(cat)}">${chk}/${items.length}</span>
+            </div>`;
+            }).join('')}
+          </div>
         </div>
       </div>
+    </details>
+    <div class="commit-quest-label" style="justify-content:space-between">
+      <span>&#9876;&#65039; Main Quest</span>
+      <button class="add-btn-inline" data-add-commit="">+ New category</button>
     </div>
-    <div class="commit-quest-label">&#9876;&#65039; Main Quest</div>
     ${categories.map((cat, idx) => `<div style="margin-top:16px">${categoryCard(cat, idx)}</div>`).join('')}
-    <button class="add-btn" data-add-commit="" style="margin-top:16px;border-style:solid;justify-content:center"><span class="plus">+</span> New category</button>
-    <div class="card" style="margin-top:16px;animation-delay:80ms">
+    <div class="commit-quest-label">History</div>
+    <div class="card" style="animation-delay:80ms">
       <div class="commit-preview-tabs">
         <button class="commit-tab-btn${tab === 'day'   ? ' active' : ''}" data-commit-tab="day">Day</button>
         <button class="commit-tab-btn${tab === 'week'  ? ' active' : ''}" data-commit-tab="week">Week</button>

@@ -94,6 +94,7 @@ let state = {
   spendingFilter: 'daily',
   spendingPickedDate: null,
   spendingPage: 1,
+  spendingShowAll: false,     // false = Spending's "Recent" list capped at 5 rows + "Show all" button, mirroring Home's Activity feed
   debtsPage: 1,
   incomeFilter: 'month',
   incomePickedDate: null,
@@ -104,59 +105,177 @@ let state = {
 
 /* =========================================================
    AMBIENT MUSIC
+   Two playback engines behind one picker: the 3 built-in radios play via a
+   plain <audio> stream; up to 3 user-supplied YouTube links (Tweaks panel,
+   see setCustomStation()) play via the YouTube IFrame Player API, mounted
+   into #yt-audio-player — a node that lives outside #main in index.html so
+   it survives render()'s main.innerHTML replacement instead of being torn
+   down and recreated on every page navigation.
+   Clicking the note icon only ever pauses/resumes whatever is already
+   selected; the ▾ caret opens the picker dropdown to choose/switch stations
+   — deliberately not the old "click cycles through streams" behavior.
 ========================================================= */
 const AMBIENT_STREAMS = [
-  { url: 'https://streams.ilovemusic.de/iloveradio17.mp3', name: 'iLove Radio' },
-  { url: 'https://usa9.fastcast4u.com/proxy/jamz?mp=/1',  name: 'Jamz Radio'  },
-  { url: 'https://lofi.stream.laut.fm/lofi',               name: 'Lo-Fi Radio' }
+  { kind: 'audio', url: 'https://streams.ilovemusic.de/iloveradio17.mp3', name: 'iLove Radio' },
+  { kind: 'audio', url: 'https://usa9.fastcast4u.com/proxy/jamz?mp=/1',  name: 'Jamz Radio'  },
+  { kind: 'audio', url: 'https://lofi.stream.laut.fm/lofi',               name: 'Lo-Fi Radio' }
 ];
-const ambientPlayer = { audio: null, isPlaying: false, currentIdx: 0 };
+const ambientPlayer = { kind: null, audio: null, stationIndex: null, isPlaying: false };
 
-function updateMusicBtn(playing) {
-  const btn      = document.getElementById('music-toggle');
-  const eq       = document.getElementById('eq-bars');
-  const noteIcon = document.getElementById('music-note-icon');
-  const label    = document.getElementById('music-label');
-  if (btn)      btn.classList.toggle('playing', playing);
-  if (eq)       eq.style.display = playing ? 'inline-flex' : 'none';
-  if (noteIcon) noteIcon.style.display = playing ? 'none' : '';
-  if (label) {
-    label.textContent = playing ? AMBIENT_STREAMS[ambientPlayer.currentIdx].name : '';
-    label.classList.toggle('playing', playing);
+let ytPlayer = null;
+let ytApiReady = false;
+let pendingYtVideoId = null;
+
+// Called automatically by the YouTube IFrame API script once it finishes loading
+// (index.html loads that script last, after this function is already defined).
+function onYouTubeIframeAPIReady() {
+  ytApiReady = true;
+  if (pendingYtVideoId) {
+    const vid = pendingYtVideoId;
+    pendingYtVideoId = null;
+    createYtPlayer(vid);
   }
 }
 
-function tryAmbientStream(idx) {
-  if (idx >= AMBIENT_STREAMS.length) {
-    showToast('No stream available right now', 'error');
+function createYtPlayer(videoId) {
+  ytPlayer = new YT.Player('yt-audio-player', {
+    height: '1', width: '1', videoId,
+    playerVars: { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1 },
+    events: {
+      onReady: (e) => { e.target.setVolume(40); e.target.playVideo(); },
+      onStateChange: (e) => {
+        if (e.data === YT.PlayerState.PLAYING)  { ambientPlayer.isPlaying = true;  updateMusicBtn(true); }
+        if (e.data === YT.PlayerState.PAUSED)   { ambientPlayer.isPlaying = false; updateMusicBtn(false); }
+      },
+      onError: () => {
+        showToast('That YouTube link can\'t be played (embedding may be disabled)', 'error');
+        ambientPlayer.isPlaying = false;
+        updateMusicBtn(false);
+      }
+    }
+  });
+}
+
+// Extracts the 11-char video id from watch/live/embed/shorts/youtu.be links.
+function extractYouTubeId(url) {
+  if (!url) return null;
+  const m = String(url).match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|live\/|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+function getCustomStations() {
+  return (window.__HQ_TWEAKS.customStations || [])
+    .filter(s => s && s.name && s.name.trim() && s.url && s.url.trim())
+    .map(s => ({ kind: 'youtube', name: s.name.trim(), videoId: extractYouTubeId(s.url.trim()) }))
+    .filter(s => s.videoId);
+}
+
+function getAllStations() {
+  return [...AMBIENT_STREAMS, ...getCustomStations()];
+}
+
+function updateMusicBtn(playing) {
+  const btn      = document.getElementById('music-toggle');
+  const caret    = document.getElementById('music-caret-btn');
+  const eq       = document.getElementById('eq-bars');
+  const noteIcon = document.getElementById('music-note-icon');
+  const label    = document.getElementById('music-label');
+  const station  = ambientPlayer.stationIndex != null ? getAllStations()[ambientPlayer.stationIndex] : null;
+  if (btn)    btn.classList.toggle('playing', playing);
+  if (caret)  caret.classList.toggle('playing', playing);
+  if (eq)     eq.style.display = playing ? 'inline-flex' : 'none';
+  if (noteIcon) noteIcon.style.display = playing ? 'none' : '';
+  if (label) {
+    label.textContent = playing && station ? station.name : '';
+    label.classList.toggle('playing', playing);
+  }
+  document.querySelectorAll('#music-dropdown [data-station-idx]').forEach(el => {
+    el.classList.toggle('sel', playing && Number(el.dataset.stationIdx) === ambientPlayer.stationIndex);
+  });
+}
+
+// Pauses in place — keeps the Audio object / yt video loaded so the icon can
+// resume the SAME station. Used by toggleAmbientMusic()'s pause branch.
+function pauseCurrentStation() {
+  if (ambientPlayer.audio) ambientPlayer.audio.pause();
+  if (ytPlayer) { try { ytPlayer.pauseVideo(); } catch (e) {} }
+  ambientPlayer.isPlaying = false;
+  updateMusicBtn(false);
+}
+
+// Full teardown before switching to a different station — discards the
+// Audio object entirely (a new one gets created for the new pick).
+function stopCurrentStation() {
+  pauseCurrentStation();
+  if (ambientPlayer.audio) { ambientPlayer.audio = null; }
+}
+
+function playAudioStation(idx, station) {
+  stopCurrentStation();
+  ambientPlayer.kind = 'audio';
+  ambientPlayer.stationIndex = idx;
+  const audio = new Audio(station.url);
+  audio.crossOrigin = 'anonymous';
+  audio.volume = 0.4;
+  ambientPlayer.audio = audio;
+  const fail = () => {
+    showToast(`${station.name} isn't reachable right now`, 'error');
+    ambientPlayer.isPlaying = false;
+    updateMusicBtn(false);
+  };
+  audio.addEventListener('error', fail, { once: true });
+  audio.play().then(() => { ambientPlayer.isPlaying = true; updateMusicBtn(true); }).catch(fail);
+}
+
+function playYoutubeStation(idx, station) {
+  stopCurrentStation();
+  ambientPlayer.kind = 'youtube';
+  ambientPlayer.stationIndex = idx;
+  if (!ytApiReady) {
+    // API script (loaded at the bottom of index.html) hasn't finished yet — flag it
+    // so onYouTubeIframeAPIReady() starts this station as soon as it's ready, and
+    // show "not playing" in the meantime rather than a misleading playing state.
+    pendingYtVideoId = station.videoId;
     ambientPlayer.isPlaying = false;
     updateMusicBtn(false);
     return;
   }
-  if (ambientPlayer.audio) { ambientPlayer.audio.pause(); ambientPlayer.audio = null; }
-  const audio = new Audio(AMBIENT_STREAMS[idx].url);
-  audio.crossOrigin = 'anonymous';
-  audio.volume = 0.4;
-  ambientPlayer.audio = audio;
-  ambientPlayer.currentIdx = idx;
-  audio.addEventListener('error', () => tryAmbientStream(idx + 1), { once: true });
-  audio.play()
-    .then(() => { ambientPlayer.isPlaying = true; updateMusicBtn(true); })
-    .catch(() => tryAmbientStream(idx + 1));
+  if (!ytPlayer) { createYtPlayer(station.videoId); }
+  else { ytPlayer.loadVideoById(station.videoId); }
 }
 
+function selectStation(idx) {
+  const station = getAllStations()[idx];
+  if (!station) return;
+  document.getElementById('music-dropdown')?.classList.remove('open');
+  if (station.kind === 'youtube') playYoutubeStation(idx, station);
+  else playAudioStation(idx, station);
+}
+
+// Note icon click: pause/resume only — never picks a station on its own.
 function toggleAmbientMusic() {
-  if (ambientPlayer.isPlaying) {
-    ambientPlayer.audio?.pause();
-    ambientPlayer.isPlaying = false;
-    updateMusicBtn(false);
-  } else if (ambientPlayer.audio) {
-    ambientPlayer.audio.play()
-      .then(() => { ambientPlayer.isPlaying = true; updateMusicBtn(true); })
-      .catch(() => { ambientPlayer.audio = null; tryAmbientStream(0); });
-  } else {
-    tryAmbientStream(0);
+  if (ambientPlayer.stationIndex == null) {
+    document.getElementById('music-dropdown')?.classList.toggle('open');
+    return;
   }
+  if (ambientPlayer.isPlaying) {
+    pauseCurrentStation();
+  } else if (ambientPlayer.kind === 'youtube' && ytPlayer) {
+    ytPlayer.playVideo();
+  } else if (ambientPlayer.kind === 'audio' && ambientPlayer.audio) {
+    ambientPlayer.audio.play().then(() => { ambientPlayer.isPlaying = true; updateMusicBtn(true); });
+  }
+}
+
+function musicDropdownHtml() {
+  const built = AMBIENT_STREAMS;
+  const custom = getCustomStations();
+  const item = (s, i) => `<button data-station-idx="${i}" class="${ambientPlayer.isPlaying && ambientPlayer.stationIndex === i ? 'sel' : ''}"><span class="music-dd-dot"></span>${escapeHtml(s.name)}</button>`;
+  return `
+    ${built.map((s, i) => item(s, i)).join('')}
+    ${custom.length ? `<div class="music-dd-sep"></div>${custom.map((s, i) => item(s, built.length + i)).join('')}`
+      : `<div class="music-dd-sep"></div><div class="music-dd-hint">Add your own YouTube stations in ⚙ Tweaks.</div>`}
+  `;
 }
 
 /* =========================================================
@@ -391,7 +510,12 @@ function topbar() {
       </div>
       <div class="right">
         <button class="mobile-signout-btn" id="topbar-logout-btn" aria-label="Sign out">${signOutSvg}</button>
-        <span id="music-label" class="${ambientPlayer.isPlaying ? 'playing' : ''}">${ambientPlayer.isPlaying ? AMBIENT_STREAMS[ambientPlayer.currentIdx].name : ''}</span><button class="icon-btn music-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-toggle" title="Ambient music" aria-label="Ambient music"><span id="music-note-icon" style="${ambientPlayer.isPlaying ? 'display:none' : ''}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${ambientPlayer.isPlaying ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span></button>
+        <span id="music-label" class="${ambientPlayer.isPlaying ? 'playing' : ''}">${ambientPlayer.isPlaying && ambientPlayer.stationIndex != null ? (getAllStations()[ambientPlayer.stationIndex]?.name || '') : ''}</span>
+        <div class="music-wrap">
+          <button class="icon-btn music-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-toggle" title="Play/pause ambient music" aria-label="Play/pause ambient music"><span id="music-note-icon" style="${ambientPlayer.isPlaying ? 'display:none' : ''}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${ambientPlayer.isPlaying ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span></button>
+          <button class="music-caret-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-caret-btn" title="Choose a station" aria-label="Choose a station">&#9662;</button>
+          <div class="notes-dropdown music-dropdown" id="music-dropdown">${musicDropdownHtml()}</div>
+        </div>
         <button class="icon-btn" id="open-tweaks" title="Tweaks" aria-label="Tweaks">&#x2699;&#xFE0E;</button>
       </div>
     </header>
@@ -617,6 +741,15 @@ function bindSharedEvents() {
   if (tlb) tlb.addEventListener('click', signOut);
   const mt = main.querySelector('#music-toggle');
   if (mt) mt.addEventListener('click', toggleAmbientMusic);
+  const mc = main.querySelector('#music-caret-btn');
+  if (mc) mc.addEventListener('click', (e) => {
+    e.stopPropagation();
+    main.querySelector('#music-dropdown')?.classList.toggle('open');
+  });
+  main.querySelectorAll('#music-dropdown [data-station-idx]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    selectStation(Number(el.dataset.stationIdx));
+  }));
 
   // navigation pills
   main.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => setActiveTab(el.dataset.go)));
@@ -661,7 +794,7 @@ document.addEventListener('click', (e) => {
     }
   });
   document.querySelectorAll('.notes-dropdown.open').forEach(dd => {
-    if (!dd.contains(e.target) && !e.target.closest('#notes-sort-btn, #notes-filter-btn, [data-dd-toggle]')) {
+    if (!dd.contains(e.target) && !e.target.closest('#notes-sort-btn, #notes-filter-btn, [data-dd-toggle], #music-caret-btn, #music-toggle')) {
       dd.classList.remove('open');
     }
   });
@@ -703,6 +836,67 @@ function syncTweaksUI() {
   document.querySelectorAll('#tw-home button').forEach(b => b.classList.toggle('active', b.dataset.v === tw.homeLayout));
   document.querySelectorAll('#tw-pills button').forEach(b => b.classList.toggle('active', String(b.dataset.v) === String(tw.showQuickPills)));
 }
+
+/* ---- Custom YouTube stations: unbounded list, add/remove from the Tweaks panel ----
+   Persisted to their own localStorage key ('hq.customStations') — unlike the rest of
+   Tweaks (an in-memory-only reset on refresh, see index.html's hardcoded
+   window.__HQ_TWEAKS default), these need to survive a reload since there's nowhere
+   else (no Supabase column) that remembers them per device.
+   #tw-custom-stations-list is rebuilt (renderCustomStationsList()) only when a row is
+   added/removed — never on every keystroke, via delegated input/click listeners below
+   — so typing in a row never fights a rebuild for focus. */
+function persistCustomStations() {
+  try { localStorage.setItem('hq.customStations', JSON.stringify(window.__HQ_TWEAKS.customStations || [])); } catch (e) {}
+}
+
+function renderCustomStationsList() {
+  const el = document.getElementById('tw-custom-stations-list');
+  if (!el) return;
+  const stations = window.__HQ_TWEAKS.customStations || [];
+  el.innerHTML = stations.map((s, i) => `
+    <div class="row tw-custom-station">
+      <input type="text" class="tw-custom-name" data-i="${i}" placeholder="Name (e.g. Study Beats)" value="${escapeHtml(s.name || '')}">
+      <input type="text" class="tw-custom-url" data-i="${i}" placeholder="YouTube link" value="${escapeHtml(s.url || '')}">
+      <button class="tw-custom-del" data-i="${i}" title="Remove station" aria-label="Remove station">${ICON_TRASH}</button>
+    </div>`).join('') || `<div class="tw-hint" style="margin-bottom:8px">No custom stations yet — add one below.</div>`;
+}
+
+function addCustomStation() {
+  if (!window.__HQ_TWEAKS.customStations) window.__HQ_TWEAKS.customStations = [];
+  window.__HQ_TWEAKS.customStations.push({ name: '', url: '' });
+  persistCustomStations();
+  renderCustomStationsList();
+  render();
+  const names = document.querySelectorAll('#tw-custom-stations-list .tw-custom-name');
+  names[names.length - 1]?.focus();
+}
+
+function removeCustomStation(i) {
+  window.__HQ_TWEAKS.customStations.splice(i, 1);
+  persistCustomStations();
+  renderCustomStationsList();
+  render();
+}
+
+function setCustomStationField(i, field, value) {
+  const s = (window.__HQ_TWEAKS.customStations || [])[i];
+  if (!s) return;
+  s[field] = value;
+  persistCustomStations();
+  render(); // refreshes the topbar's music dropdown; #tweaks-panel itself is untouched by render(), so the input keeps focus
+}
+
+renderCustomStationsList();
+document.getElementById('tw-custom-add-btn')?.addEventListener('click', addCustomStation);
+document.getElementById('tw-custom-stations-list')?.addEventListener('input', (e) => {
+  const t = e.target, i = Number(t.dataset.i);
+  if (t.classList.contains('tw-custom-name')) setCustomStationField(i, 'name', t.value);
+  else if (t.classList.contains('tw-custom-url')) setCustomStationField(i, 'url', t.value);
+});
+document.getElementById('tw-custom-stations-list')?.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('.tw-custom-del');
+  if (delBtn) removeCustomStation(Number(delBtn.dataset.i));
+});
 
 document.getElementById('tw-name').addEventListener('input', (e) => setTweak('name', e.target.value));
 document.getElementById('tw-currency').addEventListener('input', (e) => setTweak('currencyPrefix', e.target.value));

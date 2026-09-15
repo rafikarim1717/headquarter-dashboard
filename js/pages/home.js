@@ -162,6 +162,121 @@ function renderHomeActivityHeatmap(year, dayFilter, showAll) {
 
 
 /* ---- LIFE: HOME ---- */
+
+// Extracted from renderLifeHome so the "Active project" card can also be
+// regenerated on its own (see updateActiveProjectCard()) when only the
+// ‹/› carousel nav changes — clicking it used to call a full render(),
+// which re-triggered animateNumbers() for the whole page and made the
+// unrelated Finance snapshot numbers look like they were recounting/reloading.
+function activeProjectCardHtml(layout, delay) {
+  const activeProjects = (state.projects || []).filter(p => p.status === 'active');
+  if (!(state.homeProjectIndex >= 0 && state.homeProjectIndex < activeProjects.length)) state.homeProjectIndex = 0;
+  const homeProjIdx = state.homeProjectIndex;
+  const current   = activeProjects[homeProjIdx] || null;
+  const projDone  = current ? current.tasks.filter(t => t.checked).length : 0;
+  const projTotal = current ? current.tasks.length : 0;
+  const projPct   = projTotal ? Math.round(projDone / projTotal * 100) : 0;
+  return `
+    <details class="card cat-card" data-home-card="active-project" style="animation-delay:${delay}ms" open>
+      <summary>
+        <div class="section-title" style="margin:0;display:flex;align-items:center;justify-content:space-between;flex:1">
+          <span>Active project</span>
+          ${activeProjects.length > 1 ? `
+            <span style="display:flex;align-items:center;gap:6px">
+              <button class="proj-nav-btn" data-home-proj-nav="-1" title="Previous project">&#x2039;</button>
+              <span style="font-size:11px;color:var(--text-faint)">${homeProjIdx + 1}/${activeProjects.length}</span>
+              <button class="proj-nav-btn" data-home-proj-nav="1" title="Next project">&#x203A;</button>
+            </span>
+          ` : ''}
+        </div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body" style="cursor:pointer" data-open-project="${current ? current.id : ''}">
+        ${current ? `
+          <div style="font-size:${layout === 'hero' ? '18px' : '15px'};font-weight:500;line-height:1.35">${escapeHtml(current.name)}</div>
+          ${projTotal > 0 ? `
+            <div class="proj-progress">
+              <div class="proj-progress-meta"><span>${projDone} / ${projTotal} tasks done</span><span>${projPct}%</span></div>
+              <div class="progress"><div class="bar" style="width:${projPct}%"></div></div>
+            </div>
+            <ul class="list" style="margin-top:12px;${current.tasks.length > 5 ? 'max-height:190px;overflow-y:auto' : ''}">
+              ${current.tasks.map(t => `
+                <li class="list-item" style="padding:8px 0">
+                  <span class="check ${t.checked ? 'checked' : ''}" data-toggle-proj-task="${current.id}|${t.id}"></span>
+                  <span class="check-label ${t.checked ? 'done' : ''}">${escapeHtml(t.text)}</span>
+                </li>
+              `).join('')}
+            </ul>
+          ` : '<div style="font-size:12px;color:var(--text-faint);margin-top:8px">No tasks yet.</div>'}
+        ` : `<div style="font-size:12px;color:var(--text-faint)">No active projects.</div>`}
+      </div>
+    </details>`;
+}
+
+// Regenerates just the "Active project" card in place (no full render()),
+// so cycling through active projects with ‹/› doesn't replay the entrance
+// animation / number count-up of every other card on Home.
+function updateActiveProjectCard() {
+  const card = main.querySelector('[data-home-card="active-project"]');
+  if (!card) return;
+  const wasOpen = card.open;
+  const layout = window.__HQ_TWEAKS.homeLayout;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = activeProjectCardHtml(layout, 0).trim();
+  const newCard = wrapper.firstElementChild;
+  newCard.open = wasOpen;
+  card.replaceWith(newCard);
+  bindActiveProjectCardEvents(newCard);
+}
+
+// Re-binds every interactive element inside a freshly swapped-in Active
+// project card — the outerHTML replace above means the old node (and any
+// listeners bound to it by bindHomeEvents/bindProjectsEvents during the
+// last full render) is gone. ‹/› stays an in-place update (that's the whole
+// point); opening the project / toggling a task still does a full render(),
+// same as it always has, since those legitimately affect other cards too
+// (Projects page, Activity heatmap).
+function bindActiveProjectCardEvents(card) {
+  card.querySelectorAll('[data-home-proj-nav]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dir = Number(el.dataset.homeProjNav);
+    const activeProjects = (state.projects || []).filter(p => p.status === 'active');
+    if (!activeProjects.length) return;
+    state.homeProjectIndex = ((state.homeProjectIndex || 0) + dir + activeProjects.length) % activeProjects.length;
+    updateActiveProjectCard();
+  }));
+
+  const body = card.querySelector('[data-open-project]');
+  if (body) body.addEventListener('click', () => {
+    const id = body.dataset.openProject;
+    if (id) {
+      if (!(state.expandedProjectIds || []).includes(id)) {
+        state.expandedProjectIds = [...(state.expandedProjectIds || []), id];
+      }
+      state.projectsFilter = 'all';
+    }
+    setActiveTab('life:projects');
+    if (id) {
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-proj-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  });
+
+  card.querySelectorAll('[data-toggle-proj-task]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const [projId, taskId] = el.dataset.toggleProjTask.split('|');
+    const proj = state.projects.find(p => p.id === projId);
+    if (!proj) return;
+    const task = proj.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    task.checked = !task.checked;
+    task.completed_at = task.checked ? new Date().toISOString() : null;
+    pulse(el); render();
+    dbCall(() => sb.from('project_tasks').update({ checked: task.checked, completed_at: task.completed_at }).eq('id', taskId));
+  }));
+}
+
 function renderLifeHome() {
   const today = todayISO();
   const sched = (state.schedule[today] || []).slice().sort((a, b) => a.time.localeCompare(b.time)).slice(0, 5);
@@ -280,48 +395,7 @@ function renderLifeHome() {
       </div>
     </details>`;
 
-  const activeProjects = (state.projects || []).filter(p => p.status === 'active');
-  if (!(state.homeProjectIndex >= 0 && state.homeProjectIndex < activeProjects.length)) state.homeProjectIndex = 0;
-  const homeProjIdx = state.homeProjectIndex;
-  const current   = activeProjects[homeProjIdx] || null;
-  const projDone  = current ? current.tasks.filter(t => t.checked).length : 0;
-  const projTotal = current ? current.tasks.length : 0;
-  const projPct   = projTotal ? Math.round(projDone / projTotal * 100) : 0;
-  const projectsBlock = (delay) => `
-    <details class="card cat-card" style="animation-delay:${delay}ms" open>
-      <summary>
-        <div class="section-title" style="margin:0;display:flex;align-items:center;justify-content:space-between;flex:1">
-          <span>Active project</span>
-          ${activeProjects.length > 1 ? `
-            <span style="display:flex;align-items:center;gap:6px">
-              <button class="proj-nav-btn" data-home-proj-nav="-1" title="Previous project">&#x2039;</button>
-              <span style="font-size:11px;color:var(--text-faint)">${homeProjIdx + 1}/${activeProjects.length}</span>
-              <button class="proj-nav-btn" data-home-proj-nav="1" title="Next project">&#x203A;</button>
-            </span>
-          ` : ''}
-        </div>
-        <span class="chevron">&#8250;</span>
-      </summary>
-      <div class="cat-body" style="cursor:pointer" data-open-project="${current ? current.id : ''}">
-        ${current ? `
-          <div style="font-size:${layout === 'hero' ? '18px' : '15px'};font-weight:500;line-height:1.35">${escapeHtml(current.name)}</div>
-          ${projTotal > 0 ? `
-            <div class="proj-progress">
-              <div class="proj-progress-meta"><span>${projDone} / ${projTotal} tasks done</span><span>${projPct}%</span></div>
-              <div class="progress"><div class="bar" style="width:${projPct}%"></div></div>
-            </div>
-            <ul class="list" style="margin-top:12px;${current.tasks.length > 5 ? 'max-height:190px;overflow-y:auto' : ''}">
-              ${current.tasks.map(t => `
-                <li class="list-item" style="padding:8px 0">
-                  <span class="check ${t.checked ? 'checked' : ''}" data-toggle-proj-task="${current.id}|${t.id}"></span>
-                  <span class="check-label ${t.checked ? 'done' : ''}">${escapeHtml(t.text)}</span>
-                </li>
-              `).join('')}
-            </ul>
-          ` : '<div style="font-size:12px;color:var(--text-faint);margin-top:8px">No tasks yet.</div>'}
-        ` : `<div style="font-size:12px;color:var(--text-faint)">No active projects.</div>`}
-      </div>
-    </details>`;
+  const projectsBlock = (delay) => activeProjectCardHtml(layout, delay);
 
   const nowHHMM = fmtClock().slice(0, 5); // "HH:MM" in the visitor's local time, same as event.time
   const upNextEvent = sched.find(s => s.time >= nowHHMM) || null;
@@ -466,14 +540,16 @@ function bindHomeEvents() {
     render();
   });
 
-  // home: cycle through active projects
+  // home: cycle through active projects — in-place update (see updateActiveProjectCard()),
+  // not a full render(), so it doesn't replay the entrance animation / number
+  // count-up of every other Home card (Finance snapshot included).
   main.querySelectorAll('[data-home-proj-nav]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const dir = Number(el.dataset.homeProjNav);
     const activeProjects = (state.projects || []).filter(p => p.status === 'active');
     if (!activeProjects.length) return;
     state.homeProjectIndex = ((state.homeProjectIndex || 0) + dir + activeProjects.length) % activeProjects.length;
-    render();
+    updateActiveProjectCard();
   }));
 
 

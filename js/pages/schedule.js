@@ -105,58 +105,68 @@ function renderSchedule() {
 
   return `
     ${topbar()}
-    <h1 class="page-title">Schedule</h1>
-    <div class="card" style="animation-delay:0ms; padding: 18px;">
-      <div class="cal-head">
-        <div>
-          <div class="month-label">${monthLabel}</div>
-          <div class="month-sub">${selDate.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })} selected</div>
+    <div class="projects-header" style="margin-bottom:18px">
+      <h1 class="page-title" style="margin:0">Schedule</h1>
+      <button class="add-btn-inline" id="add-sched-btn">+ Add event</button>
+    </div>
+    <details class="card cat-card" style="animation-delay:0ms" open>
+      <summary>
+        <div class="section-title" style="margin:0">${monthLabel}<span class="meta">${selDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} selected</span></div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body">
+        <div class="cal-head">
+          <div></div>
+          <div class="cal-nav">
+            <button data-cal-nav="-1" aria-label="Previous month">‹</button>
+            <button data-cal-today aria-label="Today" style="width:auto; padding:0 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase;">Today</button>
+            <button data-cal-nav="1" aria-label="Next month">›</button>
+          </div>
         </div>
-        <div class="cal-nav">
-          <button data-cal-nav="-1" aria-label="Previous month">‹</button>
-          <button data-cal-today aria-label="Today" style="width:auto; padding:0 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase;">Today</button>
-          <button data-cal-nav="1" aria-label="Next month">›</button>
+        <div class="cal-dow">${dows.map(d => `<div class="d">${d.charAt(0)}</div>`).join('')}</div>
+        <div class="cal-grid">
+          ${cells.map(c => {
+            const iso = isoLocal(c.d);
+            const has = (eventCount[iso] || 0) > 0;
+            const isToday = iso === todayIso;
+            const isSel = iso === sel;
+            return `<button class="cal-cell ${c.other?'other':''} ${isToday?'today':''} ${isSel?'selected':''}" data-pick-day="${iso}">
+              <span class="n">${c.d.getDate()}</span>
+              <span class="dot" style="${has?'':'visibility:hidden'}"></span>
+            </button>`;
+          }).join('')}
         </div>
       </div>
-      <div class="cal-dow">${dows.map(d => `<div class="d">${d.charAt(0)}</div>`).join('')}</div>
-      <div class="cal-grid">
-        ${cells.map(c => {
-          const iso = isoLocal(c.d);
-          const has = (eventCount[iso] || 0) > 0;
-          const isToday = iso === todayIso;
-          const isSel = iso === sel;
-          return `<button class="cal-cell ${c.other?'other':''} ${isToday?'today':''} ${isSel?'selected':''}" data-pick-day="${iso}">
-            <span class="n">${c.d.getDate()}</span>
-            <span class="dot" style="${has?'':'visibility:hidden'}"></span>
-          </button>`;
-        }).join('')}
+    </details>
+    <details class="card cat-card" style="animation-delay:100ms" open>
+      <summary>
+        <div class="section-title" style="margin:0">${selDate.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'})}<span class="meta">${list.length} ${list.length===1?'block':'blocks'}</span></div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body">
+        <ul class="list" id="sched-list">
+          ${list.map(s => {
+            const isDone = !!s.completed_at;
+            const isMissed = !isDone && (isPastDay || (sel === todayIso && s.time < nowHHMM));
+            return `
+            <li class="sched-item" data-id="${s.id}">
+              <div class="list-item row-wrap">
+                <span class="check ${isDone ? 'checked' : ''}" data-toggle-sched-done="${s.id}" title="${isDone ? 'Mark not done' : 'Mark done'}"></span>
+                <div class="time-col">${s.time}</div>
+                <div class="item-main">
+                  <div class="item-title${isDone ? ' done' : ''}">${escapeHtml(s.title)}${s.alarm_time ? `<span class="alarm-tag">⏰ ${s.alarm_time}</span>` : ''}${s.repeat && s.repeat !== 'none' ? `<span class="alarm-tag" title="${REPEAT_LABEL[s.repeat] || s.repeat}">🔁</span>` : ''}${isMissed ? `<span class="missed-tag">Missed</span>` : ''}</div>
+                  ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
+                </div>
+                <div class="sched-acts">
+                  <button class="fin-edit-btn" data-edit-sched="${s.id}" title="Edit">${ICON_PENCIL}</button>
+                  <button class="fin-del-btn" data-del-sched="${s.id}" title="Delete">${ICON_TRASH}</button>
+                </div>
+              </div>
+            </li>`;
+          }).join('') || `<li class="list-item"><div class="item-sub">No events. Tap "+ Add event" above.</div></li>`}
+        </ul>
       </div>
-    </div>
-    <div class="card" style="animation-delay:100ms">
-      <div class="section-title" style="margin-top:0">${selDate.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'})}<span class="meta">${list.length} ${list.length===1?'block':'blocks'}</span></div>
-      <ul class="list" id="sched-list">
-        ${list.map(s => {
-          const isDone = !!s.completed_at;
-          const isMissed = !isDone && (isPastDay || (sel === todayIso && s.time < nowHHMM));
-          return `
-          <li class="sched-item" data-id="${s.id}">
-            <div class="list-item row-wrap">
-              <span class="check ${isDone ? 'checked' : ''}" data-toggle-sched-done="${s.id}" title="${isDone ? 'Mark not done' : 'Mark done'}"></span>
-              <div class="time-col">${s.time}</div>
-              <div class="item-main">
-                <div class="item-title${isDone ? ' done' : ''}">${escapeHtml(s.title)}${s.alarm_time ? `<span class="alarm-tag">⏰ ${s.alarm_time}</span>` : ''}${s.repeat && s.repeat !== 'none' ? `<span class="alarm-tag" title="${REPEAT_LABEL[s.repeat] || s.repeat}">🔁</span>` : ''}${isMissed ? `<span class="missed-tag">Missed</span>` : ''}</div>
-                ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
-              </div>
-              <div class="sched-acts">
-                <button class="fin-edit-btn" data-edit-sched="${s.id}" title="Edit">${ICON_PENCIL}</button>
-                <button class="fin-del-btn" data-del-sched="${s.id}" title="Delete">${ICON_TRASH}</button>
-              </div>
-            </div>
-          </li>`;
-        }).join('') || `<li class="list-item"><div class="item-sub">No events. Add one below.</div></li>`}
-      </ul>
-      <button class="add-btn" id="add-sched-btn" style="margin-top:14px"><span class="plus">+</span> Add event</button>
-    </div>
+    </details>
   `;
 }
 

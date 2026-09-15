@@ -122,7 +122,10 @@ function renderIncome() {
 
   return `
     ${topbar()}
-    <h1 class="page-title">Income</h1>
+    <div class="projects-header" style="margin-bottom:18px">
+      <h1 class="page-title" style="margin:0">Income</h1>
+      <button class="add-btn-inline" data-modal-add="income">+ Log income</button>
+    </div>
     <div class="card" style="animation-delay:0ms">
       <div class="section-title" style="margin-top:0">${cardLabel}</div>
       <div class="num" style="font-size:42px; font-weight:300; letter-spacing:-0.02em;" data-target="${total}" data-prefix="${pfx}">${fmtMoney(0)}</div>
@@ -162,7 +165,6 @@ function renderIncome() {
             </div>
           </li>`).join('') || `<li class="list-item"><div class="item-sub">No income yet.</div></li>`}
       </ul>
-      <button class="add-btn" data-modal-add="income" style="margin-top:14px"><span class="plus">+</span> Log income</button>
     </div>
   `;
 }
@@ -198,15 +200,19 @@ function renderSpending() {
     : ({daily:"Today's total", weekly:"This week's total", monthly:"This month's total"}[filter]);
 
   const recent = filteredSpending.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
-  const PAGE_SIZE = 7;
-  const totalPages = Math.max(1, Math.ceil(recent.length / PAGE_SIZE));
-  state.spendingPage = Math.min(state.spendingPage || 1, totalPages);
-  const page = state.spendingPage;
-  const pageItems = recent.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
+  // "Recent" list mirrors Home's Activity feed: capped at 5 rows + a "Show all" /
+  // "Show less" toggle, instead of the old (never-shown) page-7-at-a-time pager.
+  const RECENT_CAP = 5;
+  const showAllSpend = !!state.spendingShowAll;
+  const cappedSpend = !showAllSpend && recent.length > RECENT_CAP;
+  const visibleSpending = cappedSpend ? recent.slice(0, RECENT_CAP) : recent;
 
   return `
     ${topbar()}
-    <h1 class="page-title">Spending</h1>
+    <div class="projects-header" style="margin-bottom:18px">
+      <h1 class="page-title" style="margin:0">Spending</h1>
+      <button class="add-btn-inline" data-modal-add="spend">+ Log spend</button>
+    </div>
     <div class="card" style="animation-delay:0ms">
       <div class="section-title" style="margin-top:0">${totalLabel}</div>
       <div class="num" style="font-size:42px; font-weight:300; letter-spacing:-0.02em;" data-target="${total}" data-prefix="${pfx}">${fmtMoney(0)}</div>
@@ -227,7 +233,7 @@ function renderSpending() {
     <div class="card" style="margin-top:16px; animation-delay:80ms">
       <div class="section-title" style="margin-top:0">Recent</div>
       <ul class="list">
-        ${pageItems.map(s => `
+        ${visibleSpending.map(s => `
           <li class="fin-item" data-id="${s.id}">
             <div class="fin-row">
               <div class="fin-row-left">
@@ -245,9 +251,10 @@ function renderSpending() {
                 <div class="fin-row-amt">−${fmtMoney(s.amount)}</div>
               </div>
             </div>
-          </li>`).join('')}
+          </li>`).join('') || `<li class="list-item"><div class="item-sub">No spending yet.</div></li>`}
       </ul>
-      <button class="add-btn" data-modal-add="spend" style="margin-top:14px"><span class="plus">+</span> Log spend</button>
+      ${cappedSpend ? `<button class="act-feed-toggle" data-spend-feed-toggle>Show all ${recent.length} activities</button>` : ''}
+      ${!cappedSpend && showAllSpend && recent.length > RECENT_CAP ? `<button class="act-feed-toggle" data-spend-feed-toggle>Show less</button>` : ''}
     </div>
   `;
 }
@@ -263,7 +270,10 @@ function renderDebts() {
   const pageItems = sorted.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
   return `
     ${topbar()}
-    <h1 class="page-title">Debts</h1>
+    <div class="projects-header" style="margin-bottom:18px">
+      <h1 class="page-title" style="margin:0">Debts</h1>
+      <button class="add-btn-inline" data-modal-add="debt">+ Add debt</button>
+    </div>
     <div class="card" style="animation-delay:0ms">
       <div class="section-title" style="margin-top:0">Open total</div>
       <div class="num" style="font-size:42px; font-weight:300; letter-spacing:-0.02em;" data-target="${totalDebt()}" data-prefix="${pfx}">${fmtMoney(0)}</div>
@@ -306,7 +316,6 @@ function renderDebts() {
         <span class="debts-pager-label">Page ${page} of ${totalPages}</span>
         <button class="proj-nav-btn" data-debts-page-nav="1" ${page>=totalPages?'disabled':''} title="Next page">&#x203A;</button>
       </div>` : ''}
-      <button class="add-btn" data-modal-add="debt" style="margin-top:14px"><span class="plus">+</span> Add debt</button>
     </div>
   `;
 }
@@ -468,6 +477,7 @@ function bindFinanceEvents() {
     state.spendingFilter = el.dataset.spendFilter;
     state.spendingPickedDate = null;
     state.spendingPage = 1;
+    state.spendingShowAll = false;
     render();
   }));
 
@@ -475,6 +485,7 @@ function bindFinanceEvents() {
   if (spendDateInput) spendDateInput.addEventListener('change', () => {
     state.spendingPickedDate = spendDateInput.value || null;
     state.spendingPage = 1;
+    state.spendingShowAll = false;
     render();
   });
 
@@ -482,6 +493,14 @@ function bindFinanceEvents() {
   if (spendDateClear) spendDateClear.addEventListener('click', () => {
     state.spendingPickedDate = null;
     state.spendingPage = 1;
+    state.spendingShowAll = false;
+    render();
+  });
+
+  // spending: "Recent" list — "Show all" / "Show less" toggle (mirrors Home's Activity feed)
+  const spendFeedToggle = main.querySelector('[data-spend-feed-toggle]');
+  if (spendFeedToggle) spendFeedToggle.addEventListener('click', () => {
+    state.spendingShowAll = !state.spendingShowAll;
     render();
   });
 
