@@ -71,6 +71,100 @@ function getWeekDays(mondayIso) {
   }
   return days;
 }
+// Habit-grid table (2026-09-18, replaced the old separate Week strip + Month calendar tabs):
+// rows = commitments, columns = days — the classic bullet-journal/habit-tracker layout, so a
+// glance shows both per-commitment patterns (reading a row) and same-day comparisons (reading
+// a column), which neither the old aggregate-%-only Week/Month views nor a single day's drill-down
+// could show at once. `commitGridRange` toggles the column count between a 7-day week and a
+// full month (horizontally scrollable — the name column stays sticky via CSS position:sticky).
+function renderCommitHabitGrid() {
+  const today = todayISO();
+  const allGoals = state.goals.items || [];
+  const range = state.commitGridRange || 'week';
+  let days, rangeLabel, isCurrent, navKey;
+
+  if (range === 'month') {
+    const viewMonthStr = state.commitViewMonth || today.slice(0, 7);
+    const [vy, vm] = viewMonthStr.split('-').map(Number);
+    isCurrent = viewMonthStr === today.slice(0, 7);
+    const daysInMonth = new Date(vy, vm, 0).getDate();
+    days = Array.from({ length: daysInMonth }, (_, i) => `${String(vy).padStart(4, '0')}-${String(vm).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`);
+    rangeLabel = new Date(vy, vm - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    navKey = 'month';
+  } else {
+    const monday = state.commitViewWeekStart || getMondayOf(today);
+    isCurrent = monday === getMondayOf(today);
+    days = getWeekDays(monday).map(isoLocal);
+    rangeLabel = `${fmtDate(days[0])} – ${fmtDate(days[6])}`;
+    navKey = 'week';
+  }
+
+  const headerCells = days.map(iso => {
+    const d = new Date(iso + 'T00:00:00');
+    const isToday = iso === today;
+    const isFuture = iso > today;
+    const dow = range === 'week' ? `<div class="habit-table-dow">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}</div>` : '';
+    return `<th class="habit-table-daycol${isToday ? ' today' : ''}${isFuture ? ' future' : ''}">${dow}<div class="habit-table-daynum">${d.getDate()}</div></th>`;
+  }).join('');
+
+  function habitCellHtml(g, iso) {
+    if (iso > today) return `<td class="habit-cell future">–</td>`;
+    const target = g.target_count || 1;
+    const log = getLogByDate(g.id, iso);
+    const checked = log?.checked || false;
+    const count = log?.count || 0;
+    if (target > 1) {
+      const cls = `habit-cell counter${checked ? ' done' : count > 0 ? ' partial' : ''}`;
+      return `<td class="${cls}" title="${iso} · ${count}/${target}${g.unit ? ' ' + escapeHtml(g.unit) : ''}">${count}</td>`;
+    }
+    return `<td class="habit-cell${checked ? ' done' : ''}" title="${iso}${checked ? ' · done' : ''}">${checked ? '&#10003;' : '&#183;'}</td>`;
+  }
+
+  // Sorted by category (not labeled inline — the point is a quick per-row/per-column scan,
+  // not a second copy of the category cards above) so related commitments still sit together.
+  const orderedGoals = getGoalCategories().flatMap(cat => categoryItems(cat));
+  const rows = orderedGoals.map(g => {
+    const streak = computeGoalStreak(g.id);
+    return `
+      <tr>
+        <td class="habit-table-namecol" title="${escapeHtml(g.text)}">${escapeHtml(g.text)}${streak > 0 ? ` <span class="habit-table-streak">&#128293;${streak}</span>` : ''}</td>
+        ${days.map(iso => habitCellHtml(g, iso)).join('')}
+      </tr>`;
+  }).join('');
+
+  const footerCells = days.map(iso => {
+    if (iso > today) return `<td class="habit-cell future">–</td>`;
+    const pct = allGoals.length ? Math.round(getDayCompliancePct(iso)) : 0;
+    return `<td class="habit-cell" style="${commitHeatTint(pct)}" title="${iso} · ${pct}%">${pct}</td>`;
+  }).join('');
+
+  return `
+    <div class="commit-grid-toolbar">
+      <div class="commit-grid-range-toggle">
+        <button class="commit-tab-btn${range === 'week' ? ' active' : ''}" data-commit-grid-range="week">Week</button>
+        <button class="commit-tab-btn${range === 'month' ? ' active' : ''}" data-commit-grid-range="month">Month</button>
+      </div>
+      <div class="commit-day-nav" style="margin-top:0;flex:1;min-width:160px">
+        <button class="proj-nav-btn" data-commit-${navKey}-nav="-1" title="Previous ${range}">&#8249;</button>
+        <span class="commit-day-label">${rangeLabel}</span>
+        <button class="proj-nav-btn" data-commit-${navKey}-nav="1" title="Next ${range}"${isCurrent ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
+        ${!isCurrent ? `<button class="commit-tab-btn" data-commit-${navKey}-today>This ${range}</button>` : ''}
+      </div>
+    </div>
+    ${allGoals.length ? `
+      <div class="habit-table-wrap">
+        <table class="habit-table">
+          <thead><tr><th class="habit-table-namecol"></th>${headerCells}</tr></thead>
+          <tbody>
+            ${rows}
+            <tr class="habit-table-footer-row">
+              <td class="habit-table-namecol">Daily %</td>
+              ${footerCells}
+            </tr>
+          </tbody>
+        </table>
+      </div>` : `<div class="item-sub" style="margin-top:10px">No commitments yet.</div>`}`;
+}
 function buildCommitYearHeatmapData(year) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const jan1 = new Date(year, 0, 1);
@@ -291,7 +385,6 @@ function updateComplianceRing() {
 }
 
 function renderCommitments() {
-  const today = todayISO();
   const allGoals  = state.goals.items || [];
   const totalGoals = allGoals.length;
 
@@ -348,80 +441,15 @@ function renderCommitments() {
       </details>`;
   }
 
-  // History tab content — Week / Month / Year (all derived from goalLogs, already fully loaded).
-  // 'day' was a standalone tab until 2026-09-18; a legacy in-session value falls back to 'week'.
-  if (state.commitPreviewTab === 'day') state.commitPreviewTab = 'week';
+  // History tab content — Grid (habit-tracker table, Week/Month range) / Year.
+  // 'day'/'week'/'month' were standalone tabs until 2026-09-18; any legacy in-session
+  // value falls back to the unified 'grid' tab.
+  if (['day', 'week', 'month'].includes(state.commitPreviewTab)) state.commitPreviewTab = 'grid';
   const tab = state.commitPreviewTab;
   let tabBodyHtml = '';
 
-  if (tab === 'week') {
-    const weekDayNames  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    const weekMonday    = state.commitViewWeekStart || getMondayOf(today);
-    const isCurrentWeek = weekMonday === getMondayOf(today);
-    const weekDays      = getWeekDays(weekMonday);
-    const weekRangeLabel = `${fmtDate(weekDays[0])} – ${fmtDate(weekDays[6])}`;
-    const weeklyHtml = weekDays.map((d, i) => {
-      const iso = isoLocal(d);
-      const isFuture = iso > today;
-      const isToday  = iso === today;
-      if (isFuture) return `<div class="week-day"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle future">–</div><div class="week-pct">–</div></div>`;
-      const pct = getDayCompliancePct(iso);
-      const cls  = pct >= 80 ? 'full' : pct >= 40 ? 'half' : pct > 0 ? 'low' : 'zero';
-      const char = pct >= 80 ? '●' : pct >= 40 ? '◐' : pct > 0 ? '◔' : '○';
-      return `<div class="week-day${isToday ? ' today' : ''}"><div class="week-day-label">${weekDayNames[i]}</div><div class="week-circle ${cls}">${char}</div><div class="week-pct">${Math.round(pct)}%</div></div>`;
-    }).join('');
-    tabBodyHtml = `
-      <div class="commit-day-nav">
-        <button class="proj-nav-btn" data-commit-week-nav="-1" title="Previous week">&#8249;</button>
-        <span class="commit-day-label">${weekRangeLabel}</span>
-        <button class="proj-nav-btn" data-commit-week-nav="1" title="Next week"${isCurrentWeek ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
-        ${!isCurrentWeek ? `<button class="commit-tab-btn" data-commit-week-today>This week</button>` : ''}
-      </div>
-      <div class="week-strip" style="margin-top:12px">${weeklyHtml}</div>`;
-
-  } else if (tab === 'month') {
-    const viewMonthStr   = state.commitViewMonth || today.slice(0, 7);
-    const [vy, vm]       = viewMonthStr.split('-').map(Number);
-    const monthLabel     = new Date(vy, vm - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-    const isCurrentMonth = viewMonthStr === today.slice(0, 7);
-    const firstDow       = new Date(vy, vm - 1, 1).getDay();
-    const daysInMonth    = new Date(vy, vm, 0).getDate();
-    const calDows = ['S','M','T','W','T','F','S'];
-    let monthCalHtml = calDows.map(d => `<div class="commit-cal-dow">${d}</div>`).join('');
-    for (let i = 0; i < firstDow; i++) monthCalHtml += `<div class="commit-cal-cell other"></div>`;
-    let monthSum = 0, monthDayCount = 0, monthPerfect = 0;
-    for (let day = 1; day <= daysInMonth; day++) {
-      const iso = `${String(vy).padStart(4,'0')}-${String(vm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-      const isToday  = iso === today;
-      const isFuture = iso > today;
-      let bg = '';
-      let tt = '';
-      let clickable = false;
-      if (!isFuture && totalGoals > 0) {
-        const pct = getDayCompliancePct(iso);
-        bg = commitHeatTint(pct);
-        tt = `title="${Math.round(pct)}%"`;
-        clickable = true;
-        monthSum += pct; monthDayCount++;
-        if (pct >= 100) monthPerfect++;
-      }
-      const selected = iso === state.commitViewDay;
-      const cls = `commit-cal-cell${isToday ? ' today' : ''}${isFuture ? ' future' : ''}${clickable ? ' clickable' : ''}${selected ? ' selected' : ''}`;
-      const sel = clickable ? ` data-commit-day-select="${iso}"` : '';
-      monthCalHtml += `<div class="${cls}" style="${bg}" ${tt}${sel}>${day}</div>`;
-    }
-    const monthAvgPct = monthDayCount ? Math.round(monthSum / monthDayCount) : 0;
-    tabBodyHtml = `
-      <div class="commit-day-nav">
-        <button class="proj-nav-btn" data-commit-month-nav="-1" title="Previous month">&#8249;</button>
-        <span class="commit-day-label">${monthLabel}</span>
-        <button class="proj-nav-btn" data-commit-month-nav="1" title="Next month"${isCurrentMonth ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
-        ${!isCurrentMonth ? `<button class="commit-tab-btn" data-commit-month-today>This month</button>` : ''}
-      </div>
-      ${totalGoals ? `<div class="commit-month-stats">${monthAvgPct}% average · ${monthPerfect} perfect day${monthPerfect === 1 ? '' : 's'}</div>` : ''}
-      <div class="commit-cal-grid">${monthCalHtml}</div>
-      ${state.commitViewDay ? commitDayDetailHtml(state.commitViewDay) : ''}`;
-
+  if (tab === 'grid') {
+    tabBodyHtml = renderCommitHabitGrid();
   } else {
     tabBodyHtml = renderCommitYearHeatmap(state.commitHeatmapYear, totalGoals > 0) + (state.commitViewDay ? commitDayDetailHtml(state.commitViewDay) : '');
   }
@@ -485,8 +513,7 @@ function renderCommitments() {
     <div class="commit-quest-label">History</div>
     <div class="card" style="animation-delay:80ms">
       <div class="commit-preview-tabs">
-        <button class="commit-tab-btn${tab === 'week'  ? ' active' : ''}" data-commit-tab="week">Week</button>
-        <button class="commit-tab-btn${tab === 'month' ? ' active' : ''}" data-commit-tab="month">Month</button>
+        <button class="commit-tab-btn${tab === 'grid'  ? ' active' : ''}" data-commit-tab="grid">Grid</button>
         <button class="commit-tab-btn${tab === 'year'  ? ' active' : ''}" data-commit-tab="year">Year</button>
       </div>
       ${tabBodyHtml}
@@ -503,6 +530,13 @@ function bindCommitmentsEvents() {
   main.querySelectorAll('[data-commit-tab]').forEach(el => el.addEventListener('click', () => {
     state.commitPreviewTab = el.dataset.commitTab;
     state.commitViewDay = null;
+    render();
+  }));
+
+
+  // habit grid: Week/Month range toggle
+  main.querySelectorAll('[data-commit-grid-range]').forEach(el => el.addEventListener('click', () => {
+    state.commitGridRange = el.dataset.commitGridRange;
     render();
   }));
 

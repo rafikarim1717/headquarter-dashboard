@@ -85,8 +85,9 @@ let state = {
   notesSort: 'newest',
   notesFilter: 'all',
   notesDisplay: 'grid',
-  commitPreviewTab: 'week',   // 'week' | 'month' | 'year' — 'day' removed 2026-09-18, replaced by click-to-drill on a Month/Year cell
-  commitViewDay: null,        // iso date of the day-detail panel drilled into from Month/Year, or null if none selected
+  commitPreviewTab: 'grid',   // 'grid' | 'year' — replaced 'day'/'week'/'month' 2026-09-18 with a single habit-grid table (see commitGridRange) plus Year
+  commitGridRange: 'week',    // 'week' | 'month' — how many day-columns the habit grid shows
+  commitViewDay: null,        // iso date of the day-detail panel drilled into from Year, or null if none selected
   commitViewWeekStart: null,  // Monday ISO date; null = current week
   commitViewMonth: todayISO().slice(0, 7),
   commitHeatmapYear: new Date().getFullYear(),

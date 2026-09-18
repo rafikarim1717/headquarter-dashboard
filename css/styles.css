@@ -1491,48 +1491,40 @@
     .compliance-bar-lbl { width: auto; min-width: 40px; }
   }
 
-  /* weekly recap strip */
-  .week-strip { display: flex; justify-content: space-between; padding: 4px 0; }
-  .week-day { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 1; }
-  .week-day.today .week-day-label { color: var(--accent); font-weight: 600; }
-  .week-day-label {
-    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint);
+  /* habit-table table (rows = commitments, columns = days) — replaced the old weekly
+     recap strip + monthly compliance calendar (2026-09-18) */
+  .commit-grid-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+  .commit-grid-range-toggle { display: flex; gap: 4px; }
+  .habit-table-wrap { overflow-x: auto; margin-top: 14px; -webkit-overflow-scrolling: touch; }
+  .habit-table { border-collapse: separate; border-spacing: 0; }
+  .habit-table th, .habit-table td { text-align: center; vertical-align: middle; }
+  .habit-table-namecol {
+    position: sticky; left: 0; z-index: 1; background: var(--card);
+    text-align: left; padding: 4px 12px 4px 0; font-size: 11.5px; color: var(--text-dim);
+    white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis;
+    border-right: 1px solid var(--border);
   }
-  .week-circle {
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1.5px solid var(--border-strong);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; color: var(--text-faint);
+  .habit-table-daycol {
+    font-size: 10px; color: var(--text-faint); font-weight: 500; padding-bottom: 6px; min-width: 28px;
   }
-  .week-circle.full  { background: var(--accent); border-color: var(--accent); color: var(--bg); }
-  .week-circle.half  { background: color-mix(in oklab, var(--accent) 28%, transparent); border-color: var(--accent); color: var(--accent); }
-  .week-circle.low   { background: color-mix(in oklab, var(--danger) 28%, transparent); border-color: var(--danger); color: var(--danger); }
-  .week-circle.zero  { color: var(--text-faint); }
-  .week-circle.future { opacity: 0.3; border-style: dashed; }
-  .week-pct { font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
-  .week-day.today .week-pct { color: var(--text-dim); }
-
-  /* monthly compliance calendar */
-  .commit-cal-grid {
-    display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 6px;
+  .habit-table-daycol.today { color: var(--accent); font-weight: 700; }
+  .habit-table-daycol.future { opacity: 0.35; }
+  .habit-table-dow { text-transform: uppercase; font-size: 9px; letter-spacing: 0.08em; }
+  .habit-table-daynum { font-variant-numeric: tabular-nums; }
+  .habit-table tbody tr:not(.habit-table-footer-row) td { border-bottom: 1px solid var(--border); }
+  .habit-table tbody tr:not(.habit-table-footer-row):last-of-type td { border-bottom: 0; }
+  .habit-cell {
+    width: 28px; height: 28px; font-size: 12px; font-variant-numeric: tabular-nums;
+    color: var(--text-faint); border-radius: 6px;
   }
-  .commit-cal-dow {
-    text-align: center; font-size: 10px; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--text-faint); font-weight: 500; padding: 2px 0 6px;
-  }
-  .commit-cal-cell {
-    aspect-ratio: 1 / 1; border-radius: 7px; font-size: 11px; color: var(--text-dim);
-    display: flex; align-items: center; justify-content: center;
-    font-variant-numeric: tabular-nums; cursor: default;
-    transition: opacity var(--t-fast) ease, transform var(--t-fast) ease, outline-color var(--t-fast) ease;
-  }
-  .commit-cal-cell.other  { opacity: 0; pointer-events: none; }
-  .commit-cal-cell.today  { outline: 1.5px solid var(--accent); outline-offset: -1px; color: var(--text); }
-  .commit-cal-cell.future { color: var(--text-faint); opacity: 0.3; }
-  .commit-cal-cell.clickable { cursor: pointer; }
-  .commit-cal-cell.clickable:hover { transform: scale(1.1); }
-  .commit-cal-cell.selected { outline: 2px solid var(--text); outline-offset: -1px; color: var(--text); font-weight: 600; }
-  .commit-month-stats { font-size: 11px; color: var(--text-faint); margin-top: 10px; text-align: center; }
+  .habit-cell.done { color: var(--accent); font-weight: 700; background: color-mix(in oklab, var(--accent) 18%, transparent); }
+  .habit-cell.future { opacity: 0.3; }
+  .habit-cell.counter { color: var(--text-dim); }
+  .habit-cell.counter.partial { color: var(--text); background: color-mix(in oklab, var(--danger) 18%, transparent); }
+  .habit-cell.counter.done { color: var(--accent); font-weight: 700; background: color-mix(in oklab, var(--accent) 18%, transparent); }
+  .habit-table-streak { font-size: 10px; color: var(--text-faint); }
+  .habit-table-footer-row td { border-top: 1px solid var(--border-strong); padding-top: 8px; font-weight: 600; color: var(--text-dim); }
+  .habit-table-footer-row .habit-table-namecol { color: var(--text-dim); }
 
   /* commitments page — preview tab buttons */
   .commit-preview-tabs {
