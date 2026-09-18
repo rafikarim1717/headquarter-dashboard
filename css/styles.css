@@ -599,7 +599,6 @@
   }
   .act-feed-tag-project { background: var(--accent); }
   .act-feed-tag-do { background: var(--good); }
-  .act-feed-tag-dont { background: var(--danger); }
   /* .act-feed-tag-schedule intentionally uses the base .act-feed-tag color
      (var(--text-dim)) — a 4th distinct color isn't in the token set, and a
      neutral gray reads fine against the other three. */
@@ -819,11 +818,18 @@
     color: var(--accent); margin: 22px 4px 10px; display: flex; align-items: center; gap: 6px;
   }
 
-  /* ---- "Don't"-type commitment tag (shown inline within a category card) ---- */
-  .dont-tag {
-    font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--danger);
-    border: 1px solid color-mix(in oklab, var(--danger) 50%, var(--border));
-    border-radius: var(--r-pill); padding: 2px 7px; flex-shrink: 0;
+  /* ---- per-commitment streak badge (consecutive checked days, grace until day ends) ---- */
+  .goal-streak {
+    font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .goal-streak:empty { display: none; }
+
+  /* ---- per-commitment cue time badge (goals.reminder_time) ---- */
+  .goal-time-badge {
+    font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--text-faint);
+    border: 1px solid var(--border); border-radius: var(--r-pill);
+    padding: 2px 7px; flex-shrink: 0; white-space: nowrap;
   }
 
   /* ============ SCHEDULE EDIT ============ */
@@ -1557,7 +1563,6 @@
   .commit-day-row.checked .commit-day-text { color: var(--text); }
   .commit-day-text { flex: 1; }
   .commit-day-count { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-  .commit-day-type { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }
 
   /* commitments page — yearly compliance heatmap */
   .heatmap-cell.lvl-low  { background: color-mix(in oklab, var(--danger) 40%, transparent); }

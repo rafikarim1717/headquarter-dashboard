@@ -92,9 +92,8 @@ async function loadFromSupabase(userId) {
     state.schedule[d].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '', alarm_time: e.alarm_time || null, completed_at: e.completed_at || null, repeat: e.repeat || 'none', series_id: e.series_id || null });
   });
 
-  // Goals
-  state.goals.dos   = (goalsRes.data || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General' }));
-  state.goals.donts = (goalsRes.data || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General' }));
+  // Goals — one flat list, no Do/Don't split (legacy rows may still carry type: 'dont' in the DB; ignored on read).
+  state.goals.items = (goalsRes.data || []).map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General', reminder_time: g.reminder_time || null }));
   state.goalLogs    = (goalLogsRes.data || []).map(l => ({ id: l.id, goal_id: l.goal_id, user_id: l.user_id, date: l.date, checked: l.checked, count: l.count || 0, completed_at: l.completed_at || null }));
 
   // Projects
@@ -169,29 +168,12 @@ async function seedSampleData(userId) {
     state.schedule[e.date].push({ id: e.id, time: e.time, title: e.title, sub: e.note || '', alarm_time: null, completed_at: null });
   });
 
-  // Goals
-  const goalRows = [
-    ...def.goals.dos.map((g, i) => ({ user_id: userId, type: 'do', text: g.text, order_index: i })),
-    ...def.goals.donts.map((g, i) => ({ user_id: userId, type: 'dont', text: g.text, order_index: i }))
-  ];
+  // Goals — no Do/Don't split; every seeded commitment is written as type: 'do'
+  // (the column stays in the DB for now, just unused by the app — see CLAUDE.md).
+  const goalRows = def.goals.items.map((g, i) => ({ user_id: userId, type: 'do', text: g.text, category: g.category || 'General', order_index: i }));
   const { data: goalData } = await sb.from('goals').insert(goalRows).select();
-  state.goals.dos   = (goalData || []).filter(g => g.type === 'do').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General' }));
-  state.goals.donts = (goalData || []).filter(g => g.type === 'dont').map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General' }));
-
-  // Goal logs — seed today's checked state from defaultState
-  const today = todayISO();
-  const defDos   = def.goals.dos;
-  const defDonts = def.goals.donts;
-  const goalLogRows = [];
-  (goalData || []).forEach(g => {
-    const defList = g.type === 'do' ? defDos : defDonts;
-    const defGoal = defList.find(d => d.text === g.text);
-    if (defGoal && defGoal.done) goalLogRows.push({ user_id: userId, goal_id: g.id, date: today, checked: true, count: g.target_count || 1, completed_at: new Date().toISOString() });
-  });
-  const { data: glData } = goalLogRows.length
-    ? await sb.from('goal_logs').insert(goalLogRows).select()
-    : { data: [] };
-  state.goalLogs = (glData || []).map(l => ({ id: l.id, goal_id: l.goal_id, user_id: l.user_id, date: l.date, checked: l.checked, count: l.count || 0, completed_at: l.completed_at || null }));
+  state.goals.items = (goalData || []).map(g => ({ id: g.id, text: g.text, target_count: g.target_count || 1, unit: g.unit || null, category: g.category || 'General', reminder_time: g.reminder_time || null }));
+  state.goalLogs = [];
 
   // Projects
   const now = new Date().toISOString();

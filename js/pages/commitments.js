@@ -11,8 +11,24 @@ function getTodayLog(goalId) {
 function getLogByDate(goalId, date) {
   return state.goalLogs.find(l => l.goal_id === goalId && l.date === date) || null;
 }
+// Consecutive-day streak ending today, with a grace period: if today isn't checked yet,
+// counting starts from yesterday instead of zeroing out immediately (the day isn't over
+// yet). Supersedes the unused computeStreak() in js/supabase.js, which broke the streak
+// the instant today was unchecked, even first thing in the morning.
+function computeGoalStreak(goalId) {
+  const checkedDates = new Set(state.goalLogs.filter(l => l.goal_id === goalId && l.checked).map(l => l.date));
+  const today = todayISO();
+  const cursor = new Date(today + 'T00:00:00');
+  if (!checkedDates.has(today)) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (checkedDates.has(isoLocal(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
 function getDayCompliancePct(dateIso) {
-  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const allGoals = state.goals.items || [];
   if (!allGoals.length) return 0;
   const checked = allGoals.filter(g => {
     const log = state.goalLogs.find(l => l.goal_id === g.id && l.date === dateIso);
@@ -22,11 +38,11 @@ function getDayCompliancePct(dateIso) {
 }
 const GOAL_CATEGORY_PRESET = ['Olahraga', 'Kerja', 'Bahasa', 'Spiritual', 'Personal & Mental'];
 function categoryItems(cat) {
-  return [...(state.goals.dos || []), ...(state.goals.donts || [])].filter(g => (g.category || 'General') === cat);
+  return (state.goals.items || []).filter(g => (g.category || 'General') === cat);
 }
 // Categories that currently have at least one commitment, in preset order then any custom ones alphabetically, 'General' last.
 function getGoalCategories() {
-  const used = new Set([...(state.goals.dos || []), ...(state.goals.donts || [])].map(g => g.category || 'General'));
+  const used = new Set((state.goals.items || []).map(g => g.category || 'General'));
   const ordered = GOAL_CATEGORY_PRESET.filter(c => used.has(c));
   const extra = [...used].filter(c => !GOAL_CATEGORY_PRESET.includes(c) && c !== 'General').sort();
   const result = ordered.concat(extra);
@@ -35,7 +51,7 @@ function getGoalCategories() {
 }
 // Full pickable category list for the Add/Edit modals — presets always offered, plus any custom ones already in use.
 function getCategoryOptions() {
-  const used = new Set([...(state.goals.dos || []), ...(state.goals.donts || [])].map(g => g.category || 'General'));
+  const used = new Set((state.goals.items || []).map(g => g.category || 'General'));
   const extra = [...used].filter(c => !GOAL_CATEGORY_PRESET.includes(c)).sort();
   return [...GOAL_CATEGORY_PRESET, ...extra];
 }
@@ -123,8 +139,52 @@ function updateCategoryHeaderCount(cat) {
     if (el.dataset.goalProgressMini === cat) el.style.width = pct + '%';
   });
 }
+// Daily reminder cue (goals.reminder_time) — an Atomic Habits-style
+// implementation intention ("at this time, do this"), distinct from
+// Schedule's one-off alarm_time. Reuses Schedule's alarm banner/beep/
+// notification system (fireAlarm/showAlarmBanner in js/pages/schedule.js)
+// and its firedAlarms Set, namespaced with a 'goal:'/'goal-nudge:' prefix
+// so ids never collide with schedule_events ids. Fires once at
+// reminder_time, then once more GOAL_REMINDER_GRACE_MINUTES later as a
+// gentler nudge — both only if the commitment isn't checked off yet today.
+const GOAL_REMINDER_GRACE_MINUTES = 45;
+function fireGoalReminder(g, isNudge) {
+  fireAlarm(
+    { id: g.id, title: g.text, time: g.reminder_time },
+    isNudge ? `Still open today${g.category ? ' · ' + g.category : ''}` : `Time for your commitment${g.category ? ' · ' + g.category : ''}`
+  );
+}
+function checkGoalReminders() {
+  const items = state.goals.items || [];
+  if (!items.length) return;
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  items.forEach(g => {
+    if (!g.reminder_time) return;
+    if (getTodayLog(g.id)?.checked) return;
+    const [hh, mm] = g.reminder_time.split(':').map(Number);
+    const remindMinutes = hh * 60 + mm;
+    const primaryKey = 'goal:' + g.id;
+    const nudgeKey = 'goal-nudge:' + g.id;
+    if (!firedAlarms.has(primaryKey) && Math.abs(nowMinutes - remindMinutes) <= 1) {
+      firedAlarms.add(primaryKey);
+      fireGoalReminder(g, false);
+    } else if (!firedAlarms.has(nudgeKey) && Math.abs(nowMinutes - (remindMinutes + GOAL_REMINDER_GRACE_MINUTES)) <= 1) {
+      firedAlarms.add(nudgeKey);
+      fireGoalReminder(g, true);
+    }
+  });
+}
+function updateGoalStreakBadge(goalId) {
+  const el = document.querySelector(`[data-goal-streak="${goalId}"]`);
+  if (!el) return;
+  const streak = computeGoalStreak(goalId);
+  el.textContent = streak > 0 ? '\u{1F525}' + streak : '';
+  if (streak > 0) el.title = `${streak}-day streak`;
+  else el.removeAttribute('title');
+}
 function computeDailyScore() {
-  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const allGoals = state.goals.items || [];
   const totalGoals = allGoals.length;
   if (!totalGoals) return 0;
   const checkedToday = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
@@ -147,7 +207,7 @@ function animateComplianceRing() {
 function updateComplianceRing() {
   const card = document.getElementById('commit-compliance-card');
   if (!card) return;
-  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const allGoals = state.goals.items || [];
   const total    = allGoals.length;
   const checked  = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
   const pct      = total ? Math.round(checked / total * 100) : 0;
@@ -173,45 +233,44 @@ function updateComplianceRing() {
 
 function renderCommitments() {
   const today = todayISO();
-  const dos   = state.goals.dos   || [];
-  const donts = state.goals.donts || [];
-  const allGoals  = [...dos, ...donts];
+  const allGoals  = state.goals.items || [];
   const totalGoals = allGoals.length;
 
   const overallChecked = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
   const overallPct     = totalGoals ? Math.round(overallChecked / totalGoals * 100) : 0;
   const categories      = getGoalCategories();
 
-  function goalRow(i, key) {
+  function goalRow(i) {
     const target = i.target_count || 1;
     const log = getTodayLog(i.id);
     const count = log?.count || 0;
     const isDone = log?.checked || false;
     const control = target > 1 ? `
         <div class="goal-counter">
-          <button type="button" class="goal-count-btn" data-goal-bump="-1|${key}|${i.id}" aria-label="Decrease">&#8722;</button>
+          <button type="button" class="goal-count-btn" data-goal-bump="-1|${i.id}" aria-label="Decrease">&#8722;</button>
           <span class="goal-count-val" data-goal-count-val="${i.id}">${count}/${target}${i.unit ? ' ' + escapeHtml(i.unit) : ''}</span>
-          <button type="button" class="goal-count-btn" data-goal-bump="1|${key}|${i.id}" aria-label="Increase">&#43;</button>
-        </div>` : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal="${key}|${i.id}"></span>`;
-    const dontTag = key === 'donts' ? `<span class="dont-tag">Don't</span>` : '';
+          <button type="button" class="goal-count-btn" data-goal-bump="1|${i.id}" aria-label="Increase">&#43;</button>
+        </div>` : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal="${i.id}"></span>`;
+    const streak = computeGoalStreak(i.id);
+    const streakBadge = `<span class="goal-streak" data-goal-streak="${i.id}"${streak > 0 ? ` title="${streak}-day streak"` : ''}>${streak > 0 ? '&#128293;' + streak : ''}</span>`;
+    const timeBadge = i.reminder_time ? `<span class="goal-time-badge" title="Cue time">&#128337; ${escapeHtml(i.reminder_time)}</span>` : '';
     return `
     <li class="goal-item${isDone ? ' goal-done' : ''}" draggable="true" data-goal-drag="${i.id}" data-goal-row="${i.id}">
       <div class="list-item" style="padding:10px 0;align-items:center">
         ${control}
         <span class="check-label ${isDone ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
-        ${dontTag}
+        ${timeBadge}
+        ${streakBadge}
         <div class="fin-acts">
-          <button class="fin-edit-btn" data-edit-goal="${key}|${i.id}">&#x270E;</button>
-          <button class="fin-del-btn" data-del-goal="${key}|${i.id}" title="Delete">${ICON_TRASH}</button>
+          <button class="fin-edit-btn" data-edit-goal="${i.id}">&#x270E;</button>
+          <button class="fin-del-btn" data-del-goal="${i.id}" title="Delete">${ICON_TRASH}</button>
         </div>
       </div>
     </li>`;
   }
 
   function categoryCard(cat, idx) {
-    const dosInCat   = dos.filter(g => (g.category || 'General') === cat);
-    const dontsInCat = donts.filter(g => (g.category || 'General') === cat);
-    const itemsInCat = [...dosInCat, ...dontsInCat];
+    const itemsInCat = categoryItems(cat);
     const checkedInCat = itemsInCat.filter(g => getTodayLog(g.id)?.checked).length;
     const pctInCat = itemsInCat.length ? Math.round(checkedInCat / itemsInCat.length * 100) : 0;
     return `
@@ -224,8 +283,7 @@ function renderCommitments() {
           </div>
         </summary>
         <div class="cat-body">
-          ${dosInCat.length ? `<ul class="list" style="padding:0" data-goal-list="dos" data-goal-cat="${escapeHtml(cat)}">${dosInCat.map(i => goalRow(i, 'dos')).join('')}</ul>` : ''}
-          ${dontsInCat.length ? `<ul class="list" style="padding:0" data-goal-list="donts" data-goal-cat="${escapeHtml(cat)}">${dontsInCat.map(i => goalRow(i, 'donts')).join('')}</ul>` : ''}
+          ${itemsInCat.length ? `<ul class="list" style="padding:0" data-goal-list data-goal-cat="${escapeHtml(cat)}">${itemsInCat.map(i => goalRow(i)).join('')}</ul>` : ''}
           <button class="add-btn" data-add-commit="${escapeHtml(cat)}" style="margin-top:14px"><span class="plus">+</span> Add to ${escapeHtml(cat)}</button>
         </div>
       </details>`;
@@ -241,7 +299,6 @@ function renderCommitments() {
     const dayLabel = isToday ? 'Today' : new Date(viewDay + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
     const dayPct   = totalGoals ? Math.round(getDayCompliancePct(viewDay)) : 0;
     const rows = allGoals.map(g => {
-      const isDo   = dos.includes(g);
       const target = g.target_count || 1;
       const log    = getLogByDate(g.id, viewDay);
       const checked = log?.checked || false;
@@ -251,7 +308,6 @@ function renderCommitments() {
           <span class="commit-day-icon">${checked ? '&#10003;' : '&#8211;'}</span>
           <span class="commit-day-text">${escapeHtml(g.text)}</span>
           ${target > 1 ? `<span class="commit-day-count">${count}/${target}</span>` : ''}
-          <span class="commit-day-type">${isDo ? "Do" : "Don't"}</span>
         </li>`;
     }).join('');
     tabBodyHtml = `
@@ -462,8 +518,8 @@ function bindCommitmentsEvents() {
 
   // goal toggle → upsert goal_logs (target_count === 1 items only; counter items use data-goal-bump)
   main.querySelectorAll('[data-toggle-goal]').forEach(el => el.addEventListener('click', async () => {
-    const [k, id] = el.dataset.toggleGoal.split('|');
-    const g = (state.goals[k] || []).find(x => x.id === id);
+    const id = el.dataset.toggleGoal;
+    const g = (state.goals.items || []).find(x => x.id === id);
     if (!g || !currentUser) return;
     const target = g.target_count || 1;
     const today = todayISO();
@@ -485,6 +541,7 @@ function bindCommitmentsEvents() {
     if (labelEl) labelEl.classList.toggle('done', newChecked);
     updateCategoryHeaderCount(g.category || 'General');
     updateComplianceRing();
+    updateGoalStreakBadge(id);
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
       { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
       { onConflict: 'goal_id,date' }
@@ -498,9 +555,9 @@ function bindCommitmentsEvents() {
 
   // goal counter bump (+/-) → upsert goal_logs.count, derives checked = count >= target_count
   main.querySelectorAll('[data-goal-bump]').forEach(el => el.addEventListener('click', async () => {
-    const [dirStr, k, id] = el.dataset.goalBump.split('|');
+    const [dirStr, id] = el.dataset.goalBump.split('|');
     const dir = Number(dirStr);
-    const g = (state.goals[k] || []).find(x => x.id === id);
+    const g = (state.goals.items || []).find(x => x.id === id);
     if (!g || !currentUser) return;
     const target = g.target_count || 1;
     const today = todayISO();
@@ -527,6 +584,7 @@ function bindCommitmentsEvents() {
     if (labelEl) labelEl.classList.toggle('done', newChecked);
     updateCategoryHeaderCount(g.category || 'General');
     updateComplianceRing();
+    updateGoalStreakBadge(id);
     const { data } = await dbCall(() => sb.from('goal_logs').upsert(
       { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
       { onConflict: 'goal_id,date' }
@@ -540,12 +598,12 @@ function bindCommitmentsEvents() {
 
   // ---- COMMITMENTS ----
   main.querySelectorAll('[data-del-goal]').forEach(el => el.addEventListener('click', () => {
-    const [k, id] = el.dataset.delGoal.split('|');
+    const id = el.dataset.delGoal;
     showConfirmModal({
       title: 'Delete Commitment?',
       message: 'Remove this from your commitments?',
       onConfirm: () => {
-        state.goals[k] = state.goals[k].filter(x => x.id !== id);
+        state.goals.items = state.goals.items.filter(x => x.id !== id);
         render();
         dbCall(() => sb.from('goals').delete().eq('id', id));
       }
@@ -554,38 +612,40 @@ function bindCommitmentsEvents() {
 
   main.querySelectorAll('[data-edit-goal]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
-    const [k, id] = el.dataset.editGoal.split('|');
-    const g = (state.goals[k] || []).find(x => x.id === id);
+    const id = el.dataset.editGoal;
+    const g = (state.goals.items || []).find(x => x.id === id);
     if (!g) return;
     showModal({
       title: 'Edit Commitment',
       fields: [
-        { id: 'text', label: k === 'dos' ? "Do" : "Don't", type: 'text', value: g.text, placeholder: '...' },
+        { id: 'text', label: 'Commitment', type: 'text', value: g.text, placeholder: '...' },
         { id: 'category', label: 'Category', type: 'select', value: g.category || 'General', options: getCategoryOptions() },
         { id: 'newCategory', label: 'Or new category', type: 'text', value: '', placeholder: 'e.g. Reading' },
         { id: 'target_count', label: 'Times per day', type: 'number', value: g.target_count || 1, placeholder: '1' },
-        { id: 'unit', label: 'Unit (optional)', type: 'text', value: g.unit || '', placeholder: 'e.g. DM, halaman, menit' }
+        { id: 'unit', label: 'Unit (optional)', type: 'text', value: g.unit || '', placeholder: 'e.g. DM, halaman, menit' },
+        { id: 'reminderEnabled', label: 'Give this a time', type: 'toggle', value: !!g.reminder_time, controls: 'reminderTime' },
+        { id: 'reminderTime', label: 'At', type: 'time', value: g.reminder_time || '08:00' }
       ],
       saveLabel: 'Save',
-      onSave: ({ text, category, newCategory, target_count, unit }) => {
+      onSave: ({ text, category, newCategory, target_count, unit, reminderEnabled, reminderTime }) => {
         const trimmed = text.trim();
         if (!trimmed) return;
         const categoryVal = newCategory.trim() || category || 'General';
         const targetVal = Math.max(1, Math.round(Number(target_count)) || 1);
         const unitVal = unit.trim() || null;
+        const reminderVal = reminderEnabled ? reminderTime : null;
         g.text = trimmed;
         g.category = categoryVal;
         g.target_count = targetVal;
         g.unit = unitVal;
+        g.reminder_time = reminderVal;
         render();
-        dbCall(() => sb.from('goals').update({ text: trimmed, category: categoryVal, target_count: targetVal, unit: unitVal }).eq('id', id));
+        dbCall(() => sb.from('goals').update({ text: trimmed, category: categoryVal, target_count: targetVal, unit: unitVal, reminder_time: reminderVal }).eq('id', id));
       }
     });
   }));
 
   main.querySelectorAll('[data-goal-list]').forEach(ul => {
-    const key = ul.dataset.goalList;
-
     ul.addEventListener('dragstart', e => {
       const li = e.target.closest('.goal-item');
       if (!li) return;
@@ -614,7 +674,7 @@ function bindCommitmentsEvents() {
     ul.addEventListener('drop', e => {
       if (!draggedGoalId) return;
       e.preventDefault();
-      const list = state.goals[key] || [];
+      const list = state.goals.items || [];
       const fromIdx = list.findIndex(x => x.id === draggedGoalId);
       if (fromIdx === -1) return;
       if (ul.dataset.goalCat && (list[fromIdx].category || 'General') !== ul.dataset.goalCat) {
@@ -647,24 +707,25 @@ function bindCommitmentsEvents() {
     showModal({
       title: presetCat ? `Add to ${presetCat}` : 'New Commitment',
       fields: [
-        { id: 'type', label: 'Type', type: 'select', value: 'do', options: [{ value: 'do', label: 'Do' }, { value: 'dont', label: "Don't" }] },
         { id: 'text', label: 'Commitment', type: 'text', value: '', placeholder: 'e.g. Push Up' },
         { id: 'category', label: 'Category', type: 'select', value: presetCat || catOptions[0], options: catOptions },
         { id: 'newCategory', label: 'Or new category', type: 'text', value: '', placeholder: 'e.g. Reading' },
         { id: 'target_count', label: 'Times per day', type: 'number', value: 1, placeholder: '1' },
-        { id: 'unit', label: 'Unit (optional)', type: 'text', value: '', placeholder: 'e.g. DM, halaman, menit' }
+        { id: 'unit', label: 'Unit (optional)', type: 'text', value: '', placeholder: 'e.g. DM, halaman, menit' },
+        { id: 'reminderEnabled', label: 'Give this a time', type: 'toggle', value: false, controls: 'reminderTime' },
+        { id: 'reminderTime', label: 'At', type: 'time', value: '08:00' }
       ],
       saveLabel: 'Add',
-      onSave: async ({ type, text, category, newCategory, target_count, unit }) => {
+      onSave: async ({ text, category, newCategory, target_count, unit, reminderEnabled, reminderTime }) => {
         const trimmed = text.trim();
         if (!trimmed) return;
-        const key = type === 'dont' ? 'donts' : 'dos';
         const categoryVal = newCategory.trim() || category || 'General';
-        const order_index = state.goals[key].length;
+        const order_index = state.goals.items.length;
         const targetVal = Math.max(1, Math.round(Number(target_count)) || 1);
         const unitVal = unit.trim() || null;
-        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type, text: trimmed, category: categoryVal, order_index, target_count: targetVal, unit: unitVal }).select().single());
-        if (data) { state.goals[key].push({ id: data.id, text: trimmed, category: categoryVal, target_count: targetVal, unit: unitVal }); render(); }
+        const reminderVal = reminderEnabled ? reminderTime : null;
+        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type: 'do', text: trimmed, category: categoryVal, order_index, target_count: targetVal, unit: unitVal, reminder_time: reminderVal }).select().single());
+        if (data) { state.goals.items.push({ id: data.id, text: trimmed, category: categoryVal, target_count: targetVal, unit: unitVal, reminder_time: reminderVal }); render(); }
       }
     });
   }));

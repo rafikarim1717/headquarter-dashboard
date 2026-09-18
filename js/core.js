@@ -67,7 +67,7 @@ let draggedGoalId = null; // id of the goal/commitment card currently being drag
 let state = {
   profile: { name: 'Friend', noteDefaultStyle: null },
   schedule: {},   // { [iso-date]: [{id, time, title, sub}] }
-  goals: { dos: [], donts: [] },  // items: {id, text, target_count, unit} — target_count=1 renders as a checkbox, >1 renders as a +/- counter
+  goals: { items: [] },  // items: {id, text, target_count, unit, category} — target_count=1 renders as a checkbox, >1 renders as a +/- counter. No Do/Don't split — every commitment is something you're building (see CLAUDE.md).
   goalLogs: [],   // [{id, goal_id, user_id, date, checked, count, completed_at}] — checked is always (count >= goal.target_count); completed_at is set/cleared alongside checked and feeds Home's activity list
   projects: [],       // [{id, name, status, deadline, tasks:[{id,text,description,checked,completed_at}]}]
   projectsFilter: 'all',
@@ -361,18 +361,14 @@ function defaultState() {
       ]
     },
     goals: {
-      dos: [
-        { text: 'Read 20 pages every day', done: true },
-        { text: 'Walk 8,000+ steps', done: true },
-        { text: 'Write a journal entry', done: false },
-        { text: 'Call mom twice a week', done: false },
-        { text: 'Sleep before 11:30pm', done: true }
-      ],
-      donts: [
-        { text: 'No phone in the first hour', done: true },
-        { text: 'No takeout on weekdays', done: true },
-        { text: 'No alcohol Mon–Thu', done: false },
-        { text: 'No infinite scroll after 9pm', done: false }
+      items: [
+        { text: 'Read 20 pages every day', category: 'Personal & Mental' },
+        { text: 'Walk 8,000+ steps', category: 'Olahraga' },
+        { text: 'Write a journal entry', category: 'Personal & Mental' },
+        { text: 'Call mom twice a week', category: 'Personal & Mental' },
+        { text: 'Sleep before 11:30pm', category: 'Personal & Mental' },
+        { text: 'Phone-free first hour', category: 'Personal & Mental' },
+        { text: 'Home-cooked meals on weekdays', category: 'Personal & Mental' }
       ]
     },
     projects: [

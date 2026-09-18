@@ -720,3 +720,18 @@ ALTER TABLE goal_logs ADD COLUMN IF NOT EXISTS completed_at timestamptz;
 ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS repeat text NOT NULL DEFAULT 'none';
 ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS series_id uuid;
 CREATE INDEX IF NOT EXISTS schedule_events_series ON schedule_events(series_id);
+
+
+-- ────────────────────────────────────────────────────────────
+-- 21. goals.reminder_time
+--     Daily reminder cue for a commitment (Atomic Habits-style
+--     implementation intention — "at this time, do this"), separate
+--     from schedule_events' one-off alarm_time. "HH:MM" text, nullable
+--     (no reminder by default). Checked every 60s by the same interval
+--     that drives Schedule's alarms (checkAlarms() in js/pages/schedule.js
+--     also calls checkGoalReminders()) — fires once at reminder_time,
+--     then once more ~45 min later as a grace-period nudge, both only
+--     if the commitment isn't already checked off for today.
+--     Safe to re-run on an existing goals table that predates this column.
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE goals ADD COLUMN IF NOT EXISTS reminder_time text;

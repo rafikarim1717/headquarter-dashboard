@@ -60,6 +60,7 @@ create table if not exists goals (
   target_count integer not null default 1,
   unit text,
   category text not null default 'General',
+  reminder_time text,
   created_at timestamptz not null default now()
 );
 

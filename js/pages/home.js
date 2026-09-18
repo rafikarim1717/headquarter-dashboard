@@ -10,10 +10,10 @@
    blocks checked done into a single per-day "activity" count, plus a
    chronological feed of the underlying events. See
    buildHomeActivityEvents() for the exact counting rule: 1 completed
-   project task = 1 activity, 1 commitment marked done that day (do or
-   don't, checkbox or counter reaching its target) = 1 activity —
-   regardless of target_count, so a 3x/day counter still counts once —
-   and 1 schedule block checked done = 1 activity.
+   project task = 1 activity, 1 commitment marked done that day (checkbox
+   or counter reaching its target) = 1 activity — regardless of
+   target_count, so a 3x/day counter still counts once — and 1 schedule
+   block checked done = 1 activity.
 ========================================================= */
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -37,16 +37,12 @@ function buildHomeActivityEvents() {
       events.push({ ts: d.getTime(), iso: isoLocal(d), title: s.title, sub: 'Schedule', kind: 'schedule' });
     });
   });
-  const allGoals = [
-    ...(state.goals.dos   || []).map(g => ({ ...g, kind: 'do' })),
-    ...(state.goals.donts || []).map(g => ({ ...g, kind: 'dont' }))
-  ];
-  allGoals.forEach(g => {
+  (state.goals.items || []).forEach(g => {
     state.goalLogs.filter(l => l.goal_id === g.id && l.checked).forEach(l => {
       // Logs written before goal_logs.completed_at existed have no timestamp —
       // fall back to midday on their date so they still show up in the feed.
       const ts = l.completed_at ? new Date(l.completed_at).getTime() : new Date(l.date + 'T12:00:00').getTime();
-      events.push({ ts, iso: l.date, title: g.text, sub: g.category || 'General', kind: g.kind });
+      events.push({ ts, iso: l.date, title: g.text, sub: g.category || 'General', kind: 'do' });
     });
   });
   return events;
@@ -97,7 +93,7 @@ function activityLevelClass(count, maxCount) {
   return ' act-low';
 }
 
-const ACT_KIND_LABEL = { project: 'Project', do: 'Do', dont: "Don't", schedule: 'Schedule' };
+const ACT_KIND_LABEL = { project: 'Project', do: 'Habit', schedule: 'Schedule' };
 
 const HOME_ACTIVITY_FEED_CAP = 10;
 
@@ -279,13 +275,20 @@ function bindActiveProjectCardEvents(card) {
 
 function renderLifeHome() {
   const today = todayISO();
-  const sched = (state.schedule[today] || []).slice().sort((a, b) => a.time.localeCompare(b.time)).slice(0, 5);
+  const nowHHMM = fmtClock().slice(0, 5); // "HH:MM" in the visitor's local time, same as event.time
+  const schedToday = (state.schedule[today] || []).slice().sort((a, b) => a.time.localeCompare(b.time));
+  const upNextEvent = schedToday.find(s => s.time >= nowHHMM) || null;
+  // Top 3 preview, windowed to keep "up next" (and what follows it) visible rather
+  // than always showing the day's earliest 3 blocks — once those are in the past,
+  // backfill from before so the card still shows 3 when fewer than 3 remain ahead.
+  const upNextIdx = upNextEvent ? schedToday.findIndex(s => s.id === upNextEvent.id) : schedToday.length;
+  const schedStart = Math.max(0, Math.min(upNextIdx, schedToday.length - 3));
+  const sched = schedToday.slice(schedStart, schedStart + 3);
   const layout = window.__HQ_TWEAKS.homeLayout;
   const showPills = String(window.__HQ_TWEAKS.showQuickPills) === 'true' || window.__HQ_TWEAKS.showQuickPills === true;
 
   const score = computeDailyScore();
-  const _allGoalsHome = [...(state.goals.dos || []), ...(state.goals.donts || [])];
-  const _totalGoalsHome = _allGoalsHome.length;
+  const _totalGoalsHome = (state.goals.items || []).length;
   const scoreColor = score >= 70 ? 'var(--accent)' : score >= 40 ? '#c8a850' : 'var(--danger)';
   // Daily score as a compact ring, shown inside the Commitments card header
   // (moved off its own top-of-page hero card — see CLAUDE.md's Home row for why).
@@ -328,7 +331,7 @@ function renderLifeHome() {
       </div>
     </details>`;
 
-  const allGoals = [...(state.goals.dos || []), ...(state.goals.donts || [])];
+  const allGoals = state.goals.items || [];
   const totalGoals = allGoals.length;
   const checkedTodayCount = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
   const homeCommitCats = getGoalCategories();
@@ -360,6 +363,42 @@ function renderLifeHome() {
             </div>`
         }
         <div style="font-size:12px;color:var(--text-faint);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">${checkedTodayCount} of ${totalGoals} done today</div>
+      </div>
+    </details>`;
+
+  // Top 3 preview, sorted by reminder_time ascending (untimed items keep their
+  // existing order_index order and sort after every timed one) — its own card,
+  // separate from the Commitments card above, styled identically to Today's
+  // schedule (same .list/.list-item/.time-col/.item-main markup) so "what do I
+  // need to do and when" reads the same way on both cards.
+  const commitPreview = allGoals.slice().sort((a, b) => (a.reminder_time || '99:99').localeCompare(b.reminder_time || '99:99')).slice(0, 3);
+  const commitPreviewBlock = (delay) => `
+    <details class="card cat-card" style="animation-delay:${delay}ms" open>
+      <summary>
+        <div class="section-title" style="margin:0">Today's commitments <span class="meta">${commitPreview.length} items</span></div>
+        <span class="chevron">&#8250;</span>
+      </summary>
+      <div class="cat-body">
+        <ul class="list">
+          ${commitPreview.map(g => {
+            const target = g.target_count || 1;
+            const log = getTodayLog(g.id);
+            const count = log?.count || 0;
+            const isDone = log?.checked || false;
+            const control = target > 1
+              ? `<button type="button" data-goal-quickbump="${g.id}" title="Tap to log (${count}/${target}${g.unit ? ' ' + escapeHtml(g.unit) : ''})" style="all:unset;cursor:pointer;flex-shrink:0"><span class="check ${isDone ? 'checked' : ''}"></span></button>`
+              : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal-home="${g.id}"></span>`;
+            return `
+            <li class="list-item">
+              ${control}
+              <div class="time-col">${g.reminder_time || ''}</div>
+              <div class="item-main" data-go="life:commitments" style="cursor:pointer">
+                <div class="item-title${isDone ? ' done' : ''}">${escapeHtml(g.text)}${target > 1 ? ` <span style="color:var(--text-faint);font-weight:400">(${count}/${target})</span>` : ''}</div>
+                ${g.category ? `<div class="item-sub">${escapeHtml(g.category)}</div>` : ''}
+              </div>
+            </li>`;
+          }).join('') || `<li class="list-item"><div class="item-sub">No commitments yet.</div></li>`}
+        </ul>
       </div>
     </details>`;
 
@@ -397,12 +436,10 @@ function renderLifeHome() {
 
   const projectsBlock = (delay) => activeProjectCardHtml(layout, delay);
 
-  const nowHHMM = fmtClock().slice(0, 5); // "HH:MM" in the visitor's local time, same as event.time
-  const upNextEvent = sched.find(s => s.time >= nowHHMM) || null;
   const scheduleBlock = (delay) => `
     <details class="card cat-card" style="animation-delay:${delay}ms" open>
       <summary>
-        <div class="section-title" style="margin:0">Today's schedule <span class="meta">${sched.length} blocks</span></div>
+        <div class="section-title" style="margin:0">Today's schedule <span class="meta">${schedToday.length} blocks</span></div>
         <span class="chevron">&#8250;</span>
       </summary>
       <div class="cat-body">
@@ -434,7 +471,7 @@ function renderLifeHome() {
     </div>` : '';
 
   const heatmapBlock = `
-    <details class="card cat-card" style="animation-delay:300ms" open>
+    <details class="card cat-card" style="animation-delay:360ms" open>
       <summary>
         <div class="section-title" style="margin:0">Activity</div>
         <span class="chevron">&#8250;</span>
@@ -445,13 +482,14 @@ function renderLifeHome() {
     </details>`;
 
   // Ordered by urgency/actionability, not by feature category: what's
-  // time-critical (Schedule/Up Next) leads, same-day action items (Focus,
-  // Commitments) follow, then Finance/Project context, then the purely
-  // retrospective Activity heatmap last. "Hero" layout keeps its original
-  // purpose — Active project surfaced right after Schedule — everything
-  // else follows the same order as "Stacked".
-  const stacked = scheduleBlock(0) + focusBlock(60) + commitmentsBlock(120) + financeBlock(180) + projectsBlock(240) + heatmapBlock;
-  const hero    = scheduleBlock(0) + projectsBlock(60) + focusBlock(120) + commitmentsBlock(180) + financeBlock(240) + heatmapBlock;
+  // time-critical (Schedule/Up Next, then Today's commitments right after —
+  // same "when do I need to do this" framing) leads, same-day action items
+  // (Focus, Commitments overview) follow, then Finance/Project context, then
+  // the purely retrospective Activity heatmap last. "Hero" layout keeps its
+  // original purpose — Active project surfaced right after Schedule —
+  // everything else follows the same order as "Stacked".
+  const stacked = scheduleBlock(0) + commitPreviewBlock(60) + focusBlock(120) + commitmentsBlock(180) + financeBlock(240) + projectsBlock(300) + heatmapBlock;
+  const hero    = scheduleBlock(0) + commitPreviewBlock(60) + projectsBlock(120) + focusBlock(180) + commitmentsBlock(240) + financeBlock(300) + heatmapBlock;
 
   return `
     ${topbar()}
@@ -590,6 +628,56 @@ function bindHomeEvents() {
     state.todayFocus = state.todayFocus.filter(x => x.id !== id);
     render();
     dbCall(() => sb.from('today_focus_items').delete().eq('id', id));
+  }));
+
+  // ---- COMMITMENTS preview (top 3, see commitPreview in renderLifeHome) ----
+  // Mirrors the checkbox toggle in js/pages/commitments.js, but this preview
+  // does a full render() rather than an in-place DOM update (like Schedule's
+  // toggle) since it also has to refresh the compliance bars/score ring above it.
+  const upsertGoalLog = (g, newChecked, newCount) => {
+    const today = todayISO();
+    const existingLog = getTodayLog(g.id);
+    const newCompletedAt = newChecked ? new Date().toISOString() : null;
+    if (existingLog) {
+      existingLog.checked = newChecked;
+      existingLog.count = newCount;
+      existingLog.completed_at = newCompletedAt;
+    } else {
+      state.goalLogs.push({ id: null, goal_id: g.id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt });
+    }
+    render();
+    dbCall(() => sb.from('goal_logs').upsert(
+      { user_id: currentUser.id, goal_id: g.id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
+      { onConflict: 'goal_id,date' }
+    ).select().single()).then(({ data } = {}) => {
+      if (data) {
+        const localLog = state.goalLogs.find(l => l.goal_id === g.id && l.date === today);
+        if (localLog && !localLog.id) localLog.id = data.id;
+      }
+    });
+  };
+
+  main.querySelectorAll('[data-toggle-goal-home]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.toggleGoalHome;
+    const g = (state.goals.items || []).find(x => x.id === id);
+    if (!g || !currentUser) return;
+    const target = g.target_count || 1;
+    const existingLog = getTodayLog(id);
+    const newChecked = existingLog ? !existingLog.checked : true;
+    upsertGoalLog(g, newChecked, newChecked ? target : 0);
+  }));
+
+  // counter commitments (target_count > 1): a single tap bumps +1, wrapping
+  // back to 0 once target is hit — fine-grained -/+ adjustment stays on the
+  // Commitments page itself, this preview is a quick-log tap only.
+  main.querySelectorAll('[data-goal-quickbump]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.goalQuickbump;
+    const g = (state.goals.items || []).find(x => x.id === id);
+    if (!g || !currentUser) return;
+    const target = g.target_count || 1;
+    const prevCount = getTodayLog(id)?.count || 0;
+    const newCount = prevCount + 1 > target ? 0 : prevCount + 1;
+    upsertGoalLog(g, newCount >= target, newCount);
   }));
 
 }

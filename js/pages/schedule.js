@@ -369,13 +369,14 @@ function dismissAlarmBanner() {
   if (alarmBannerEl) alarmBannerEl.classList.remove('show');
 }
 
-function showAlarmBanner(ev) {
+function showAlarmBanner(ev, sub) {
   const el = ensureAlarmBanner();
+  const subText = sub || `Scheduled for ${ev.time}`;
   el.innerHTML = `
     <span class="alarm-banner-icon">⏰</span>
     <div class="alarm-banner-body">
       <div class="alarm-banner-title">${escapeHtml(ev.title)}</div>
-      <div class="alarm-banner-sub">Scheduled for ${ev.time}</div>
+      <div class="alarm-banner-sub">${escapeHtml(subText)}</div>
     </div>
     <button class="alarm-banner-snooze" data-alarm-snooze>Snooze 5 min</button>
     <button class="alarm-banner-dismiss" data-alarm-dismiss aria-label="Dismiss">&#x2715;</button>
@@ -384,37 +385,41 @@ function showAlarmBanner(ev) {
   el.querySelector('[data-alarm-dismiss]').onclick = dismissAlarmBanner;
   el.querySelector('[data-alarm-snooze]').onclick = () => {
     dismissAlarmBanner();
-    setTimeout(() => fireAlarm(ev), 5 * 60000);
+    setTimeout(() => fireAlarm(ev, sub), 5 * 60000);
   };
   if (alarmBeepInterval) clearInterval(alarmBeepInterval);
   alarmBeepInterval = setInterval(playAlarmBeep, 20000);
 }
 
-function fireAlarm(ev) {
+// sub: optional subtitle override, used by checkGoalReminders() (commitments.js)
+// to reuse this same banner/notification/beep system for daily commitment cues
+// instead of one-off schedule alarms.
+function fireAlarm(ev, sub) {
   if ('Notification' in window && Notification.permission === 'granted') {
     new Notification('HQ — ' + ev.title, {
-      body: 'Scheduled for ' + ev.time,
+      body: sub || 'Scheduled for ' + ev.time,
       icon: '/icon-192.png'
     });
   }
   playAlarmBeep();
-  showAlarmBanner(ev);
+  showAlarmBanner(ev, sub);
 }
 
 function checkAlarms() {
-  const today = todayISO();
-  const events = state.schedule[today] || [];
-  if (!events.length) return;
-  const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  events.forEach(ev => {
-    if (!ev.alarm_time) return;
-    if (firedAlarms.has(ev.id)) return;
-    const [hh, mm] = ev.alarm_time.split(':').map(Number);
-    const alarmMinutes = hh * 60 + mm;
-    if (Math.abs(nowMinutes - alarmMinutes) <= 1) {
-      firedAlarms.add(ev.id);
-      fireAlarm(ev);
-    }
-  });
+  const events = state.schedule[todayISO()] || [];
+  if (events.length) {
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    events.forEach(ev => {
+      if (!ev.alarm_time) return;
+      if (firedAlarms.has(ev.id)) return;
+      const [hh, mm] = ev.alarm_time.split(':').map(Number);
+      const alarmMinutes = hh * 60 + mm;
+      if (Math.abs(nowMinutes - alarmMinutes) <= 1) {
+        firedAlarms.add(ev.id);
+        fireAlarm(ev);
+      }
+    });
+  }
+  checkGoalReminders(); // js/pages/commitments.js — shares this same 60s tick + firedAlarms Set
 }
