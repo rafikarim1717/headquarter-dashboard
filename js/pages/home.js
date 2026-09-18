@@ -366,12 +366,13 @@ function renderLifeHome() {
       </div>
     </details>`;
 
-  // Top 3 preview, sorted by reminder_time ascending (untimed items keep their
-  // existing order_index order and sort after every timed one) — its own card,
-  // separate from the Commitments card above, styled identically to Today's
-  // schedule (same .list/.list-item/.time-col/.item-main markup) so "what do I
-  // need to do and when" reads the same way on both cards.
-  const commitPreview = allGoals.slice().sort((a, b) => (a.reminder_time || '99:99').localeCompare(b.reminder_time || '99:99')).slice(0, 3);
+  // Top 3 preview: only commitments with a reminder_time set (this card is
+  // "when do I need to do this today", not a generic commitments list — an
+  // untimed commitment has no "when" to show here), sorted ascending by that
+  // time. Its own card, separate from the Commitments card above, styled
+  // identically to Today's schedule (same .list/.list-item/.time-col/.item-main
+  // markup) so the two read the same way.
+  const commitPreview = allGoals.filter(g => g.reminder_time).sort((a, b) => a.reminder_time.localeCompare(b.reminder_time)).slice(0, 3);
   const commitPreviewBlock = (delay) => `
     <details class="card cat-card" style="animation-delay:${delay}ms" open>
       <summary>
@@ -397,7 +398,7 @@ function renderLifeHome() {
                 ${g.category ? `<div class="item-sub">${escapeHtml(g.category)}</div>` : ''}
               </div>
             </li>`;
-          }).join('') || `<li class="list-item"><div class="item-sub">No commitments yet.</div></li>`}
+          }).join('') || `<li class="list-item"><div class="item-sub">No commitments with a reminder time set. Add one from Commitments → Edit.</div></li>`}
         </ul>
       </div>
     </details>`;
