@@ -85,10 +85,7 @@ let state = {
   notesSort: 'newest',
   notesFilter: 'all',
   notesDisplay: 'grid',
-  commitPreviewTab: 'grid',   // 'grid' | 'year' — replaced 'day'/'week'/'month' 2026-09-18 with a single habit-grid table (see commitGridRange) plus Year
-  commitGridRange: 'week',    // 'week' | 'month' — how many day-columns the habit grid shows
-  commitViewDay: null,        // iso date of the day-detail panel drilled into from Year, or null if none selected
-  commitViewWeekStart: null,  // Monday ISO date; null = current week
+  commitPreviewTab: 'month',  // 'month' | 'year' — the History card's two layers (Month heatmap default, Year sparkline). Layer 3 (day detail) is a modal (showCommitDayModal), not state-backed.
   commitViewMonth: todayISO().slice(0, 7),
   commitHeatmapYear: new Date().getFullYear(),
   incomePage: 1,

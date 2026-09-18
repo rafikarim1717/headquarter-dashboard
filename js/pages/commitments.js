@@ -55,203 +55,154 @@ function getCategoryOptions() {
   const extra = [...used].filter(c => !GOAL_CATEGORY_PRESET.includes(c)).sort();
   return [...GOAL_CATEGORY_PRESET, ...extra];
 }
-function getMondayOf(dateIso) {
-  const d = new Date(dateIso + 'T00:00:00');
-  const dow = d.getDay();
-  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
-  return isoLocal(d);
-}
-function getWeekDays(mondayIso) {
-  const monday = new Date(mondayIso + 'T00:00:00');
-  const days = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    days.push(d);
-  }
-  return days;
-}
-// Habit-grid table (2026-09-18, replaced the old separate Week strip + Month calendar tabs):
-// rows = commitments, columns = days — the classic bullet-journal/habit-tracker layout, so a
-// glance shows both per-commitment patterns (reading a row) and same-day comparisons (reading
-// a column), which neither the old aggregate-%-only Week/Month views nor a single day's drill-down
-// could show at once. `commitGridRange` toggles the column count between a 7-day week and a
-// full month (horizontally scrollable — the name column stays sticky via CSS position:sticky).
-function renderCommitHabitGrid() {
+// =========================================================
+// Commitments — History: 3-layer design (2026-09-18, replaced the habit-grid
+// table from the same day — that table was rejected as too busy/cluttered).
+//   Layer 1 (default): Month heatmap calendar — one cell per day, % + a
+//     traffic-light tier (green/yellow/red) for quick scanning.
+//   Layer 2: Year sparkline — 12 monthly averages as a line chart; click a
+//     point to jump to Layer 1 for that month.
+//   Layer 3: a day-detail MODAL (not an inline panel) — click any Month cell
+//     to open it; ESC or an outside click closes it, mirroring the existing
+//     showConfirmModal() pattern in js/core.js.
+// =========================================================
+
+// Layer 1 — Month heatmap calendar.
+// Colorblind note: the % is always rendered as text inside the cell (not
+// color-only), so the tier color is a redundant reinforcement, not the sole
+// signal — satisfies the "accessible heat map" requirement without needing
+// a separate colorblind palette mode.
+function renderCommitMonthHeatmap() {
   const today = todayISO();
-  const allGoals = state.goals.items || [];
-  const range = state.commitGridRange || 'week';
-  let days, rangeLabel, isCurrent, navKey;
+  const totalGoals = (state.goals.items || []).length;
+  const viewMonthStr = state.commitViewMonth || today.slice(0, 7);
+  const [vy, vm] = viewMonthStr.split('-').map(Number);
+  const monthLabel = new Date(vy, vm - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const isCurrentMonth = viewMonthStr === today.slice(0, 7);
+  const firstDow = new Date(vy, vm - 1, 1).getDay();
+  const daysInMonth = new Date(vy, vm, 0).getDate();
+  const dowLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-  if (range === 'month') {
-    const viewMonthStr = state.commitViewMonth || today.slice(0, 7);
-    const [vy, vm] = viewMonthStr.split('-').map(Number);
-    isCurrent = viewMonthStr === today.slice(0, 7);
-    const daysInMonth = new Date(vy, vm, 0).getDate();
-    days = Array.from({ length: daysInMonth }, (_, i) => `${String(vy).padStart(4, '0')}-${String(vm).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`);
-    rangeLabel = new Date(vy, vm - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-    navKey = 'month';
-  } else {
-    const monday = state.commitViewWeekStart || getMondayOf(today);
-    isCurrent = monday === getMondayOf(today);
-    days = getWeekDays(monday).map(isoLocal);
-    rangeLabel = `${fmtDate(days[0])} – ${fmtDate(days[6])}`;
-    navKey = 'week';
-  }
-
-  const headerCells = days.map(iso => {
-    const d = new Date(iso + 'T00:00:00');
+  let cellsHtml = dowLabels.map(d => `<div class="commit-hm-dow">${d}</div>`).join('');
+  for (let i = 0; i < firstDow; i++) cellsHtml += `<div class="commit-hm-cell other"></div>`;
+  let monthSum = 0, monthCount = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = `${String(vy).padStart(4, '0')}-${String(vm).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const isToday = iso === today;
     const isFuture = iso > today;
-    const dow = range === 'week' ? `<div class="habit-table-dow">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}</div>` : '';
-    return `<th class="habit-table-daycol${isToday ? ' today' : ''}${isFuture ? ' future' : ''}">${dow}<div class="habit-table-daynum">${d.getDate()}</div></th>`;
-  }).join('');
-
-  function habitCellHtml(g, iso) {
-    if (iso > today) return `<td class="habit-cell future">–</td>`;
-    const target = g.target_count || 1;
-    const log = getLogByDate(g.id, iso);
-    const checked = log?.checked || false;
-    const count = log?.count || 0;
-    if (target > 1) {
-      const cls = `habit-cell counter${checked ? ' done' : count > 0 ? ' partial' : ''}`;
-      return `<td class="${cls}" title="${iso} · ${count}/${target}${g.unit ? ' ' + escapeHtml(g.unit) : ''}">${count}</td>`;
+    if (isFuture || totalGoals === 0) {
+      cellsHtml += `<div class="commit-hm-cell${isToday ? ' today' : ''}${isFuture ? ' future' : ''}"><span class="commit-hm-daynum">${day}</span></div>`;
+      continue;
     }
-    return `<td class="habit-cell${checked ? ' done' : ''}" title="${iso}${checked ? ' · done' : ''}">${checked ? '&#10003;' : '&#183;'}</td>`;
+    const checked = (state.goals.items || []).filter(g => getLogByDate(g.id, iso)?.checked).length;
+    const pct = Math.round(getDayCompliancePct(iso));
+    monthSum += pct; monthCount++;
+    const tier = pct >= 80 ? 'good' : pct >= 60 ? 'warn' : 'bad';
+    cellsHtml += `
+      <div class="commit-hm-cell tier-${tier}${isToday ? ' today' : ''} clickable" data-commit-day-select="${iso}" title="${checked}/${totalGoals} commitments completed">
+        <span class="commit-hm-daynum">${day}</span>
+        <span class="commit-hm-pct">${pct}%</span>
+      </div>`;
   }
-
-  // Sorted by category (not labeled inline — the point is a quick per-row/per-column scan,
-  // not a second copy of the category cards above) so related commitments still sit together.
-  const orderedGoals = getGoalCategories().flatMap(cat => categoryItems(cat));
-  const rows = orderedGoals.map(g => {
-    const streak = computeGoalStreak(g.id);
-    return `
-      <tr>
-        <td class="habit-table-namecol" title="${escapeHtml(g.text)}">${escapeHtml(g.text)}${streak > 0 ? ` <span class="habit-table-streak">&#128293;${streak}</span>` : ''}</td>
-        ${days.map(iso => habitCellHtml(g, iso)).join('')}
-      </tr>`;
-  }).join('');
-
-  const footerCells = days.map(iso => {
-    if (iso > today) return `<td class="habit-cell future">–</td>`;
-    const pct = allGoals.length ? Math.round(getDayCompliancePct(iso)) : 0;
-    return `<td class="habit-cell" style="${commitHeatTint(pct)}" title="${iso} · ${pct}%">${pct}</td>`;
-  }).join('');
+  const monthAvgPct = monthCount ? Math.round(monthSum / monthCount) : 0;
 
   return `
-    <div class="commit-grid-toolbar">
-      <div class="commit-grid-range-toggle">
-        <button class="commit-tab-btn${range === 'week' ? ' active' : ''}" data-commit-grid-range="week">Week</button>
-        <button class="commit-tab-btn${range === 'month' ? ' active' : ''}" data-commit-grid-range="month">Month</button>
-      </div>
-      <div class="commit-day-nav" style="margin-top:0;flex:1;min-width:160px">
-        <button class="proj-nav-btn" data-commit-${navKey}-nav="-1" title="Previous ${range}">&#8249;</button>
-        <span class="commit-day-label">${rangeLabel}</span>
-        <button class="proj-nav-btn" data-commit-${navKey}-nav="1" title="Next ${range}"${isCurrent ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
-        ${!isCurrent ? `<button class="commit-tab-btn" data-commit-${navKey}-today>This ${range}</button>` : ''}
-      </div>
+    <div class="commit-day-nav">
+      <button class="proj-nav-btn" data-commit-month-nav="-1" title="Previous month">&#8249;</button>
+      <span class="commit-day-label">${monthLabel}</span>
+      <button class="proj-nav-btn" data-commit-month-nav="1" title="Next month"${isCurrentMonth ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
+      ${!isCurrentMonth ? `<button class="commit-tab-btn" data-commit-month-today>This month</button>` : ''}
     </div>
-    ${allGoals.length ? `
-      <div class="habit-table-wrap">
-        <table class="habit-table">
-          <thead><tr><th class="habit-table-namecol"></th>${headerCells}</tr></thead>
-          <tbody>
-            ${rows}
-            <tr class="habit-table-footer-row">
-              <td class="habit-table-namecol">Daily %</td>
-              ${footerCells}
-            </tr>
-          </tbody>
-        </table>
-      </div>` : `<div class="item-sub" style="margin-top:10px">No commitments yet.</div>`}`;
+    ${totalGoals ? `<div class="commit-month-stats">${monthAvgPct}% average this month</div>` : `<div class="commit-month-stats">No commitments yet.</div>`}
+    <div class="commit-hm-grid">${cellsHtml}</div>
+    <div class="commit-hm-legend">
+      <span class="commit-hm-legend-sw tier-good"></span><span>&ge;80%</span>
+      <span class="commit-hm-legend-sw tier-warn"></span><span>60&ndash;79%</span>
+      <span class="commit-hm-legend-sw tier-bad"></span><span>&lt;60%</span>
+    </div>`;
 }
-function buildCommitYearHeatmapData(year) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const jan1 = new Date(year, 0, 1);
-  const start = new Date(year, 0, 1 - jan1.getDay());
-  const yearEnd = year < today.getFullYear() ? new Date(year, 11, 31) : today;
-  const end = new Date(yearEnd.getFullYear(), yearEnd.getMonth(), yearEnd.getDate() + (6 - yearEnd.getDay()));
-  const cells = [], monthLabels = [];
-  let col = 0, prevMonth = -1, d = new Date(start);
-  let sum = 0, dayCount = 0, perfectDays = 0, activeDays = 0;
-  while (d <= end) {
-    for (let row = 0; row < 7; row++) {
-      const iso = isoLocal(d);
-      const inYear = d.getFullYear() === year;
-      const m = d.getMonth();
-      const isFuture = d > today;
-      if (row === 0 && inYear && m !== prevMonth) { monthLabels.push({ month: m, col }); prevMonth = m; }
-      let pct = 0;
-      if (inYear && !isFuture) {
-        pct = getDayCompliancePct(iso);
-        sum += pct; dayCount++;
-        if (pct >= 100) perfectDays++;
-        if (pct > 0) activeDays++;
-      }
-      cells.push({ iso, pct, isFuture, isOut: !inYear });
-      d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+
+// Layer 2 — Year sparkline: 12 monthly averages as a simple SVG line chart.
+// Months after the current one (or, for a future year, every month) have no
+// data yet and are left out of the line entirely rather than plotted as 0%.
+function buildCommitYearSparklineData(year) {
+  const today = todayISO();
+  const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+  const points = [];
+  for (let m = 0; m < 12; m++) {
+    const monthStart = new Date(year, m, 1);
+    const isFutureMonth = monthStart > todayD && !(monthStart.getFullYear() === todayD.getFullYear() && monthStart.getMonth() === todayD.getMonth());
+    if (isFutureMonth) { points.push({ month: m, pct: null }); continue; }
+    const daysInMonth = new Date(year, m + 1, 0).getDate();
+    let sum = 0, count = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const iso = `${year}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (iso > today) break;
+      sum += getDayCompliancePct(iso);
+      count++;
     }
-    col++;
+    points.push({ month: m, pct: count ? Math.round(sum / count) : 0 });
   }
-  const avgPct = dayCount ? Math.round(sum / dayCount) : 0;
-  return { cells, monthLabels, totalCols: col, avgPct, perfectDays, activeDays };
+  return points;
 }
-// Continuous (not bucketed) heat tint — blends var(--danger) toward var(--accent) as pct climbs
-// from 0 to 100, then dims to a pastel via a second color-mix, for a smoother-looking gradient
-// than the old 3-bucket (low/mid/high) scheme.
-function commitHeatTint(pct) {
-  if (pct <= 0) return '';
-  return `background: color-mix(in oklab, color-mix(in oklab, var(--accent) ${Math.round(pct)}%, var(--danger)) 55%, transparent);`;
-}
-function renderCommitYearHeatmap(year, hasGoals) {
-  const { cells, monthLabels, totalCols, avgPct, perfectDays, activeDays } = buildCommitYearHeatmapData(year);
+function renderCommitYearSparkline(year, hasGoals) {
+  const points = buildCommitYearSparklineData(year);
   const todayYear = new Date().getFullYear();
-  const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
-  const cols = `24px repeat(${totalCols},1fr)`;
+  const nowMonth = new Date().getMonth();
+  const validPoints = points.filter(p => p.pct !== null);
+  const avgPct = validPoints.length ? Math.round(validPoints.reduce((s, p) => s + p.pct, 0) / validPoints.length) : 0;
+
+  const W = 600, H = 180, padX = 28, padY = 20;
+  const plotW = W - padX * 2, plotH = H - padY * 2;
+  const xFor = i => padX + (i / 11) * plotW;
+  const yFor = pct => padY + plotH - (pct / 100) * plotH;
+
+  const linePoints = points.map((p, i) => p.pct === null ? null : `${xFor(i).toFixed(1)},${yFor(p.pct).toFixed(1)}`).filter(Boolean).join(' ');
+  const gridLines = [0, 50, 100].map(v => `
+      <line x1="${padX}" y1="${yFor(v).toFixed(1)}" x2="${W - padX}" y2="${yFor(v).toFixed(1)}" class="commit-spark-grid"/>
+      <text x="${padX - 6}" y="${(yFor(v) + 3).toFixed(1)}" class="commit-spark-axis-lbl" text-anchor="end">${v}</text>`).join('');
+  const xLabels = points.map((_, i) => `<text x="${xFor(i).toFixed(1)}" y="${H - 4}" class="commit-spark-axis-lbl" text-anchor="middle">${MONTH_NAMES[i]}</text>`).join('');
+  const dots = points.map((p, i) => {
+    if (p.pct === null) return '';
+    const isCurrentMonth = year === todayYear && i === nowMonth;
+    return `<circle class="commit-spark-dot${isCurrentMonth ? ' current' : ''}" cx="${xFor(i).toFixed(1)}" cy="${yFor(p.pct).toFixed(1)}" r="4.5" data-commit-spark-month="${i}" title="${MONTH_NAMES[i]} ${year} · ${p.pct}%"></circle>`;
+  }).join('');
+
   return `
     <div class="heatmap-header">
-      <span class="heatmap-total">${hasGoals ? `${avgPct}% average · ${perfectDays} perfect day${perfectDays === 1 ? '' : 's'} · ${activeDays} active day${activeDays === 1 ? '' : 's'} in ${year}` : 'No commitments yet'}</span>
+      <span class="heatmap-total">${hasGoals && validPoints.length ? `${avgPct}% average in ${year}` : 'No commitments yet'}</span>
       <div class="heatmap-year-nav">
         <button class="proj-nav-btn" data-commit-year-nav="-1" title="Previous year">&#8249;</button>
         <span style="font-size:11px;color:var(--text-faint)">${year}</span>
         <button class="proj-nav-btn" data-commit-year-nav="1" title="Next year"${year >= todayYear ? ' disabled style="opacity:.3;pointer-events:none"' : ''}>&#8250;</button>
       </div>
     </div>
-    <div class="heatmap-month-row" style="grid-template-columns:${cols}">
-      <span></span>
-      ${monthLabels.map(({month, col}) => `<span class="heatmap-month-lbl" style="grid-column:${col + 2}">${MONTH_NAMES[month]}</span>`).join('')}
-    </div>
-    <div class="proj-heatmap" style="grid-template-columns:${cols};grid-template-rows:repeat(7,1fr)">
-      ${DAY_LABELS.map(l => `<span class="hm-day-lbl">${l}</span>`).join('')}
-      ${cells.map(c => {
-        if (c.isOut || c.isFuture) return `<div class="heatmap-cell empty"></div>`;
-        const selected = c.iso === state.commitViewDay;
-        const cls = `heatmap-cell clickable${selected ? ' selected' : ''}`;
-        return `<div class="${cls}" style="${commitHeatTint(c.pct)}" title="${c.iso} · ${Math.round(c.pct)}%" data-commit-day-select="${c.iso}"></div>`;
-      }).join('')}
-    </div>
-    <div class="heatmap-legend">
-      <span>Less</span>
-      <div class="heatmap-cell" style="width:10px;height:10px"></div>
-      <div class="heatmap-cell" style="width:10px;height:10px;${commitHeatTint(30)}"></div>
-      <div class="heatmap-cell" style="width:10px;height:10px;${commitHeatTint(60)}"></div>
-      <div class="heatmap-cell" style="width:10px;height:10px;${commitHeatTint(100)}"></div>
-      <span>More</span>
-    </div>`;
+    <svg viewBox="0 0 ${W} ${H}" class="commit-sparkline" role="img" aria-label="Monthly completion trend for ${year}">
+      ${gridLines}
+      <polyline class="commit-spark-line" points="${linePoints}" fill="none"/>
+      ${dots}
+      ${xLabels}
+    </svg>`;
 }
-// Day-detail drill-down panel, opened by clicking a Month/Year cell (data-commit-day-select) —
-// replaced the standalone "Day" tab (2026-09-18): that tab only ever showed one day at a time
-// with no calendar context, so seeing a specific day's detail now lives one click away from
-// the Month/Year view that day belongs to, instead of being its own tab. Shows the same
-// per-commitment checked/count info the old Day tab did, plus the reminder cue time and the
-// actual completed_at time so you can see not just whether you did it, but when.
-function commitDayDetailHtml(iso) {
+
+// Layer 3 — day-detail modal. Reuses the app's shared .hq-modal-* CSS (see
+// showConfirmModal() in js/core.js for the same overlay/ESC/outside-click
+// pattern) via its own dynamically-created overlay, so it doesn't need to
+// touch state or go through render() to open/close.
+function showCommitDayModal(iso) {
+  let overlay = document.getElementById('commit-day-modal-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'commit-day-modal-overlay';
+    overlay.className = 'hq-modal-overlay';
+    document.body.appendChild(overlay);
+  }
   const allGoals = state.goals.items || [];
   const dayPct = allGoals.length ? Math.round(getDayCompliancePct(iso)) : 0;
   const isToday = iso === todayISO();
-  const dayLabel = isToday ? 'Today' : new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  const cats = getGoalCategories();
-  const rows = cats.map(cat => {
+  const dayLabel = isToday ? 'Today' : new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+
+  const rows = getGoalCategories().map(cat => {
     const items = categoryItems(cat);
     if (!items.length) return '';
     const catRows = items.map(g => {
@@ -259,27 +210,43 @@ function commitDayDetailHtml(iso) {
       const log = getLogByDate(g.id, iso);
       const checked = log?.checked || false;
       const count = log?.count || 0;
-      const doneTime = checked && log?.completed_at ? new Date(log.completed_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '';
+      const status = checked ? 'done' : count > 0 ? 'partial' : 'missed';
+      const icon = status === 'done' ? '&#10003;' : status === 'partial' ? '&#9675;' : '&#10007;';
+      const value = target > 1 ? `${count}/${target}${g.unit ? ' ' + escapeHtml(g.unit) : ''}` : '';
       return `
-        <li class="commit-day-row${checked ? ' checked' : ''}">
-          <span class="commit-day-icon">${checked ? '&#10003;' : '&#8211;'}</span>
-          <span class="commit-day-text">${escapeHtml(g.text)}</span>
-          ${target > 1 ? `<span class="commit-day-count">${count}/${target}</span>` : ''}
-          ${g.reminder_time ? `<span class="commit-day-time" title="Cue time">&#128337; ${escapeHtml(g.reminder_time)}</span>` : ''}
-          ${doneTime ? `<span class="commit-day-time" title="Completed at">&#10003; ${doneTime}</span>` : ''}
+        <li class="commit-day-modal-row status-${status}">
+          <span class="commit-day-modal-icon">${icon}</span>
+          <span class="commit-day-modal-text">${escapeHtml(g.text)}</span>
+          ${value ? `<span class="commit-day-modal-value">${value}</span>` : ''}
         </li>`;
     }).join('');
-    return `<div class="commit-day-cat-label">${escapeHtml(cat)}</div>${catRows}`;
+    return `<div class="commit-day-cat-label">${escapeHtml(cat)}</div><ul class="commit-day-modal-list">${catRows}</ul>`;
   }).join('');
-  return `
-    <div class="commit-day-detail">
-      <div class="commit-day-detail-header">
-        <span class="commit-day-label" style="text-align:left">${dayLabel}</span>
-        <span class="commit-day-pct-badge">${dayPct}%</span>
-        <button class="commit-day-detail-close" data-commit-day-close title="Close">&times;</button>
+
+  overlay.innerHTML = `
+    <div class="hq-modal-card commit-day-modal-card" role="dialog" aria-modal="true" aria-label="${escapeHtml(dayLabel)} detail">
+      <div class="hq-modal-header">
+        <div>
+          <div class="hq-modal-title">${dayLabel}</div>
+          <div class="commit-day-modal-pct">${dayPct}% complete</div>
+        </div>
+        <button class="hq-modal-close" data-commit-day-modal-close aria-label="Close">&#x2715;</button>
       </div>
-      <ul class="commit-day-list">${rows || `<li class="commit-day-row"><span class="commit-day-text" style="color:var(--text-faint)">No commitments yet.</span></li>`}</ul>
+      <div class="hq-modal-body">
+        ${rows || `<div class="item-sub">No commitments yet.</div>`}
+      </div>
     </div>`;
+
+  function close() {
+    overlay.classList.remove('open');
+    document.removeEventListener('keydown', escHandler);
+  }
+  function escHandler(e) { if (e.key === 'Escape') close(); }
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  overlay.querySelector('[data-commit-day-modal-close]').onclick = close;
+  document.addEventListener('keydown', escHandler);
+
+  requestAnimationFrame(() => overlay.classList.add('open'));
 }
 function updateCategoryHeaderCount(cat) {
   const items = categoryItems(cat);
@@ -441,18 +408,15 @@ function renderCommitments() {
       </details>`;
   }
 
-  // History tab content — Grid (habit-tracker table, Week/Month range) / Year.
-  // 'day'/'week'/'month' were standalone tabs until 2026-09-18; any legacy in-session
-  // value falls back to the unified 'grid' tab.
-  if (['day', 'week', 'month'].includes(state.commitPreviewTab)) state.commitPreviewTab = 'grid';
+  // History tab content — Month (Layer 1, default) / Year (Layer 2 sparkline).
+  // Layer 3 (day detail) is a modal, not a tab — see showCommitDayModal().
+  // 'day'/'week'/'grid' were prior designs (all replaced 2026-09-18); any legacy
+  // in-session value falls back to 'month'.
+  if (['day', 'week', 'grid'].includes(state.commitPreviewTab)) state.commitPreviewTab = 'month';
   const tab = state.commitPreviewTab;
-  let tabBodyHtml = '';
-
-  if (tab === 'grid') {
-    tabBodyHtml = renderCommitHabitGrid();
-  } else {
-    tabBodyHtml = renderCommitYearHeatmap(state.commitHeatmapYear, totalGoals > 0) + (state.commitViewDay ? commitDayDetailHtml(state.commitViewDay) : '');
-  }
+  const tabBodyHtml = tab === 'year'
+    ? renderCommitYearSparkline(state.commitHeatmapYear, totalGoals > 0)
+    : renderCommitMonthHeatmap();
 
   return `
     ${topbar()}
@@ -513,7 +477,7 @@ function renderCommitments() {
     <div class="commit-quest-label">History</div>
     <div class="card" style="animation-delay:80ms">
       <div class="commit-preview-tabs">
-        <button class="commit-tab-btn${tab === 'grid'  ? ' active' : ''}" data-commit-tab="grid">Grid</button>
+        <button class="commit-tab-btn${tab === 'month' ? ' active' : ''}" data-commit-tab="month">Month</button>
         <button class="commit-tab-btn${tab === 'year'  ? ' active' : ''}" data-commit-tab="year">Year</button>
       </div>
       ${tabBodyHtml}
@@ -525,68 +489,48 @@ function renderCommitments() {
 /* ---- COMMIT: event binding ---- */
 
 function bindCommitmentsEvents() {
-  // commitments preview tab switch — clears any open day-detail panel, since it
-  // was drilled into from a specific Month/Year view that's no longer showing
+  // commitments preview tab switch
   main.querySelectorAll('[data-commit-tab]').forEach(el => el.addEventListener('click', () => {
     state.commitPreviewTab = el.dataset.commitTab;
-    state.commitViewDay = null;
     render();
   }));
 
 
-  // habit grid: Week/Month range toggle
-  main.querySelectorAll('[data-commit-grid-range]').forEach(el => el.addEventListener('click', () => {
-    state.commitGridRange = el.dataset.commitGridRange;
-    render();
-  }));
-
-
-  // commitments history — Month/Year day-detail drill-down: click a cell to open
-  // (click the same cell again, or the panel's × button, to close)
+  // Layer 1 → Layer 3: click a Month heatmap cell to open the day-detail modal.
+  // Purely a DOM/overlay concern — no state mutation or render() needed to open it.
   main.querySelectorAll('[data-commit-day-select]').forEach(el => el.addEventListener('click', () => {
-    const iso = el.dataset.commitDaySelect;
-    state.commitViewDay = state.commitViewDay === iso ? null : iso;
+    showCommitDayModal(el.dataset.commitDaySelect);
+  }));
+
+
+  // Layer 2 → Layer 1: click a sparkline month point to jump to the Month heatmap for that month
+  main.querySelectorAll('[data-commit-spark-month]').forEach(el => el.addEventListener('click', () => {
+    const m = Number(el.dataset.commitSparkMonth);
+    const year = state.commitHeatmapYear || new Date().getFullYear();
+    state.commitViewMonth = `${year}-${String(m + 1).padStart(2, '0')}`;
+    state.commitPreviewTab = 'month';
     render();
   }));
-  const commitDayClose = main.querySelector('[data-commit-day-close]');
-  if (commitDayClose) commitDayClose.addEventListener('click', () => { state.commitViewDay = null; render(); });
 
 
-  // commitments history nav — Week
-  main.querySelectorAll('[data-commit-week-nav]').forEach(el => el.addEventListener('click', () => {
-    const dir = Number(el.dataset.commitWeekNav);
-    const monday = state.commitViewWeekStart || getMondayOf(todayISO());
-    const d = new Date(monday + 'T00:00:00');
-    d.setDate(d.getDate() + dir * 7);
-    const iso = isoLocal(d);
-    if (iso > getMondayOf(todayISO())) return;
-    state.commitViewWeekStart = iso;
-    render();
-  }));
-  const commitWeekToday = main.querySelector('[data-commit-week-today]');
-  if (commitWeekToday) commitWeekToday.addEventListener('click', () => { state.commitViewWeekStart = null; render(); });
-
-
-  // commitments history nav — Month (clears the day-detail panel — it belonged to the month being left)
+  // commitments history nav — Month
   main.querySelectorAll('[data-commit-month-nav]').forEach(el => el.addEventListener('click', () => {
     const dir = Number(el.dataset.commitMonthNav);
     const [y, m] = (state.commitViewMonth || todayISO().slice(0, 7)).split('-').map(Number);
     const next = ymLocal(new Date(y, m - 1 + dir, 1));
     if (next > todayISO().slice(0, 7)) return;
     state.commitViewMonth = next;
-    state.commitViewDay = null;
     render();
   }));
   const commitMonthToday = main.querySelector('[data-commit-month-today]');
-  if (commitMonthToday) commitMonthToday.addEventListener('click', () => { state.commitViewMonth = todayISO().slice(0, 7); state.commitViewDay = null; render(); });
+  if (commitMonthToday) commitMonthToday.addEventListener('click', () => { state.commitViewMonth = todayISO().slice(0, 7); render(); });
 
 
-  // commitments history nav — Year (clears the day-detail panel — same reasoning as Month)
+  // commitments history nav — Year
   main.querySelectorAll('[data-commit-year-nav]').forEach(el => el.addEventListener('click', () => {
     const dir = Number(el.dataset.commitYearNav);
     const todayYear = new Date().getFullYear();
     state.commitHeatmapYear = Math.min(todayYear, (state.commitHeatmapYear || todayYear) + dir);
-    state.commitViewDay = null;
     render();
   }));
 

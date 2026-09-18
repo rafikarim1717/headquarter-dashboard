@@ -12,6 +12,7 @@
     --accent: #f5f0e8;
     --danger: #d97a6c;
     --good: #8aa888;
+    --warn: #c8a850;
     --r-card: 16px;
     --r-sm: 10px;
     --r-pill: 50px;
@@ -1491,40 +1492,67 @@
     .compliance-bar-lbl { width: auto; min-width: 40px; }
   }
 
-  /* habit-table table (rows = commitments, columns = days) — replaced the old weekly
-     recap strip + monthly compliance calendar (2026-09-18) */
-  .commit-grid-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
-  .commit-grid-range-toggle { display: flex; gap: 4px; }
-  .habit-table-wrap { overflow-x: auto; margin-top: 14px; -webkit-overflow-scrolling: touch; }
-  .habit-table { border-collapse: separate; border-spacing: 0; }
-  .habit-table th, .habit-table td { text-align: center; vertical-align: middle; }
-  .habit-table-namecol {
-    position: sticky; left: 0; z-index: 1; background: var(--card);
-    text-align: left; padding: 4px 12px 4px 0; font-size: 11.5px; color: var(--text-dim);
-    white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis;
-    border-right: 1px solid var(--border);
+  /* commitments page — Month heatmap (Layer 1) */
+  .commit-month-stats { font-size: 11px; color: var(--text-faint); margin-top: 10px; text-align: center; }
+  .commit-hm-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px;
   }
-  .habit-table-daycol {
-    font-size: 10px; color: var(--text-faint); font-weight: 500; padding-bottom: 6px; min-width: 28px;
+  .commit-hm-dow {
+    text-align: center; font-size: 10px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--text-faint); font-weight: 500; padding: 2px 0 6px;
   }
-  .habit-table-daycol.today { color: var(--accent); font-weight: 700; }
-  .habit-table-daycol.future { opacity: 0.35; }
-  .habit-table-dow { text-transform: uppercase; font-size: 9px; letter-spacing: 0.08em; }
-  .habit-table-daynum { font-variant-numeric: tabular-nums; }
-  .habit-table tbody tr:not(.habit-table-footer-row) td { border-bottom: 1px solid var(--border); }
-  .habit-table tbody tr:not(.habit-table-footer-row):last-of-type td { border-bottom: 0; }
-  .habit-cell {
-    width: 28px; height: 28px; font-size: 12px; font-variant-numeric: tabular-nums;
-    color: var(--text-faint); border-radius: 6px;
+  .commit-hm-cell {
+    aspect-ratio: 1 / 1; border-radius: 8px; background: var(--card-2);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    transition: transform var(--t-fast) ease;
   }
-  .habit-cell.done { color: var(--accent); font-weight: 700; background: color-mix(in oklab, var(--accent) 18%, transparent); }
-  .habit-cell.future { opacity: 0.3; }
-  .habit-cell.counter { color: var(--text-dim); }
-  .habit-cell.counter.partial { color: var(--text); background: color-mix(in oklab, var(--danger) 18%, transparent); }
-  .habit-cell.counter.done { color: var(--accent); font-weight: 700; background: color-mix(in oklab, var(--accent) 18%, transparent); }
-  .habit-table-streak { font-size: 10px; color: var(--text-faint); }
-  .habit-table-footer-row td { border-top: 1px solid var(--border-strong); padding-top: 8px; font-weight: 600; color: var(--text-dim); }
-  .habit-table-footer-row .habit-table-namecol { color: var(--text-dim); }
+  .commit-hm-cell.other { opacity: 0; pointer-events: none; }
+  .commit-hm-cell.today { outline: 1.5px solid var(--accent); outline-offset: -1px; }
+  .commit-hm-cell.future { opacity: 0.35; }
+  .commit-hm-cell.clickable { cursor: pointer; }
+  .commit-hm-cell.clickable:hover { transform: scale(1.06); }
+  .commit-hm-daynum { font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .commit-hm-pct { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  /* Traffic-light tiers (green/yellow/red per the ≥80 / 60-79 / <60 spec) — kept fairly
+     desaturated to match the rest of the dark theme rather than pure stoplight colors. */
+  .commit-hm-cell.tier-good { background: color-mix(in oklab, var(--good) 32%, var(--card-2)); }
+  .commit-hm-cell.tier-good .commit-hm-pct { color: var(--good); }
+  .commit-hm-cell.tier-warn { background: color-mix(in oklab, var(--warn) 30%, var(--card-2)); }
+  .commit-hm-cell.tier-warn .commit-hm-pct { color: var(--warn); }
+  .commit-hm-cell.tier-bad { background: color-mix(in oklab, var(--danger) 26%, var(--card-2)); }
+  .commit-hm-cell.tier-bad .commit-hm-pct { color: var(--danger); }
+  .commit-hm-legend { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 12px; font-size: 10px; color: var(--text-faint); flex-wrap: wrap; }
+  .commit-hm-legend-sw { width: 9px; height: 9px; border-radius: 2px; margin-left: 8px; }
+  .commit-hm-legend-sw:first-child { margin-left: 0; }
+  .commit-hm-legend-sw.tier-good { background: var(--good); }
+  .commit-hm-legend-sw.tier-warn { background: var(--warn); }
+  .commit-hm-legend-sw.tier-bad { background: var(--danger); }
+
+  /* commitments page — Year sparkline (Layer 2) */
+  .commit-sparkline { width: 100%; height: auto; display: block; margin-top: 8px; overflow: visible; }
+  .commit-spark-grid { stroke: var(--border); stroke-width: 1; }
+  .commit-spark-axis-lbl { font-size: 9px; fill: var(--text-faint); font-family: inherit; }
+  .commit-spark-line { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .commit-spark-dot { fill: var(--bg); stroke: var(--accent); stroke-width: 2; cursor: pointer; transition: r var(--t-fast) ease; }
+  .commit-spark-dot:hover { r: 6.5; }
+  .commit-spark-dot.current { fill: var(--accent); }
+
+  /* commitments page — day-detail modal (Layer 3), built on the shared .hq-modal-* CSS */
+  .commit-day-modal-card { max-width: 420px; }
+  .commit-day-modal-pct { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+  .commit-day-modal-list { margin: 6px 0 0; }
+  .commit-day-modal-row {
+    display: flex; align-items: center; gap: 10px; padding: 7px 0;
+    border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--text-dim);
+  }
+  .commit-day-modal-row:last-child { border-bottom: 0; }
+  .commit-day-modal-icon { width: 16px; text-align: center; flex-shrink: 0; font-size: 13px; }
+  .commit-day-modal-row.status-done .commit-day-modal-icon { color: var(--good); }
+  .commit-day-modal-row.status-done .commit-day-modal-text { color: var(--text); }
+  .commit-day-modal-row.status-partial .commit-day-modal-icon { color: var(--warn); }
+  .commit-day-modal-row.status-missed .commit-day-modal-icon { color: var(--danger); }
+  .commit-day-modal-text { flex: 1; }
+  .commit-day-modal-value { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
   /* commitments page — preview tab buttons */
   .commit-preview-tabs {
@@ -1540,54 +1568,14 @@
     background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600;
   }
 
-  /* commitments page — history nav (Week/Month tabs) */
+  /* commitments page — history nav (Month tab) */
   .commit-day-nav { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
   .commit-day-label { flex: 1; text-align: center; font-size: 12px; color: var(--text-dim); font-weight: 500; }
-  .commit-day-list { margin-top: 8px; }
-  .commit-day-row {
-    display: flex; align-items: center; gap: 10px; padding: 8px 0;
-    border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-dim);
-  }
-  .commit-day-row:last-child { border-bottom: 0; }
-  .commit-day-icon {
-    width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
-    border: 1.5px solid var(--border-strong);
-    display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-faint);
-  }
-  .commit-day-row.checked .commit-day-icon { background: var(--accent); border-color: var(--accent); color: var(--bg); }
-  .commit-day-row.checked .commit-day-text { color: var(--text); }
-  .commit-day-text { flex: 1; }
-  .commit-day-count { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-  .commit-day-time { font-size: 10.5px; color: var(--text-faint); white-space: nowrap; }
   .commit-day-cat-label {
     font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint);
     font-weight: 600; margin-top: 12px;
   }
   .commit-day-cat-label:first-child { margin-top: 0; }
-
-  /* commitments page — Month/Year day-detail drill-down panel */
-  .commit-day-detail {
-    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
-    animation: card-in var(--t-slow) ease-out;
-  }
-  .commit-day-detail-header { display: flex; align-items: center; gap: 10px; }
-  .commit-day-pct-badge {
-    font-size: 11px; font-weight: 600; color: var(--accent);
-    background: color-mix(in oklab, var(--accent) 16%, transparent);
-    border-radius: var(--r-pill); padding: 2px 10px;
-  }
-  .commit-day-detail-close {
-    background: none; border: none; color: var(--text-faint); font-size: 18px; line-height: 1;
-    cursor: pointer; padding: 0 2px;
-  }
-  .commit-day-detail-close:hover { color: var(--text); }
-
-  /* commitments page — yearly compliance heatmap */
-  .heatmap-cell.clickable { cursor: pointer; transition: transform var(--t-fast) ease, outline-color var(--t-fast) ease; }
-  .heatmap-cell.clickable:hover { transform: scale(1.25); }
-  .heatmap-cell.selected { outline: 1.5px solid var(--text); outline-offset: 1px; }
-  .heatmap-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 8px; font-size: 10px; color: var(--text-faint); }
-  .heatmap-legend .heatmap-cell { border-radius: 2px; }
 
   /* ============ MODAL ============ */
   #modal-container .modal-overlay {
