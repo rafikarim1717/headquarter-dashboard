@@ -27,14 +27,226 @@ function computeGoalStreak(goalId) {
   }
   return streak;
 }
+// Partial credit: how far along one commitment is on a given day, 0..1. A yes/no item is all-or-
+// nothing; a counter/duration item earns count/target (dzikir 20/33 = 0.6), capped at 1. This feeds
+// every compliance number (rings, category bars, heatmap, sparkline, daily score). `checked` still
+// means "target fully hit" and alone drives streaks, reminders and the "N / M done" counts.
+function goalProgress(g, log) {
+  if (!log) return 0;
+  const target = g.target_count || 1;
+  if (target <= 1) return log.checked ? 1 : 0;
+  return Math.min((log.count || 0) / target, 1);
+}
+// Average progress (0..100) across `items` for one day — the single formula behind every % on the page.
+function avgProgressPct(items, dateIso = todayISO()) {
+  if (!items.length) return 0;
+  const sum = items.reduce((s, g) => s + goalProgress(g, getLogByDate(g.id, dateIso)), 0);
+  return (sum / items.length) * 100;
+}
 function getDayCompliancePct(dateIso) {
-  const allGoals = state.goals.items || [];
-  if (!allGoals.length) return 0;
-  const checked = allGoals.filter(g => {
-    const log = state.goalLogs.find(l => l.goal_id === g.id && l.date === dateIso);
-    return log && log.checked;
-  }).length;
-  return (checked / allGoals.length) * 100;
+  return avgProgressPct(state.goals.items || [], dateIso);
+}
+// A commitment's "kind" is derived from data we already store (target_count + unit) rather than
+// its own column, so no schema change: a Duration is just a counter whose unit is menit/detik.
+//   check    — plain yes/no checkbox (target_count 1, no unit)
+//   count    — N of something per day (33x dzikir, 3 CV applied, 5 prayers)
+//   duration — N minutes/seconds per day (10 menit belajar, 20 detik plank)
+const GOAL_DURATION_UNITS = ['menit', 'detik'];
+function getGoalKind(g) {
+  const unit = (g.unit || '').trim().toLowerCase();
+  if (GOAL_DURATION_UNITS.includes(unit)) return 'duration';
+  if ((g.target_count || 1) > 1 || unit) return 'count';
+  return 'check';
+}
+// Shared by Add and Edit so the two forms can't drift apart. `g` is the goal being edited (or
+// null for Add); `presetCat` pre-selects the category when Add is opened from a category card.
+function goalFormFields(g, presetCat) {
+  const catOptions = getCategoryOptions();
+  const kind = g ? getGoalKind(g) : 'check';
+  return [
+    { id: 'text', label: 'Commitment', type: 'text', value: g ? g.text : '', placeholder: 'e.g. Push Up' },
+    { id: 'kind', label: 'Type', type: 'select', value: kind, options: [
+      { value: 'check', label: 'Yes / No' },
+      { value: 'count', label: 'Count (e.g. 33x, 3 CV)' },
+      { value: 'duration', label: 'Duration (e.g. 10 min)' }
+    ] },
+    { id: 'target_count', label: 'Target per day', type: 'number', value: g && kind !== 'check' ? (g.target_count || 1) : '', placeholder: 'e.g. 33', showWhen: { field: 'kind', values: ['count', 'duration'] } },
+    { id: 'unit', label: 'Unit (optional)', type: 'text', value: g && kind === 'count' ? (g.unit || '') : '', placeholder: 'e.g. x, DM, halaman', showWhen: { field: 'kind', values: ['count'] } },
+    { id: 'durationUnit', label: 'Unit', type: 'select', value: g && kind === 'duration' ? g.unit.trim().toLowerCase() : 'menit', options: GOAL_DURATION_UNITS, showWhen: { field: 'kind', values: ['duration'] } },
+    { id: 'category', label: 'Category', type: 'select', value: g ? (g.category || 'General') : (presetCat || catOptions[0]), options: catOptions },
+    { id: 'newCategory', label: 'Or new category', type: 'text', value: '', placeholder: 'e.g. Reading' },
+    { id: 'reminderEnabled', label: 'Give this a time', type: 'toggle', value: !!(g && g.reminder_time), controls: 'reminderTime' },
+    { id: 'reminderTime', label: 'At', type: 'time', value: (g && g.reminder_time) || '08:00' }
+  ];
+}
+// Turns the modal's raw values into the columns we store. Returns null if the name is blank.
+function parseGoalForm(v) {
+  const text = v.text.trim();
+  if (!text) return null;
+  let target_count = 1, unit = null;
+  if (v.kind === 'count') {
+    target_count = Math.max(1, Math.round(Number(v.target_count)) || 1);
+    unit = v.unit.trim() || null;
+  } else if (v.kind === 'duration') {
+    target_count = Math.max(1, Math.round(Number(v.target_count)) || 1);
+    unit = v.durationUnit;
+  }
+  return {
+    text,
+    category: v.newCategory.trim() || v.category || 'General',
+    target_count,
+    unit,
+    reminder_time: v.reminderEnabled ? v.reminderTime : null
+  };
+}
+function goalValueText(g, count) {
+  return `${count}/${g.target_count || 1}${g.unit ? ' ' + g.unit : ''}`;
+}
+// "+" shortcut buttons for a count commitment, so a 33x dzikir isn't 33 taps. The first step
+// doubles as the size of the "−" button. Duration commitments have no manual buttons at all —
+// the only way to log time is the Start timer below.
+function goalQuickSteps(g) {
+  return (g.target_count || 1) >= 20 ? [1, 10] : [1];
+}
+
+/* ---- Duration timers ----
+   A duration commitment (10 menit belajar, 60 detik plank) can only be logged by running its
+   timer: Start counts down the time still missing to reach today's target, and finishing it
+   (automatically at 0:00, or early via Stop) adds the time actually spent to today's count through
+   setGoalCountToday(), so progress/streak/ring behave like any other log.
+   A running timer is {startedAt, endsAt} per goal id, mirrored to localStorage so a reload or page
+   switch doesn't lose it — endsAt is wall-clock, so time passing while the app was closed still counts. */
+const GOAL_TIMERS_KEY = 'hq.goalTimers';
+let goalTimers = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GOAL_TIMERS_KEY)) || {};
+    Object.keys(saved).forEach(id => { if (!saved[id] || !saved[id].endsAt) delete saved[id]; });
+    return saved;
+  } catch (e) { return {}; }
+})();
+let goalTimerInterval = null;
+function saveGoalTimers() { try { localStorage.setItem(GOAL_TIMERS_KEY, JSON.stringify(goalTimers)); } catch (e) { /* storage blocked — timer just won't survive a reload */ } }
+function goalUnitSeconds(g) { return (g.unit || '').trim().toLowerCase() === 'detik' ? 1 : 60; }
+function fmtGoalTimer(secs) {
+  secs = Math.max(0, Math.ceil(secs));
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  const mm = String(m).padStart(h ? 2 : 1, '0'), ss = String(s).padStart(2, '0');
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+function goalTimerBtnInner(id) {
+  const t = goalTimers[id];
+  if (t) return `<span class="goal-timer-dot"></span><span data-goal-timer-disp="${id}">${fmtGoalTimer((t.endsAt - Date.now()) / 1000)}</span> left &middot; Stop`;
+  return getTodayLog(id)?.checked ? '&#10003; Done' : '&#9654; Start';
+}
+// Re-syncs one timer button (label, running/done styling, disabled) with the current timer + log state.
+function paintGoalTimerBtn(id) {
+  const btn = document.querySelector(`[data-goal-timer="${id}"]`);
+  if (!btn) return;
+  const running = !!goalTimers[id];
+  const done = !running && !!getTodayLog(id)?.checked;
+  btn.classList.toggle('running', running);
+  btn.classList.toggle('done', done);
+  btn.disabled = done;
+  btn.innerHTML = goalTimerBtnInner(id);
+}
+function startGoalTimer(id) {
+  const g = (state.goals.items || []).find(x => x.id === id);
+  if (!g || goalTimers[id]) return;
+  const remaining = Math.max((g.target_count || 1) - (getTodayLog(id)?.count || 0), 0);
+  if (!remaining) return;
+  const now = Date.now();
+  goalTimers[id] = { startedAt: now, endsAt: now + remaining * goalUnitSeconds(g) * 1000 };
+  saveGoalTimers();
+  ensureGoalTimerTicker();
+  paintGoalTimerBtn(id);
+}
+// auto = the countdown hit 0 (credit the full planned time); otherwise the user pressed Stop early
+// (credit whatever whole units were actually spent).
+function finishGoalTimer(id, auto) {
+  const g = (state.goals.items || []).find(x => x.id === id);
+  const t = goalTimers[id];
+  delete goalTimers[id];
+  saveGoalTimers();
+  if (!g || !t) return;
+  const unitMs = goalUnitSeconds(g) * 1000;
+  const planned = Math.round((t.endsAt - t.startedAt) / unitMs);
+  const spent = auto ? planned : Math.min(Math.round((Date.now() - t.startedAt) / unitMs), planned);
+  if (spent > 0) setGoalCountToday(id, (getTodayLog(id)?.count || 0) + spent);
+  else showToast('Under half a unit — nothing logged', 'error');
+  const fill = document.querySelector(`[data-goal-fill="${id}"]`); // drop the live-estimate width back to the saved count
+  if (fill) fill.style.width = Math.min((getTodayLog(id)?.count || 0) / (g.target_count || 1), 1) * 100 + '%';
+  paintGoalTimerBtn(id);
+  if (auto) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('HQ — ' + g.text, { body: 'Timer done — target reached', icon: '/icon-192.png' });
+    }
+    playAlarmBeep();
+    showToast(`${g.text} — done`);
+  }
+}
+// Live countdown + progress bar for every running timer; auto-finishes at 0:00 and stops itself once none are left.
+function tickGoalTimers() {
+  const ids = Object.keys(goalTimers);
+  if (!ids.length) { clearInterval(goalTimerInterval); goalTimerInterval = null; return; }
+  ids.forEach(id => {
+    const g = (state.goals.items || []).find(x => x.id === id);
+    if (!g) { delete goalTimers[id]; saveGoalTimers(); return; }
+    const t = goalTimers[id];
+    if (Date.now() >= t.endsAt) { finishGoalTimer(id, true); return; }
+    const disp = document.querySelector(`[data-goal-timer-disp="${id}"]`);
+    if (disp) disp.textContent = fmtGoalTimer((t.endsAt - Date.now()) / 1000);
+    const fill = document.querySelector(`[data-goal-fill="${id}"]`);
+    if (fill) fill.style.width = Math.min(((getTodayLog(id)?.count || 0) + (Date.now() - t.startedAt) / 1000 / goalUnitSeconds(g)) / (g.target_count || 1), 1) * 100 + '%';
+  });
+}
+function ensureGoalTimerTicker() {
+  if (!goalTimerInterval && Object.keys(goalTimers).length) goalTimerInterval = setInterval(tickGoalTimers, 1000);
+}
+
+// Sets today's logged amount for a counter commitment, derives checked = count >= target, and
+// syncs the in-place UI + goal_logs. Shared by the −/+ stepper and by typing an exact number.
+async function setGoalCountToday(id, rawCount) {
+  const g = (state.goals.items || []).find(x => x.id === id);
+  if (!g || !currentUser) return;
+  const target = g.target_count || 1;
+  const today = todayISO();
+  const existingLog = getTodayLog(id);
+  const wasChecked = existingLog?.checked || false;
+  const newCount = Math.max(0, Math.round(Number(rawCount)) || 0);
+  const newChecked = newCount >= target;
+  // Only stamp/clear completed_at on an actual checked transition — bumping the
+  // counter further up/down while already done (or already not done) shouldn't move it.
+  const newCompletedAt = newChecked === wasChecked ? (existingLog?.completed_at || null) : (newChecked ? new Date().toISOString() : null);
+  if (existingLog) {
+    existingLog.count = newCount;
+    existingLog.checked = newChecked;
+    existingLog.completed_at = newCompletedAt;
+  } else {
+    state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt });
+  }
+  const valEl = document.querySelector(`[data-goal-count-val="${id}"]`);
+  if (valEl) valEl.textContent = goalValueText(g, newCount);
+  const fillEl = document.querySelector(`[data-goal-fill="${id}"]`);
+  if (fillEl) {
+    fillEl.style.width = Math.min(newCount / target, 1) * 100 + '%';
+    fillEl.classList.toggle('done', newChecked);
+  }
+  document.querySelector(`[data-toggle-goal="${id}"], [data-goal-check="${id}"]`)?.classList.toggle('checked', newChecked);
+  const rowEl = document.querySelector(`[data-goal-row="${id}"]`);
+  if (rowEl) rowEl.classList.toggle('goal-done', newChecked);
+  const labelEl = document.querySelector(`[data-goal-text="${id}"]`);
+  if (labelEl) labelEl.classList.toggle('done', newChecked);
+  updateCategoryHeaderCount(g.category || 'General');
+  updateComplianceRing();
+  updateGoalStreakBadge(id);
+  const { data } = await dbCall(() => sb.from('goal_logs').upsert(
+    { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
+    { onConflict: 'goal_id,date' }
+  ).select().single());
+  if (data) {
+    const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
+    if (localLog && !localLog.id) localLog.id = data.id;
+  }
 }
 const GOAL_CATEGORY_PRESET = ['Olahraga', 'Kerja', 'Bahasa', 'Spiritual', 'Personal & Mental'];
 function categoryItems(cat) {
@@ -251,7 +463,7 @@ function showCommitDayModal(iso) {
 function updateCategoryHeaderCount(cat) {
   const items = categoryItems(cat);
   const checked = items.filter(i => getTodayLog(i.id)?.checked).length;
-  const pct = items.length ? Math.round(checked / items.length * 100) : 0;
+  const pct = Math.round(avgProgressPct(items));
   document.querySelectorAll('[data-goal-count-header]').forEach(el => {
     if (el.dataset.goalCountHeader === cat) el.textContent = `${checked} / ${items.length}`;
   });
@@ -275,6 +487,7 @@ function fireGoalReminder(g, isNudge) {
   );
 }
 function checkGoalReminders() {
+  ensureGoalTimerTicker(); // resumes a timer that was running before a reload, even if Commitments isn't open
   const items = state.goals.items || [];
   if (!items.length) return;
   const now = new Date();
@@ -304,11 +517,29 @@ function updateGoalStreakBadge(goalId) {
   else el.removeAttribute('title');
 }
 function computeDailyScore() {
-  const allGoals = state.goals.items || [];
-  const totalGoals = allGoals.length;
-  if (!totalGoals) return 0;
-  const checkedToday = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
-  return Math.round((checkedToday / totalGoals) * 100);
+  return Math.round(avgProgressPct(state.goals.items || []));
+}
+
+// Colour of the Today's Compliance ring by ratio:
+//   < 10%    bright red (nothing done yet — a loud "go do something")
+//   10–70%   the theme accent, unchanged
+//   70–100%  light green at 70% deepening to dark green at 100% — the closer to done, the darker
+// With no commitments at all there is no ratio to judge, so it stays the accent.
+const COMPLIANCE_RED = '#ff4d4f';
+const COMPLIANCE_GREEN_LIGHT = [168, 230, 161]; // at 70%
+const COMPLIANCE_GREEN_DARK = [31, 143, 70];    // at 100%
+function complianceColor(pct, hasGoals = true) {
+  if (!hasGoals) return 'var(--accent)';
+  if (pct < 10) return COMPLIANCE_RED;
+  if (pct < 70) return 'var(--accent)';
+  const t = Math.min((pct - 70) / 30, 1);
+  const [r, g, b] = COMPLIANCE_GREEN_LIGHT.map((c, i) => Math.round(c + (COMPLIANCE_GREEN_DARK[i] - c) * t));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+function paintComplianceRingColor(card, pct) {
+  const color = complianceColor(pct, (state.goals.items || []).length > 0);
+  card.querySelectorAll('.compliance-arc').forEach(arc => { arc.style.stroke = color; });
+  card.querySelectorAll('.compliance-pct-text').forEach(el => { el.style.fill = color; });
 }
 
 function animateComplianceRing() {
@@ -322,27 +553,24 @@ function animateComplianceRing() {
   const firstArc = card.querySelector('.compliance-arc');
   const pct = firstArc ? parseFloat(firstArc.dataset.pct || 0) : 0;
   card.querySelectorAll('.compliance-pct-text').forEach(el => el.textContent = Math.round(pct));
+  paintComplianceRingColor(card, pct);
 }
 
 function updateComplianceRing() {
   const card = document.getElementById('commit-compliance-card');
   if (!card) return;
-  const allGoals = state.goals.items || [];
-  const total    = allGoals.length;
-  const checked  = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
-  const pct      = total ? Math.round(checked / total * 100) : 0;
+  const pct = Math.round(avgProgressPct(state.goals.items || []));
   card.querySelectorAll('.compliance-arc').forEach(arc => {
     const full = parseFloat(arc.getAttribute('stroke-dasharray') || 213.63);
     arc.style.strokeDashoffset = full - (pct / 100 * full);
     arc.dataset.pct = pct;
   });
   card.querySelectorAll('.compliance-pct-text').forEach(el => el.textContent = pct);
+  paintComplianceRingColor(card, pct);
   const summaryPct = card.querySelector('[data-compliance-summary-pct]');
   if (summaryPct) summaryPct.textContent = pct + '%'; // kept in sync so the score still shows while the card is collapsed
   card.querySelectorAll('[data-compliance-fill]').forEach(el => {
-    const items = categoryItems(el.dataset.complianceFill);
-    const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
-    el.style.width = (items.length ? Math.round(chk / items.length * 100) : 0) + '%';
+    el.style.width = Math.round(avgProgressPct(categoryItems(el.dataset.complianceFill))) + '%';
   });
   card.querySelectorAll('[data-compliance-count]').forEach(el => {
     const items = categoryItems(el.dataset.complianceCount);
@@ -355,21 +583,43 @@ function renderCommitments() {
   const allGoals  = state.goals.items || [];
   const totalGoals = allGoals.length;
 
-  const overallChecked = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
-  const overallPct     = totalGoals ? Math.round(overallChecked / totalGoals * 100) : 0;
-  const categories      = getGoalCategories();
+  const overallPct = Math.round(avgProgressPct(allGoals));
+  const categories = getGoalCategories();
+
+  // Count/duration items get a progress bar + shortcut buttons (and a Start/Stop timer for
+  // durations) under the title. The left checkbox stays as a "mark fully done / reset" shortcut.
+  function goalProgressRow(g, kind, count, isDone) {
+    const target = g.target_count || 1;
+    let value, controls;
+    if (kind === 'duration') {
+      // Read-only value, timer is the only control — no −/+, no typing, no "mark done" checkbox.
+      const running = !!goalTimers[g.id];
+      const done = isDone && !running;
+      value = `<span class="goal-count-val ro" data-goal-count-val="${g.id}">${escapeHtml(goalValueText(g, count))}</span>`;
+      controls = `<button type="button" class="goal-quick-btn timer${running ? ' running' : ''}${done ? ' done' : ''}" data-goal-timer="${g.id}"${done ? ' disabled' : ''}>${goalTimerBtnInner(g.id)}</button>`;
+    } else {
+      const steps = goalQuickSteps(g);
+      value = `<span class="goal-count-val" data-goal-count-val="${g.id}" title="Tap to type an exact amount">${escapeHtml(goalValueText(g, count))}</span>`;
+      controls = `<button type="button" class="goal-count-btn" data-goal-bump="-${steps[0]}|${g.id}" aria-label="Decrease">&#8722;</button>` +
+        steps.map((s, idx) => `<button type="button" class="goal-quick-btn${idx === 0 ? ' primary' : ''}" data-goal-bump="${s}|${g.id}">+${s}</button>`).join('');
+    }
+    return `
+      <div class="goal-prog">
+        <div class="goal-prog-track"><div class="goal-prog-fill${isDone ? ' done' : ''}" data-goal-fill="${g.id}" style="width:${Math.min(count / target, 1) * 100}%"></div></div>
+        ${value}
+        <div class="goal-quick">${controls}</div>
+      </div>`;
+  }
 
   function goalRow(i) {
-    const target = i.target_count || 1;
+    const kind = getGoalKind(i);
     const log = getTodayLog(i.id);
     const count = log?.count || 0;
     const isDone = log?.checked || false;
-    const control = target > 1 ? `
-        <div class="goal-counter">
-          <button type="button" class="goal-count-btn" data-goal-bump="-1|${i.id}" aria-label="Decrease">&#8722;</button>
-          <span class="goal-count-val" data-goal-count-val="${i.id}">${count}/${target}${i.unit ? ' ' + escapeHtml(i.unit) : ''}</span>
-          <button type="button" class="goal-count-btn" data-goal-bump="1|${i.id}" aria-label="Increase">&#43;</button>
-        </div>` : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal="${i.id}"></span>`;
+    // Durations can't be ticked off by hand — the box just mirrors done/not-done, only the timer moves it.
+    const control = kind === 'duration'
+      ? `<span class="check static ${isDone ? 'checked' : ''}" data-goal-check="${i.id}" title="Run the timer to log this"></span>`
+      : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal="${i.id}"></span>`;
     const streak = computeGoalStreak(i.id);
     const streakBadge = `<span class="goal-streak" data-goal-streak="${i.id}"${streak > 0 ? ` title="${streak}-day streak"` : ''}>${streak > 0 ? '&#128293;' + streak : ''}</span>`;
     const timeBadge = i.reminder_time ? `<span class="goal-time-badge" title="Cue time">&#128337; ${escapeHtml(i.reminder_time)}</span>` : '';
@@ -377,21 +627,24 @@ function renderCommitments() {
     <li class="goal-item${isDone ? ' goal-done' : ''}" draggable="true" data-goal-drag="${i.id}" data-goal-row="${i.id}">
       <div class="list-item" style="padding:10px 0;align-items:center">
         ${control}
-        <span class="check-label ${isDone ? 'done' : ''}" style="flex:1" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
-        ${timeBadge}
-        ${streakBadge}
+        <div class="goal-title-wrap">
+          <span class="check-label ${isDone ? 'done' : ''}" data-goal-text="${i.id}">${escapeHtml(i.text)}</span>
+          ${timeBadge}
+          ${streakBadge}
+        </div>
         <div class="fin-acts">
           <button class="fin-edit-btn" data-edit-goal="${i.id}">&#x270E;</button>
           <button class="fin-del-btn" data-del-goal="${i.id}" title="Delete">${ICON_TRASH}</button>
         </div>
       </div>
+      ${kind === 'check' ? '' : goalProgressRow(i, kind, count, isDone)}
     </li>`;
   }
 
   function categoryCard(cat, idx) {
     const itemsInCat = categoryItems(cat);
     const checkedInCat = itemsInCat.filter(g => getTodayLog(g.id)?.checked).length;
-    const pctInCat = itemsInCat.length ? Math.round(checkedInCat / itemsInCat.length * 100) : 0;
+    const pctInCat = Math.round(avgProgressPct(itemsInCat));
     return `
       <details class="card cat-card" style="animation-delay:${40 + idx * 20}ms" open>
         <summary>
@@ -457,7 +710,7 @@ function renderCommitments() {
             ${categories.map(cat => {
               const items = categoryItems(cat);
               const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
-              const pct = items.length ? Math.round(chk / items.length * 100) : 0;
+              const pct = Math.round(avgProgressPct(items));
               return `
             <div class="compliance-bar-row">
               <span class="compliance-bar-lbl" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>
@@ -536,82 +789,57 @@ function bindCommitmentsEvents() {
 
 
   // goal toggle → upsert goal_logs (target_count === 1 items only; counter items use data-goal-bump)
-  main.querySelectorAll('[data-toggle-goal]').forEach(el => el.addEventListener('click', async () => {
+  main.querySelectorAll('[data-toggle-goal]').forEach(el => el.addEventListener('click', () => {
     const id = el.dataset.toggleGoal;
     const g = (state.goals.items || []).find(x => x.id === id);
-    if (!g || !currentUser) return;
-    const target = g.target_count || 1;
-    const today = todayISO();
-    const existingLog = getTodayLog(id);
-    const newChecked = existingLog ? !existingLog.checked : true;
-    const newCount = newChecked ? target : 0;
-    const newCompletedAt = newChecked ? new Date().toISOString() : null; // feeds Home's activity heatmap/feed
-    if (existingLog) {
-      existingLog.checked = newChecked;
-      existingLog.count = newCount;
-      existingLog.completed_at = newCompletedAt;
-    } else {
-      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt });
-    }
+    if (!g) return;
     pulse(el);
-    el.classList.toggle('checked', newChecked);
-    el.closest('.goal-item')?.classList.toggle('goal-done', newChecked);
-    const labelEl = el.closest('.goal-item')?.querySelector('.check-label');
-    if (labelEl) labelEl.classList.toggle('done', newChecked);
-    updateCategoryHeaderCount(g.category || 'General');
-    updateComplianceRing();
-    updateGoalStreakBadge(id);
-    const { data } = await dbCall(() => sb.from('goal_logs').upsert(
-      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
-      { onConflict: 'goal_id,date' }
-    ).select().single());
-    if (data) {
-      const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
-      if (localLog && !localLog.id) localLog.id = data.id;
-    }
+    // For a counter/duration item this is "mark fully done" / "reset to 0"
+    setGoalCountToday(id, getTodayLog(id)?.checked ? 0 : (g.target_count || 1));
   }));
 
 
-  // goal counter bump (+/-) → upsert goal_logs.count, derives checked = count >= target_count
-  main.querySelectorAll('[data-goal-bump]').forEach(el => el.addEventListener('click', async () => {
+  // Duration Start/Stop timer — the only way to log a duration commitment
+  main.querySelectorAll('[data-goal-timer]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.goalTimer;
+    if (goalTimers[id]) finishGoalTimer(id, false);
+    else startGoalTimer(id);
+  }));
+  ensureGoalTimerTicker();
+
+
+  // goal counter bump (+N/−N) → upsert goal_logs.count, derives checked = count >= target_count
+  main.querySelectorAll('[data-goal-bump]').forEach(el => el.addEventListener('click', () => {
     const [dirStr, id] = el.dataset.goalBump.split('|');
-    const dir = Number(dirStr);
-    const g = (state.goals.items || []).find(x => x.id === id);
-    if (!g || !currentUser) return;
-    const target = g.target_count || 1;
-    const today = todayISO();
-    const existingLog = getTodayLog(id);
-    const prevCount = existingLog?.count || 0;
-    const wasChecked = existingLog?.checked || false;
-    const newCount = Math.max(0, prevCount + dir);
-    const newChecked = newCount >= target;
-    // Only stamp/clear completed_at on an actual checked transition — bumping the
-    // counter further up/down while already done (or already not done) shouldn't move it.
-    const newCompletedAt = newChecked === wasChecked ? (existingLog?.completed_at || null) : (newChecked ? new Date().toISOString() : null);
-    if (existingLog) {
-      existingLog.count = newCount;
-      existingLog.checked = newChecked;
-      existingLog.completed_at = newCompletedAt;
-    } else {
-      state.goalLogs.push({ id: null, goal_id: id, user_id: currentUser.id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt });
-    }
-    const valEl = document.querySelector(`[data-goal-count-val="${id}"]`);
-    if (valEl) valEl.textContent = `${newCount}/${target}${g.unit ? ' ' + g.unit : ''}`;
-    const rowEl = document.querySelector(`[data-goal-row="${id}"]`);
-    if (rowEl) rowEl.classList.toggle('goal-done', newChecked);
-    const labelEl = document.querySelector(`[data-goal-text="${id}"]`);
-    if (labelEl) labelEl.classList.toggle('done', newChecked);
-    updateCategoryHeaderCount(g.category || 'General');
-    updateComplianceRing();
-    updateGoalStreakBadge(id);
-    const { data } = await dbCall(() => sb.from('goal_logs').upsert(
-      { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
-      { onConflict: 'goal_id,date' }
-    ).select().single());
-    if (data) {
-      const localLog = state.goalLogs.find(l => l.goal_id === id && l.date === today);
-      if (localLog && !localLog.id) localLog.id = data.id;
-    }
+    setGoalCountToday(id, (getTodayLog(id)?.count || 0) + Number(dirStr));
+  }));
+
+  // tap the "2/3 menit" value → type an exact amount instead of tapping +/− repeatedly
+  main.querySelectorAll('[data-goal-count-val]').forEach(valEl => valEl.addEventListener('click', () => {
+    if (valEl.classList.contains('ro')) return; // duration values are read-only
+    const id = valEl.dataset.goalCountVal;
+    if (valEl.nextElementSibling?.classList.contains('goal-count-input')) return;
+    const input = document.createElement('input');
+    input.type = 'number'; input.min = '0'; input.inputMode = 'numeric';
+    input.className = 'goal-count-input';
+    input.value = getTodayLog(id)?.count || 0;
+    valEl.style.display = 'none';
+    valEl.after(input);
+    input.focus(); input.select();
+    let finished = false;
+    const finish = (commit) => {
+      if (finished) return;
+      finished = true;
+      const raw = input.value;
+      input.remove();
+      valEl.style.display = '';
+      if (commit && raw !== '') setGoalCountToday(id, raw);
+    };
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') finish(true);
+      else if (e.key === 'Escape') finish(false);
+    });
+    input.addEventListener('blur', () => finish(true));
   }));
 
 
@@ -636,30 +864,14 @@ function bindCommitmentsEvents() {
     if (!g) return;
     showModal({
       title: 'Edit Commitment',
-      fields: [
-        { id: 'text', label: 'Commitment', type: 'text', value: g.text, placeholder: '...' },
-        { id: 'category', label: 'Category', type: 'select', value: g.category || 'General', options: getCategoryOptions() },
-        { id: 'newCategory', label: 'Or new category', type: 'text', value: '', placeholder: 'e.g. Reading' },
-        { id: 'target_count', label: 'Times per day', type: 'number', value: g.target_count || 1, placeholder: '1' },
-        { id: 'unit', label: 'Unit (optional)', type: 'text', value: g.unit || '', placeholder: 'e.g. DM, halaman, menit' },
-        { id: 'reminderEnabled', label: 'Give this a time', type: 'toggle', value: !!g.reminder_time, controls: 'reminderTime' },
-        { id: 'reminderTime', label: 'At', type: 'time', value: g.reminder_time || '08:00' }
-      ],
+      fields: goalFormFields(g),
       saveLabel: 'Save',
-      onSave: ({ text, category, newCategory, target_count, unit, reminderEnabled, reminderTime }) => {
-        const trimmed = text.trim();
-        if (!trimmed) return;
-        const categoryVal = newCategory.trim() || category || 'General';
-        const targetVal = Math.max(1, Math.round(Number(target_count)) || 1);
-        const unitVal = unit.trim() || null;
-        const reminderVal = reminderEnabled ? reminderTime : null;
-        g.text = trimmed;
-        g.category = categoryVal;
-        g.target_count = targetVal;
-        g.unit = unitVal;
-        g.reminder_time = reminderVal;
+      onSave: (values) => {
+        const parsed = parseGoalForm(values);
+        if (!parsed) return;
+        Object.assign(g, parsed);
         render();
-        dbCall(() => sb.from('goals').update({ text: trimmed, category: categoryVal, target_count: targetVal, unit: unitVal, reminder_time: reminderVal }).eq('id', id));
+        dbCall(() => sb.from('goals').update(parsed).eq('id', id));
       }
     });
   }));
@@ -722,29 +934,16 @@ function bindCommitmentsEvents() {
 
   main.querySelectorAll('[data-add-commit]').forEach(btn => btn.addEventListener('click', () => {
     const presetCat = btn.dataset.addCommit || '';
-    const catOptions = getCategoryOptions();
     showModal({
       title: presetCat ? `Add to ${presetCat}` : 'New Commitment',
-      fields: [
-        { id: 'text', label: 'Commitment', type: 'text', value: '', placeholder: 'e.g. Push Up' },
-        { id: 'category', label: 'Category', type: 'select', value: presetCat || catOptions[0], options: catOptions },
-        { id: 'newCategory', label: 'Or new category', type: 'text', value: '', placeholder: 'e.g. Reading' },
-        { id: 'target_count', label: 'Times per day', type: 'number', value: 1, placeholder: '1' },
-        { id: 'unit', label: 'Unit (optional)', type: 'text', value: '', placeholder: 'e.g. DM, halaman, menit' },
-        { id: 'reminderEnabled', label: 'Give this a time', type: 'toggle', value: false, controls: 'reminderTime' },
-        { id: 'reminderTime', label: 'At', type: 'time', value: '08:00' }
-      ],
+      fields: goalFormFields(null, presetCat),
       saveLabel: 'Add',
-      onSave: async ({ text, category, newCategory, target_count, unit, reminderEnabled, reminderTime }) => {
-        const trimmed = text.trim();
-        if (!trimmed) return;
-        const categoryVal = newCategory.trim() || category || 'General';
+      onSave: async (values) => {
+        const parsed = parseGoalForm(values);
+        if (!parsed) return;
         const order_index = state.goals.items.length;
-        const targetVal = Math.max(1, Math.round(Number(target_count)) || 1);
-        const unitVal = unit.trim() || null;
-        const reminderVal = reminderEnabled ? reminderTime : null;
-        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type: 'do', text: trimmed, category: categoryVal, order_index, target_count: targetVal, unit: unitVal, reminder_time: reminderVal }).select().single());
-        if (data) { state.goals.items.push({ id: data.id, text: trimmed, category: categoryVal, target_count: targetVal, unit: unitVal, reminder_time: reminderVal }); render(); }
+        const { data } = await dbCall(() => sb.from('goals').insert({ user_id: currentUser.id, type: 'do', order_index, ...parsed }).select().single());
+        if (data) { state.goals.items.push({ id: data.id, ...parsed }); render(); }
       }
     });
   }));

@@ -24,6 +24,19 @@
     --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   }
   *, *::before, *::after { box-sizing: border-box; }
+  /* Themed scrollbars, site-wide — no browser-default white bars anywhere. Zero specificity on
+     purpose so the few places that intentionally hide their scrollbar (.sub-nav, .mobile-sub-nav)
+     still win. Chrome/Edge/Safari use the ::-webkit-scrollbar rules (they ignore those if the
+     standard scrollbar-* properties are set, which would also kill the hover color), Firefox
+     gets the standard properties. */
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-corner { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 10px; }
+  *::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+  @supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+  }
   html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
   body {
     font-size: 13px;
@@ -440,6 +453,7 @@
   }
   .check.checked { background: var(--accent); border-color: var(--accent); }
   .check.checked::after { transform: rotate(-45deg) scale(1); }
+  .check.static { cursor: default; }
   .check.pulse { animation: pulse 150ms ease; }
   @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
   .check-label { flex: 1; min-width: 0; }
@@ -579,12 +593,7 @@
   .act-feed-clear:hover { color: var(--text); border-color: var(--border-strong); }
   .act-feed-list {
     margin-top: 8px; max-height: 320px; overflow-y: auto;
-    scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent;
   }
-  .act-feed-list::-webkit-scrollbar { width: 6px; }
-  .act-feed-list::-webkit-scrollbar-track { background: transparent; }
-  .act-feed-list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 10px; }
-  .act-feed-list::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
   .act-feed-toggle {
     width: 100%; margin-top: 10px; padding: 10px;
     background: var(--card-2); border: 1px solid var(--border); border-radius: var(--r-sm);
@@ -782,20 +791,62 @@
   .goal-item.drag-over-bottom { box-shadow: inset 0 -2px 0 0 var(--accent); }
 
   /* ---- goal counter (target-count commitments, e.g. "Cold DM 3/day") ---- */
-  .goal-counter { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  /* progress line under a count/duration commitment: bar + "20/33 x" + shortcut buttons.
+     32px left inset = checkbox (18) + row gap (14), so it lines up under the title. */
+  .goal-prog {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+    padding: 0 0 12px 32px;
+  }
+  /* full-width bar on its own line so every item's bar is the same length; value left, buttons right below it */
+  .goal-prog-track { flex: 0 0 100%; height: 6px; background: #232323; border-radius: 6px; overflow: hidden; }
+  .goal-prog .goal-quick { margin-left: auto; }
+  .goal-prog-fill { height: 100%; background: var(--accent); border-radius: 6px; transition: width 300ms ease, background 200ms ease; }
+  .goal-prog-fill.done { background: var(--good); }
+  .goal-quick { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .goal-count-btn {
-    width: 20px; height: 20px; border-radius: 50%;
+    width: 24px; height: 24px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     background: var(--card-2); border: 1px solid var(--border);
-    color: var(--text-dim); font-size: 13px; line-height: 1; cursor: pointer;
+    color: var(--text-dim); font-size: 14px; line-height: 1; cursor: pointer;
     transition: background 150ms ease, color 150ms ease;
   }
   .goal-count-btn:hover { background: var(--border); color: var(--text); }
-  .goal-count-val {
-    font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums;
-    min-width: 34px; text-align: center;
+  .goal-quick-btn {
+    height: 24px; padding: 0 10px; border-radius: var(--r-pill);
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--card-2); border: 1px solid var(--border);
+    color: var(--text-dim); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap;
+    cursor: pointer; transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
   }
+  .goal-quick-btn:hover { background: var(--border); color: var(--text); }
+  .goal-quick-btn:active { transform: scale(0.96); }
+  /* the main "+1" of a count item: same size/shape as its neighbours, just a touch brighter — no filled white pill */
+  .goal-quick-btn.primary { color: var(--text); border-color: var(--border-strong); font-weight: 600; }
+  .goal-quick-btn.primary:hover { border-color: var(--accent); }
+  /* the only way to log a duration: big, always the obvious thing to press */
+  .goal-quick-btn.timer { height: 30px; padding: 0 18px; font-size: 12.5px; font-weight: 600; color: var(--text); border-color: var(--border-strong); }
+  .goal-quick-btn.timer:hover { border-color: var(--accent); }
+  .goal-quick-btn.timer.running { border-color: var(--accent); color: var(--accent); }
+  .goal-quick-btn.timer.done, .goal-quick-btn.timer:disabled { color: var(--good); border-color: transparent; background: transparent; cursor: default; font-weight: 500; }
+  .goal-timer-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); animation: goal-timer-blink 1.2s ease-in-out infinite; }
+  @keyframes goal-timer-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+  .goal-count-val {
+    font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums;
+    min-width: 52px; text-align: left; cursor: text;
+    border-radius: 4px; transition: color 150ms ease;
+  }
+  .goal-count-val:hover { color: var(--text); }
   .goal-item.goal-done .goal-count-val { color: var(--accent); }
+  /* replaces .goal-count-val while typing an exact amount */
+  .goal-count-input {
+    width: 52px; padding: 2px 4px; text-align: center;
+    font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text);
+    background: var(--card-2); border: 1px solid var(--border-strong); border-radius: 6px;
+    -moz-appearance: textfield; appearance: textfield;
+  }
+  .goal-count-input::-webkit-outer-spin-button,
+  .goal-count-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .goal-count-input:focus { outline: none; border-color: var(--accent); }
 
   /* ---- commitment category card (collapsible) ---- */
   details.cat-card { padding: 0; overflow: hidden; }
@@ -820,6 +871,9 @@
   }
 
   /* ---- per-commitment streak badge (consecutive checked days, grace until day ends) ---- */
+  /* name · time · streak, all left-aligned with a 8px gap; the wrapper takes the free space so the edit/delete icons stay right */
+  .goal-title-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+  .goal-title-wrap .check-label { flex: 0 1 auto; }
   .goal-streak {
     font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-dim);
     flex-shrink: 0;
@@ -1459,6 +1513,9 @@
   .compliance-inner {
     display: flex; align-items: center; gap: 24px;
   }
+  /* colour (set inline from js/pages/commitments.js complianceColor) eases between tiers instead of snapping */
+  .compliance-arc { transition: stroke 300ms ease; }
+  .compliance-pct-text { transition: fill 300ms ease; }
   .compliance-ring-mobile { display: none; }
   .compliance-ring-desktop { display: block; flex-shrink: 0; }
   .compliance-bars { display: flex; flex-direction: column; flex: 1; min-width: 0; }
@@ -1493,7 +1550,7 @@
   }
 
   /* commitments page — Month heatmap (Layer 1) */
-  .commit-month-stats { font-size: 11px; color: var(--text-faint); margin-top: 10px; text-align: center; }
+  .commit-month-stats { font-size: 11px; color: var(--text-faint); margin-top: 18px; text-align: left; }
   .commit-hm-grid {
     display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px;
   }
@@ -1538,7 +1595,9 @@
   .commit-spark-dot.current { fill: var(--accent); }
 
   /* commitments page — day-detail modal (Layer 3), built on the shared .hq-modal-* CSS */
-  .commit-day-modal-card { max-width: 420px; }
+  .commit-day-modal-card { max-width: 420px; max-height: min(80vh, 640px); }
+  /* Header stays pinned; only the body scrolls (scrollbar look comes from the global rule at the top). */
+  .commit-day-modal-card .hq-modal-body { overflow-y: auto; min-height: 0; }
   .commit-day-modal-pct { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
   .commit-day-modal-list { margin: 6px 0 0; }
   .commit-day-modal-row {

@@ -289,7 +289,7 @@ function renderLifeHome() {
 
   const score = computeDailyScore();
   const _totalGoalsHome = (state.goals.items || []).length;
-  const scoreColor = score >= 70 ? 'var(--accent)' : score >= 40 ? '#c8a850' : 'var(--danger)';
+  const scoreColor = complianceColor(score, _totalGoalsHome > 0); // same tiers as the Commitments ring (js/pages/commitments.js)
   // Daily score as a compact ring, shown inside the Commitments card header
   // (moved off its own top-of-page hero card — see CLAUDE.md's Home row for why).
   const scoreRingHtml = _totalGoalsHome === 0 ? '' : (() => {
@@ -352,7 +352,7 @@ function renderLifeHome() {
               ${homeCommitCats.map(cat => {
                 const items = categoryItems(cat);
                 const chk = items.filter(g => getTodayLog(g.id)?.checked).length;
-                const pct = items.length ? Math.round(chk / items.length * 100) : 0;
+                const pct = Math.round(avgProgressPct(items));
                 return `
               <div class="compliance-bar-row" data-go="life:commitments" style="cursor:pointer">
                 <span class="compliance-bar-lbl" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>
@@ -386,7 +386,10 @@ function renderLifeHome() {
             const log = getTodayLog(g.id);
             const count = log?.count || 0;
             const isDone = log?.checked || false;
-            const control = target > 1
+            // Durations are timer-only (see js/pages/commitments.js), so Home shows them read-only.
+            const control = getGoalKind(g) === 'duration'
+              ? `<span class="check static ${isDone ? 'checked' : ''}" title="Start the timer on Commitments"></span>`
+              : target > 1
               ? `<button type="button" data-goal-quickbump="${g.id}" title="Tap to log (${count}/${target}${g.unit ? ' ' + escapeHtml(g.unit) : ''})" style="all:unset;cursor:pointer;flex-shrink:0"><span class="check ${isDone ? 'checked' : ''}"></span></button>`
               : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal-home="${g.id}"></span>`;
             return `
@@ -676,6 +679,7 @@ function bindHomeEvents() {
     const g = (state.goals.items || []).find(x => x.id === id);
     if (!g || !currentUser) return;
     const target = g.target_count || 1;
+    if (getGoalKind(g) === 'duration') return; // timer-only, never bumped by hand
     const prevCount = getTodayLog(id)?.count || 0;
     const newCount = prevCount + 1 > target ? 0 : prevCount + 1;
     upsertGoalLog(g, newCount >= target, newCount);

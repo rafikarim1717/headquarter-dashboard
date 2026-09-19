@@ -636,6 +636,19 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
     });
   });
 
+  // Wire up showWhen — a field that appears only while another field's value is in a set,
+  // e.g. { id: 'unit', showWhen: { field: 'kind', values: ['count'] } }. Unlike `controls`
+  // (one trigger → one field), this lets several fields key off the same select.
+  fields.forEach(f => {
+    if (!f.showWhen) return;
+    const triggerEl = document.getElementById('modal-f-' + f.showWhen.field);
+    const self = container.querySelector(`[data-field-id="${f.id}"]`);
+    if (!triggerEl || !self) return;
+    const sync = () => { self.style.display = f.showWhen.values.includes(triggerEl.value) ? '' : 'none'; };
+    sync();
+    triggerEl.addEventListener('change', sync);
+  });
+
   // Wire up amount fields — live Indonesian dot formatting + preview
   fields.forEach(f => {
     if (f.type !== 'amount') return;
