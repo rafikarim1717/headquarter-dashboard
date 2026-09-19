@@ -1,6 +1,14 @@
 # ERD.md — Entity Relationship Document
 
-> Last synced against `js/app.js` / `js/supabase.js` on 2026-07-07. The **Habits**, **Focus** (`habits`, `habit_logs`, `focus_board`, `focus_tasks`) tables described in older versions of this document no longer exist in the app — they were replaced by **Commitments** (`goals` + `goal_logs`) and **Projects** (`projects` + `project_tasks`). Those tables may still linger in a live DB as unused leftovers; safe to drop.
+> Last audited against `js/supabase.js` (`loadFromSupabase()`), the page files and both schema files on 2026-09-19.
+>
+> **Schema files:** `schema.sql` is a fresh-project schema (every table below **except `projects` and `project_tasks`**). `schema_fix.sql` is the idempotent, numbered (sections 1–21) version that also backfills columns onto an existing DB — run it on the live DB after any schema change; it contains every table below.
+>
+> **Legacy tables** `habits`, `habit_logs`, `focus_board`, `focus_tasks` still exist in both schema files but **no code reads or writes them** — they were replaced by Commitments (`goals` + `goal_logs`) and Projects (`projects` + `project_tasks`) and are safe to drop.
+
+Non-unique indexes listed per table are the ones `schema.sql` creates; `schema_fix.sql` itself only creates `goal_logs(goal_id, date)` and `schedule_events(series_id)`.
+
+All tables have Row Level Security enabled with policies restricting every operation to the owning user (`auth.uid() = user_id`, or `= id` for `profiles`). All app queries also filter `user_id = auth.uid()`. All reads happen once at login in a single `Promise.all()` in `loadFromSupabase()`; writes go through `dbCall()` (retry once).
 
 ## Tables
 
@@ -8,24 +16,25 @@
 
 ### `profiles`
 
-Stores the display name for each authenticated user. One row per user.
+Stores the display name and the Notes editor's saved default style. One row per user (created by `seedSampleData()` on first login).
 
 | Column | Type | Nullable | Default | Description |
 |---|---|---|---|---|
 | `id` | uuid | NOT NULL | — | **PK** · References `auth.users(id)` · cascade delete |
-| `name` | text | YES | `'Friend'` (schema.sql) | Display name shown in greeting |
+| `name` | text | YES | `'Friend'` (schema.sql) | Display name shown in the greeting. Auth metadata (`full_name` → `name` → email prefix) takes priority over this value on load |
+| `note_default_style` | jsonb | YES | — | `{ fontFamily, fontSize, fontWeight, color }` from the Notes editor's "Save as my default style"; `NULL` = none saved |
 | `created_at` | timestamptz | NOT NULL | `now()` | Row creation timestamp (schema.sql only) |
 
 **Primary Key:** `id`
 **Foreign Keys:** `id → auth.users(id)` ON DELETE CASCADE
-**RLS:** Enabled — select/insert/update/delete restricted to `auth.uid() = id`
-**Operations in code:** `select * where id = userId` (maybeSingle), `upsert` on first login, `update name` via Tweaks panel
+**RLS:** select / insert / update / delete restricted to `auth.uid() = id`
+**Operations in code:** `select * where id = userId` (maybeSingle), `upsert` on first login, `update name` via the Tweaks panel, `update note_default_style` via the Notes editor
 
 ---
 
 ### `schedule_events`
 
-One row per calendar event. Events belong to a user and a date.
+One row per calendar event occurrence. Recurring events are stored as many real rows sharing a `series_id`.
 
 | Column | Type | Nullable | Default | Description |
 |---|---|---|---|---|
@@ -35,42 +44,49 @@ One row per calendar event. Events belong to a user and a date.
 | `time` | text | YES | `'09:00'` (schema.sql) | Start time "HH:MM" |
 | `title` | text | YES | — | Event name |
 | `note` | text | YES | `''` (schema.sql) | Sub-title / note |
-| `alarm_time` | text | YES | — | **[MISSING FROM SCHEMA FILES — run `ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS alarm_time text;`]** Alarm "HH:MM", nullable |
-| `created_at` | timestamptz | NOT NULL | `now()` | Row creation timestamp (schema.sql only) |
+| `alarm_time` | text | YES | — | Alarm "HH:MM" computed from the "Remind me" dropdown (at time / N min before / custom); `NULL` = no reminder |
+| `completed_at` | timestamptz | YES | — | Set to `now()` when the block's checkbox is ticked, `NULL` when unticked. A past, uncompleted block shows a "Missed" tag; completed blocks feed Home's Activity heatmap/feed |
+| `repeat` | text | NOT NULL | `'none'` | `'none'` \| `'daily'` \| `'weekdays'` \| `'weekly'` — set on Add only |
+| `series_id` | uuid | YES | — | Shared by every row generated from one recurring Add; `NULL` for non-recurring events |
+| `created_at` | timestamptz | NOT NULL | `now()` | Row creation timestamp |
 
 **Primary Key:** `id`
 **Foreign Keys:** `user_id → auth.users(id)` ON DELETE CASCADE
-**Indexes:** `(user_id, date)`
-**RLS:** Enabled — all operations restricted to `auth.uid() = user_id`
-**Operations in code:** `select * where user_id = userId`, `insert` (add event — includes `alarm_time`), `update` (edit — time/title/note/alarm_time), `delete` (by id)
+**Indexes:** `(user_id, date)`, `(series_id)`
+**Operations in code:** `select * where user_id = userId` (grouped by date client-side), `insert` (Add — one row per occurrence: 90 days ahead for daily/weekdays, 26 occurrences for weekly), `update time/title/note/alarm_time` (Edit), `update completed_at` (done checkbox), `delete by id`, `delete where series_id = … and date >= today` (opt-in "delete the rest of the series")
 
 ---
 
 ### `goals`
 
-Do's and Don'ts — behavioral commitments the user sets for themselves. Backs the **Commitments** page (formerly separate Goals/Habits pages). The static item list only; per-day check-off state lives in `goal_logs`, not on this row.
+The static list of **commitments** (one flat list — the old Do/Don't split was removed). Per-day state lives in `goal_logs`, not on this row.
+
+A commitment's **kind** is *derived* from `target_count` + `unit` (there is no `kind` column): `unit` = `menit`/`detik` ⇒ **Duration** (logged only via a Start/Stop timer); any other non-empty `unit`, or `target_count > 1` ⇒ **Count**; otherwise **Yes/No**.
 
 | Column | Type | Nullable | Default | Description |
 |---|---|---|---|---|
 | `id` | uuid | NOT NULL | `gen_random_uuid()` | **PK** |
 | `user_id` | uuid | NOT NULL | — | **FK** → `auth.users(id)` cascade delete |
-| `type` | text | YES | — | `'do'` or `'dont'` (check constraint in schema.sql) |
-| `text` | text | YES | — | Goal description text |
-| `checked` | boolean | NOT NULL | `false` | **Legacy column** — no longer read or written by the app; per-day state now lives in `goal_logs` |
-| `order_index` | integer | NOT NULL | `0` | Manual sort position within its `type` (dos/donts ordered independently). Set on insert; reordered via HTML5 drag-and-drop on the Commitments page (no arrow buttons). **[Only in `schema_fix.sql` section 13 — must be run against the live DB, see Schema Gaps]** |
+| `type` | text | NOT NULL | — | `'do'` \| `'dont'` (check constraint in schema.sql). **Legacy** — the app always inserts `'do'` and never reads it |
+| `text` | text | YES | — | Commitment name |
+| `checked` | boolean | NOT NULL | `false` | **Legacy** — no longer read or written; per-day state lives in `goal_logs` |
+| `order_index` | integer | NOT NULL | `0` | Manual sort position across all commitments. Set on insert; rewritten for every item on drag-and-drop reorder. Load order: `order_index`, then `created_at` |
+| `target_count` | integer | NOT NULL | `1` | Daily target: number of times (Count), minutes/seconds (Duration), or `1` (Yes/No) |
+| `unit` | text | YES | — | Label for the target (`'x'`, `'DM'`, `'waktu'`, `'halaman'`, …) or `'menit'`/`'detik'` for a Duration; `NULL` for Yes/No |
+| `category` | text | NOT NULL | `'General'` | Life area used to group commitments (presets: Olahraga, Kerja, Bahasa, Spiritual, Personal & Mental; any custom text allowed) |
+| `reminder_time` | text | YES | — | Daily reminder cue "HH:MM"; fires once at that time and once ~45 min later if still not done; `NULL` = none |
 | `created_at` | timestamptz | NOT NULL | `now()` | Row creation timestamp |
 
 **Primary Key:** `id`
 **Foreign Keys:** `user_id → auth.users(id)` ON DELETE CASCADE
 **Indexes:** `(user_id)`
-**RLS:** Enabled — all operations restricted to `auth.uid() = user_id`
-**Operations in code:** `select * where user_id = userId order by order_index, created_at`, `insert` (add, with `order_index`), `update text` (edit), `update order_index` (drag-to-reorder, one update per affected row), `delete`
+**Operations in code:** `select * where user_id = userId order by order_index, created_at`, `insert` (Add — with `type: 'do'`, `order_index`, `target_count`, `unit`, `category`, `reminder_time`), `update text/target_count/unit/category/reminder_time` (Edit — also how a commitment's type is changed), `update order_index` (drag-to-reorder), `delete` (cascades to its `goal_logs`)
 
 ---
 
 ### `goal_logs`
 
-Daily check-off log for each commitment. One row per `(goal_id, date)`. Drives the daily compliance ring (Home + Commitments) and the Commitments **Day / Week / Month / Year** history views.
+The daily log for each commitment. One row per `(goal_id, date)`, created on the first log of a day by an upsert.
 
 | Column | Type | Nullable | Default | Description |
 |---|---|---|---|---|
@@ -78,22 +94,23 @@ Daily check-off log for each commitment. One row per `(goal_id, date)`. Drives t
 | `user_id` | uuid | NOT NULL | — | **FK** → `auth.users(id)` cascade delete |
 | `goal_id` | uuid | NOT NULL | — | **FK** → `goals(id)` cascade delete |
 | `date` | date | NOT NULL | — | Log date (ISO YYYY-MM-DD) |
-| `checked` | boolean | NOT NULL | `false` | Whether the commitment was checked that day |
+| `checked` | boolean | NOT NULL | `false` | **Always `count >= goals.target_count`** — "target fully hit". Drives streaks, reminders, "N / M done" counts and Home's Activity feed |
+| `count` | integer | NOT NULL | `0` | That day's logged amount toward `target_count` (times, or minutes/seconds). Compliance percentages use `min(count / target_count, 1)` — **partial credit** — not `checked` |
+| `completed_at` | timestamptz | YES | — | Set to `now()` when `checked` flips to true, cleared to `NULL` when it flips back; unchanged by count changes that don't cross the boundary. Feeds Home's Activity feed (falls back to midday on `date` when `NULL`) |
 | UNIQUE | — | — | — | `(goal_id, date)` — one log per goal per day |
 
 **Primary Key:** `id`
 **Foreign Keys:**
 - `user_id → auth.users(id)` ON DELETE CASCADE
 - `goal_id → goals(id)` ON DELETE CASCADE
-**RLS:** Enabled — all operations restricted to `auth.uid() = user_id`
-**Operations in code:** `select * where user_id = userId` (bulk load), `upsert (goal_id, date)` on toggle (from both the Commitments page and the Today page preview)
-**Status:** **[MISSING FROM SCHEMA FILES]** — entire table absent from `schema.sql`/`schema_fix.sql`. Must be created manually (see Schema Gaps).
+**Indexes:** `(goal_id, date)` (plus the unique constraint)
+**Operations in code:** `select * where user_id = userId` (bulk load), `upsert on (goal_id, date)` writing `{ checked, count, completed_at }` — from the Commitments page (`setGoalCountToday()`: checkbox, `+N/−1`, typed amount, duration timer) and from Home's Today's-commitments quick-log controls
 
 ---
 
 ### `projects`
 
-A project: an objective broken into small tasks with a progress bar and activity heatmap. Replaced the old single-board Focus page.
+A project: an objective broken into small tasks with a progress bar. Replaced the old single-board Focus page. **Only in `schema_fix.sql` (section 11).**
 
 | Column | Type | Nullable | Default | Description |
 |---|---|---|---|---|
@@ -108,15 +125,13 @@ A project: an objective broken into small tasks with a progress bar and activity
 
 **Primary Key:** `id`
 **Foreign Keys:** `user_id → auth.users(id)` ON DELETE CASCADE
-**RLS:** Enabled — all operations restricted to `auth.uid() = user_id`
-**Operations in code:** `select * where user_id = userId order by created_at`, `insert` (add), `update name/description/status/deadline/updated_at` (edit), `delete` (behind a confirm modal — cascades to `project_tasks`)
-**Status:** **[MISSING FROM SCHEMA FILES]** — added to `schema_fix.sql` section 11. Must be run against the live DB (see Schema Gaps).
+**Operations in code:** `select * where user_id = userId order by created_at`, `insert` (New Project), `update name/description/status/deadline/updated_at` (Edit Project), `delete` (behind a confirm modal — cascades to `project_tasks`)
 
 ---
 
 ### `project_tasks`
 
-Sub-tasks under a project.
+Sub-tasks under a project. **Only in `schema_fix.sql` (section 12).**
 
 | Column | Type | Nullable | Default | Description |
 |---|---|---|---|---|
@@ -126,16 +141,33 @@ Sub-tasks under a project.
 | `text` | text | NOT NULL | — | Task title |
 | `description` | text | YES | — | Optional long-form description |
 | `checked` | boolean | NOT NULL | `false` | Task completion state |
-| `completed_at` | timestamptz | YES | — | Set to `now()` when `checked` flips to `true`, cleared to `NULL` on uncheck. Drives the Home "Active project" activity heatmap — a day is "green" if any task in the project has `completed_at` on that date. |
+| `completed_at` | timestamptz | YES | — | Set to `now()` when `checked` flips to `true`, cleared on uncheck. Feeds Home's Activity heatmap/feed (1 task completed that day = 1 activity) |
 | `created_at` | timestamptz | NOT NULL | `now()` | Row creation timestamp |
 
 **Primary Key:** `id`
 **Foreign Keys:**
 - `user_id → auth.users(id)` ON DELETE CASCADE
 - `project_id → projects(id)` ON DELETE CASCADE
-**RLS:** Enabled — all operations restricted to `auth.uid() = user_id`
-**Operations in code:** `select * where user_id = userId order by created_at`, `insert` (add task), `update checked, completed_at` (toggle), `update text/description` (edit), `delete`
-**Status:** **[MISSING FROM SCHEMA FILES]** — added to `schema_fix.sql` section 12 (including `completed_at`). Must be run against the live DB — until then, checking off a task fails outright since Postgrest rejects the whole `UPDATE` when `completed_at` is unknown (see Schema Gaps).
+**Operations in code:** `select * where user_id = userId order by created_at` (grouped under their project client-side), `insert` (Add Task), `update checked, completed_at` (toggle), `update text/description` (Edit Task), `delete`. The Projects page can also turn a task into a `schedule_events` row ("Assign to Today's Schedule" — insert only, no link back to the task)
+
+---
+
+### `today_focus_items`
+
+Home's "Today's focus" quick priority list.
+
+| Column | Type | Nullable | Default | Description |
+|---|---|---|---|---|
+| `id` | uuid | NOT NULL | `gen_random_uuid()` | **PK** |
+| `user_id` | uuid | NOT NULL | — | **FK** → `auth.users(id)` cascade delete |
+| `text` | text | NOT NULL | — | The priority |
+| `checked` | boolean | NOT NULL | `false` | Done state |
+| `created_at` | timestamptz | NOT NULL | `now()` | Row creation timestamp; the list loads `order by created_at` |
+
+**Primary Key:** `id`
+**Foreign Keys:** `user_id → auth.users(id)` ON DELETE CASCADE
+**Indexes:** `(user_id)`
+**Operations in code:** `select … order by created_at`, `insert` (Add), `update checked` (toggle), `delete` (immediate, no confirm). Not seeded for new users
 
 ---
 
@@ -155,8 +187,7 @@ Income log entries.
 **Primary Key:** `id`
 **Foreign Keys:** `user_id → auth.users(id)` ON DELETE CASCADE
 **Indexes:** `(user_id, date)`
-**RLS:** Enabled — all operations restricted to `auth.uid() = user_id`
-**Operations in code:** `select * where user_id = userId order by date desc`, `insert` (add), `update date/source/amount` (edit), `delete`
+**Operations in code:** `select * where user_id = userId order by date desc`, `insert` (Log income), `update date/source/amount` (Edit), `delete`
 
 ---
 
@@ -169,7 +200,7 @@ Spending/expense log entries.
 | `id` | uuid | NOT NULL | `gen_random_uuid()` | **PK** |
 | `user_id` | uuid | NOT NULL | — | **FK** → `auth.users(id)` cascade delete |
 | `date` | date | NOT NULL | — | Spending date |
-| `time` | text | YES | `'00:00'` (schema.sql) | Time "HH:MM" (auto-set to now on add) |
+| `time` | text | YES | `'00:00'` (schema.sql) | Time "HH:MM" |
 | `category` | text | YES | `'Other'` (schema.sql) | One of: Food / Transport / Shopping / Other |
 | `note` | text | YES | `''` (schema.sql) | Description |
 | `amount` | numeric(18,2) | NOT NULL | `0` | Spending amount |
@@ -178,8 +209,7 @@ Spending/expense log entries.
 **Primary Key:** `id`
 **Foreign Keys:** `user_id → auth.users(id)` ON DELETE CASCADE
 **Indexes:** `(user_id, date)`
-**RLS:** Enabled — all operations restricted to `auth.uid() = user_id`
-**Operations in code:** `select * where user_id = userId order by date desc`, `insert` (add), `update category/amount/note/time` (edit), `delete`
+**Operations in code:** `select * where user_id = userId order by date desc`, `insert` (Log spend), `update category/amount/note/time` (Edit — the date isn't editable), `delete`
 
 ---
 
@@ -194,14 +224,13 @@ Debt obligations owed to creditors.
 | `creditor` | text | YES | — | Name of who you owe |
 | `amount` | numeric(18,2) | NOT NULL | `0` | Amount owed |
 | `due_date` | date | YES | — | Payment due date |
-| `paid` | boolean | NOT NULL | `false` | Whether debt has been settled |
+| `paid` | boolean | NOT NULL | `false` | Whether the debt has been settled |
 | `created_at` | timestamptz | NOT NULL | `now()` | Row creation timestamp (schema.sql only) |
 
 **Primary Key:** `id`
 **Foreign Keys:** `user_id → auth.users(id)` ON DELETE CASCADE
 **Indexes:** `(user_id)`
-**RLS:** Enabled — all operations restricted to `auth.uid() = user_id`
-**Operations in code:** `select * where user_id = userId order by due_date`, `insert` (add), `update creditor/amount/due_date` (edit), `update paid` (mark paid / unpaid), `delete`
+**Operations in code:** `select * where user_id = userId order by due_date`, `insert` (Add debt), `update creditor/amount/due_date` (Edit), `update paid` (paid ↔ unpaid toggle), `delete`
 
 ---
 
@@ -213,16 +242,15 @@ Freeform rich-text notes.
 |---|---|---|---|---|
 | `id` | uuid | NOT NULL | `gen_random_uuid()` | **PK** |
 | `user_id` | uuid | NOT NULL | — | **FK** → `auth.users(id)` cascade delete |
-| `title` | text | YES | `''` | Note title |
-| `content` | text | YES | `''` | Note body as HTML (from contenteditable) |
+| `title` | text | NOT NULL | `''` | Note title |
+| `content` | text | NOT NULL | `''` | Note body as HTML (from contenteditable) |
 | `created_at` | timestamptz | NOT NULL | `now()` | Row creation timestamp |
-| `updated_at` | timestamptz | YES | — | Last save timestamp (set on every autosave) |
+| `updated_at` | timestamptz | NOT NULL | `now()` | Last save timestamp (set on every autosave); the list loads `order by updated_at desc` |
 
 **Primary Key:** `id`
 **Foreign Keys:** `user_id → auth.users(id)` ON DELETE CASCADE
-**RLS:** Should be enabled — all operations restricted to `auth.uid() = user_id`
-**Operations in code:** `select * where user_id = userId order by updated_at desc`, `insert` (new note), `update title/content/updated_at` (autosave, debounced 1000ms), `delete`
-**Status:** **[MISSING FROM SCHEMA FILES]** — queried in code but not defined in any schema file. Must be created manually (see Schema Gaps).
+**Indexes:** `(user_id)` (schema.sql)
+**Operations in code:** `select * where user_id = userId order by updated_at desc`, `insert` (new note), `update title/content/updated_at` (autosave, debounced 1000ms), `delete` (confirmed)
 
 ---
 
@@ -236,11 +264,12 @@ auth.users (Supabase managed)
   │
   ├──< schedule_events (1:many)
   │       user_id ─────── auth.users.id
+  │       series_id ───── (shared uuid, not a FK) groups a recurring series
   │
-  ├──< goals (1:many)
+  ├──< goals (1:many)                       ← the "commitments"
   │       user_id ─────── auth.users.id
   │       │
-  │       └──< goal_logs (1:many per goal)
+  │       └──< goal_logs (1:many per goal, one per day)
   │               goal_id ──── goals.id
   │               user_id ──── auth.users.id
   │               UNIQUE (goal_id, date)
@@ -252,6 +281,9 @@ auth.users (Supabase managed)
   │               project_id ── projects.id
   │               user_id ──── auth.users.id
   │
+  ├──< today_focus_items (1:many)
+  │       user_id ─────── auth.users.id
+  │
   ├──< income_entries (1:many)
   │       user_id ─────── auth.users.id
   │
@@ -261,13 +293,13 @@ auth.users (Supabase managed)
   ├──< debts (1:many)
   │       user_id ─────── auth.users.id
   │
-  └──< notes (1:many)  ← [SCHEMA MISSING]
+  └──< notes (1:many)
           user_id ─────── auth.users.id
 ```
 
 **Cardinality key:**
 - `──<` = one-to-many (parent ── child)
-- `(1:1)` = enforced by UNIQUE constraint on FK column
+- `(1:1)` = the child's PK is also the FK to the parent
 
 ---
 
@@ -275,75 +307,46 @@ auth.users (Supabase managed)
 
 | Table | Home | Schedule | Commitments | Projects | Notes | F:Overview | F:Income | F:Spending | F:Debts |
 |---|---|---|---|---|---|---|---|---|---|
-| `profiles` | R | — | — | — | — | — | — | — | — |
-| `schedule_events` | R | R W | — | — | — | — | — | — | — |
+| `profiles` | R | — | — | — | R W¹ | — | — | — | — |
+| `schedule_events` | R W | R W | — | W² | — | — | — | — | — |
 | `goals` | R | — | R W | — | — | — | — | — | — |
 | `goal_logs` | R W | — | R W | — | — | — | — | — | — |
 | `projects` | R | — | — | R W | — | — | — | — | — |
-| `project_tasks` | R | — | — | R W | — | — | — | — | — |
-| `income_entries` | — | — | — | — | — | R | R W | — | — |
-| `spending_entries` | — | — | — | — | — | R | — | R W | — |
-| `debts` | — | — | — | — | — | R | — | — | R W |
+| `project_tasks` | R W | — | — | R W | — | — | — | — | — |
+| `today_focus_items` | R W | — | — | — | — | — | — | — | — |
+| `income_entries` | R | — | — | — | — | R | R W | — | — |
+| `spending_entries` | R | — | — | — | — | R | — | R W | — |
+| `debts` | R | — | — | — | — | R | — | — | R W |
 | `notes` | — | — | — | — | R W | — | — | — | — |
 
-**R** = Read only, **W** = Read + Write (insert / update / delete)
+**R** = Read only, **W** = Read + Write (insert / update / delete). ¹ `profiles.note_default_style` is written by the Notes editor; `profiles.name` by the Tweaks panel (any page). ² Projects only inserts (its "Assign to Today's Schedule" action).
 
-Home writes to `goal_logs` (Today's commitments preview check-off) and reads `projects`/`project_tasks` for the "Active project" card (progress bar + heatmap + carousel).
-All data is bulk-loaded once on login in `loadFromSupabase()` via a single `Promise.all()`.
+Home writes: `schedule_events.completed_at` (schedule checkboxes), `goal_logs` (Today's-commitments quick-log — Yes/No and Count only; Duration is read-only there), `project_tasks` (Active-project checkboxes), `today_focus_items`. Home reads `goals`/`goal_logs` for the compliance bars + Daily score, and `projects`/`project_tasks`/`schedule_events`/`goal_logs` for the Activity heatmap/feed. Finance snapshot on Home reads `income_entries`, `spending_entries`, `debts`.
+
+All data is bulk-loaded once on login in `loadFromSupabase()` via a single `Promise.all()` (and again after the tab has been hidden for more than 5 minutes).
 
 ---
 
 ## Schema Gaps to Fix
 
-Run the following in the Supabase SQL Editor (also covered by `schema_fix.sql`) to bring the live DB up to date with what the app code expects:
+The complete, idempotent migration is `schema_fix.sql` — running the whole file in the Supabase SQL Editor brings any older live DB up to what the app expects. The sections that matter for features added over time:
 
-```sql
--- 1. alarm_time on schedule_events
-ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS alarm_time text;
+| `schema_fix.sql` section | What it adds | What breaks without it |
+|---|---|---|
+| 2 | `schedule_events.alarm_time`, `.completed_at` | Reminders; schedule "done"/"Missed"; Activity feed |
+| 11–12 | `projects`, `project_tasks` (+ `completed_at`) | Projects page, Active project card, Activity heatmap |
+| 13 | `goals.order_index` | Loading/inserting commitments |
+| 14 | `notes` | Notes page |
+| 15 | `today_focus_items` | Home's Today's focus |
+| 16 | `goals.target_count`, `.unit`; `goal_logs` table + `.count` | Commitment types (Yes/No, Count, Duration) and daily progress — adding/editing commitments |
+| 17 | `profiles.note_default_style` | Notes "default style" options |
+| 18 | `goals.category` | Category grouping |
+| 19 | `goal_logs.completed_at` | Logging any commitment; Activity feed |
+| 20 | `schedule_events.repeat`, `.series_id` | Adding any schedule event |
+| 21 | `goals.reminder_time` | Adding/editing commitments |
 
--- 2. goals.order_index (Commitments drag-to-reorder)
-ALTER TABLE goals ADD COLUMN IF NOT EXISTS order_index integer NOT NULL DEFAULT 0;
-WITH ranked AS (
-  SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id, type ORDER BY created_at) - 1 AS rn
-  FROM goals
-)
-UPDATE goals SET order_index = ranked.rn
-FROM ranked WHERE goals.id = ranked.id AND goals.order_index = 0;
-
--- 3. goal_logs table (full creation)
-CREATE TABLE IF NOT EXISTS goal_logs (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  goal_id    uuid NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
-  date       date NOT NULL,
-  checked    boolean NOT NULL DEFAULT false,
-  UNIQUE (goal_id, date)
-);
-ALTER TABLE goal_logs ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
-  CREATE POLICY "goal_logs_all" ON goal_logs FOR ALL USING (auth.uid() = user_id);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
--- 4. projects + project_tasks tables — see schema_fix.sql sections 11–12
-
--- 5. notes table (full creation)
-CREATE TABLE IF NOT EXISTS notes (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  title      text NOT NULL DEFAULT '',
-  content    text NOT NULL DEFAULT '',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz
-);
-ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
-  CREATE POLICY "notes_all" ON notes FOR ALL USING (auth.uid() = user_id);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-CREATE INDEX IF NOT EXISTS notes_user_updated ON notes(user_id, updated_at DESC);
-```
+The Yes/No / Count / Duration types, duration timers, partial-credit compliance and ring colours introduced on 2026-09-19 need **no schema change** — they only use `goals.target_count`/`unit` and `goal_logs.count`/`checked`.
 
 ## Deprecated Tables (no longer referenced by the app)
 
-`habits`, `habit_logs`, `focus_board`, `focus_tasks` — replaced by `goals`+`goal_logs` (Commitments) and `projects`+`project_tasks` (Projects). If these still exist in the live DB or in `schema.sql`/`schema_fix.sql`, they are safe to ignore or drop.
+`habits`, `habit_logs`, `focus_board`, `focus_tasks` — replaced by `goals` + `goal_logs` (Commitments) and `projects` + `project_tasks` (Projects). They are still created by `schema.sql` / `schema_fix.sql`, and may exist in the live DB; safe to ignore or drop.

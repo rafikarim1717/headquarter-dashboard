@@ -1,10 +1,12 @@
 # IA.md — Information Architecture
 
+> Last audited against the code on 2026-09-19. For implementation detail (functions, state, edge cases) see `CLAUDE.md`; for tables and columns see `ERD.md`.
+
 ## App Overview
 
 **Headquarter (HQ)** is a single-page application with two top-level sections: **Life** and **Finance**. Within each section are sub-pages rendered into a single `<main>` element. Navigation is either via a collapsible left sidebar (desktop) or a bottom tab bar + horizontal pill strip (mobile).
 
-There is no routing library — the app uses a simple `state.activeTab` string (e.g. `'life:home'`, `'finance:spending'`) mapped to render functions. The URL does not change between pages.
+There is no routing library — the app uses a simple `state.activeTab` string (e.g. `'life:home'`, `'finance:spending'`) mapped to render functions in `ROUTES` (`js/navigation.js`). The URL does not change between pages. The active tab, selected schedule day and calendar month are remembered per device in `localStorage('hq.prefs')`.
 
 ---
 
@@ -15,9 +17,8 @@ App
 ├── Life (section)
 │   ├── Today          life:home
 │   ├── Schedule       life:schedule
-│   ├── Goals & Rules  life:goals
-│   ├── Habits         life:habits
-│   ├── Focus          life:focus
+│   ├── Commitments    life:commitments
+│   ├── Projects       life:projects
 │   └── Notes          life:notes
 └── Finance (section)
     ├── Overview        finance:overview
@@ -29,8 +30,8 @@ App
 ### Desktop Navigation (sidebar)
 - Left sidebar: 200px expanded, 60px collapsed (icon-only)
 - Toggle button (« / ») collapses/expands; state persisted in `localStorage('hq.sidebar')`
-- Each nav item has a Heroicons outline SVG + label text
-- Active item: `background: rgba(255,255,255,0.08)`
+- Each nav item has an outline SVG icon + label text
+- Active item highlighted
 - Collapsed mode: labels hidden, tooltip shown on hover via `#nav-tooltip`
 - Section labels ("Life", "Finance") fade out when collapsed
 - Footer: Sign out button
@@ -38,16 +39,19 @@ App
 ### Mobile Navigation (bottom bar + pills)
 - `<nav class="bottom-nav">` — 2 buttons: **Life** (home icon) and **Finance** (chart icon)
 - Tapping Life → navigates to `life:home`; tapping Finance → `finance:overview`
-- Sub-nav: horizontal scrollable pill strip rendered inside `<div class="mobile-sub-nav">` as part of each page's `topbar()` output
+- Sub-nav: horizontal scrollable pill strip rendered inside `<div class="mobile-sub-nav">` as part of each page's `topbar()` output (Today / Schedule / Commitments / Projects / Notes for Life; Overview / Income / Spending / Debts for Finance)
 - Active pill highlighted with accent background
 
 ### Topbar (rendered per page)
 Every page renders `topbar()` which outputs:
-- Greeting (time-based: Late night / Good morning / Good afternoon / Good evening)
-- User name + live clock (seconds tick, cleared on re-render)
-- Gear icon → opens Tweaks panel
-- Mobile sign-out button
-- Horizontal sub-nav pills for current section
+- Greeting (time-based: Late night / Good morning / Good afternoon / Good evening) + user name
+- Date + live clock (seconds tick; the interval is cleared on re-render)
+- Right side: mobile sign-out button, the **ambient music** widget (station name while playing, ♪/equalizer play-pause button, ▾ station picker with 3 built-in radios + custom YouTube stations), and the ⚙ **Tweaks** button
+- Horizontal sub-nav pills for the current section (shown on mobile)
+
+### Login / loading
+- **Login screen** (`#login-screen`): Google OAuth button, email + password sign-in, "Forgot password". The sign-up button exists but is hidden.
+- **Loading screen** (`#app-loading`): shown while the session is checked and data loads (minimum 800ms, then fades out). New users (no `profiles` row) get sample data seeded first.
 
 ---
 
@@ -57,18 +61,22 @@ Every page renders `topbar()` which outputs:
 
 ### Life: Today (`life:home`)
 
-**Purpose:** At-a-glance overview of the current day.
+**Purpose:** At-a-glance overview of the current day, ordered by urgency.
 
-**Features:**
-- Time-based greeting + date + live clock
-- Today's schedule preview (up to 5 events from `state.schedule[today]`)
-- Current focus statement + first 3 sub-tasks (toggleable)
-- Optional quick-navigation pills to Schedule, Goals, Habits, Focus (controlled by Tweaks `showQuickPills`)
-- Two layout modes: **Stacked** (schedule first) or **Hero focus** (focus first) — controlled by Tweaks `homeLayout`
+**Cards, in order** (each is a collapsible `<details>` card; collapse state resets on re-render):
+1. **Today's schedule** — top 3 blocks, windowed around "now" so the next upcoming one ("Up Next", with a live `in Xh Ym Zs` countdown) is always visible; each has a checkbox to mark it done, plus alarm/repeat/"Missed" tags
+2. **Today's commitments** — top 3 commitments *that have a reminder time*, sorted by that time. Yes/No items have a checkbox; Count items a tap-to-log control (+1, wraps to 0 at target) with a `(count/target)` suffix; **Duration items are read-only** (logged only via the timer on Commitments)
+3. **Today's focus** — quick priority list: add an item (input + Add / Enter), tick it, delete it
+4. **Commitments** — per-category compliance bars (partial-credit %) and a compact **Daily score ring** in the header, coloured red / white / green by ratio
+5. **Finance snapshot** — spent today, income this month, nearest debt due
+6. **Active project** — one active project at a time (progress bar + tasks; ‹ / › to cycle when several are active); click the body to jump to Projects
+7. **Activity** — GitHub-style year heatmap of completed project tasks + fully-done commitments + done schedule blocks, with a year selector, click-a-day filter, and a chronological feed tagged Project / Habit / Schedule (10 rows, "Show all")
+8. Optional quick-navigation pills (Schedule, Commitments, Projects) — Tweaks → Quick pills on Today
 
-**Data reads:** `state.schedule[todayISO()]`, `state.focus.main`, `state.focus.tasks`
-**Data writes:** Focus task toggle → `focus_tasks` (update checked)
-**Supabase tables:** `focus_tasks`
+**Layouts** (Tweaks → Today layout): **Stacked** (above order) or **Hero** (Active project moved up to right after Today's commitments).
+
+**Data reads:** `schedule_events`, `goals`, `goal_logs`, `today_focus_items`, `income_entries`, `spending_entries`, `debts`, `projects`, `project_tasks`
+**Data writes:** schedule "done" (`schedule_events.completed_at`), commitment quick-log (`goal_logs`), project-task check (`project_tasks`), Today's focus add/tick/delete (`today_focus_items`)
 
 ---
 
@@ -77,86 +85,57 @@ Every page renders `topbar()` which outputs:
 **Purpose:** Full calendar + daily event management.
 
 **Features:**
-- Month calendar grid (42 cells, 7 columns) with navigation (‹ / Today / ›)
-- Event dots on calendar cells with events
-- Selected day highlight (accent background)
-- Today highlight (border)
-- Event list for selected day: time, title, note/subtitle
-- Per-event alarm badge (⏰ HH:MM) if alarm is set
-- **Add event:** inline form — time (input[type=time]), title, note, alarm toggle + alarm time
-- **Edit event:** inline form per item — same fields as add
-- **Delete event:** immediate remove from state + Supabase delete
-- Alarm system: Web Notification + AudioContext sine beep, fires ±1 min of alarm_time, checked every 60s
+- Header with **+ Add event**
+- Collapsible **Calendar** card: month grid (Sun–Sat, 42 cells) with ‹ / Today / › navigation, a dot on days with events, today and selected-day highlights
+- Collapsible **day** card for the selected date: block count, then each event — done checkbox, time, title, note, ⏰ alarm tag, 🔁 repeat tag, red **Missed** tag when its time has passed unchecked, edit ✎ and delete 🗑
+- **Add event** modal: time, title, note, **Remind me** (No reminder / At event time / 5, 10, 15, 30 min or 1 hour before / Custom time…), **Repeat** (Doesn't repeat / Every day / Weekdays / Every week — materialized as real rows, 90 days ahead or 26 weeks)
+- **Edit event** modal: same fields minus Repeat
+- **Delete**: confirmation; for a recurring event a second confirmation offers to delete the rest of the series
+- **Alarms:** a Web Notification + beep + persistent in-app banner (Dismiss / Snooze 5 min, beep repeating every 20s), fired ±1 min of the alarm time; checked every 60s while the app is open
 
 **State managed:** `state.schedule`, `state.selectedDay`, `state.viewMonth`
 **UI prefs persisted:** `selectedDay`, `viewMonth` in `localStorage('hq.prefs')`
 **Supabase tables:** `schedule_events`
-- Read: all events for user, grouped by date
-- Write: insert (add), update (edit — time/title/note/alarm_time), delete
 
 ---
 
-### Life: Goals & Rules (`life:goals`)
+### Life: Commitments (`life:commitments`)
 
-**Purpose:** Behavioral commitments — things to do and not do.
+**Purpose:** Daily commitments (habits) — yes/no, counted or timed — with streaks, reminders and a compliance history.
+
+**Commitment types** (chosen in the Add/Edit modal, stored as `target_count` + `unit`):
+
+| Type | Example | How you log it |
+|---|---|---|
+| **Yes / No** | Push up | Tap the checkbox |
+| **Count** | Dzikir 33x, Sholat 5 waktu, Cold DM 3 | Progress bar + `count/target unit`; buttons `−`, `+1` and (target ≥ 20) `+10`; tap the number to type an exact amount; the left checkbox = mark fully done / reset |
+| **Duration** | Belajar 10 menit, Plank 60 detik | **Only** the **▶ Start** timer: counts down the time still missing, auto-completes at 0:00 (notification + beep + toast), **Stop** early logs the time actually spent; survives reload; no manual +/− or typing |
 
 **Features:**
-- Progress bar + percentage based on Do's checked today
-- Two columns: **Do's** and **Don'ts**
-- Each item: checkbox toggle, text label, edit (inline form), delete
-- Progress meta: "X done / Y to go"
-- **Add goal:** inline form per column — text input
-- **Edit goal:** inline form per item — text input
-- **Delete goal:** immediate
+- **Today's Compliance** card (collapsible): a ring showing today's % — **partial credit** (dzikir 20/33 ≈ 61%, not 0) — coloured **red below 10%**, normal white **10–70%**, **green from 70% (light) deepening to dark green at 100%**; per-category bars; the % also stays visible in the collapsed header
+- **⚔️ Main Quest**: collapsible **category cards** (Olahraga, Kerja, Bahasa, Spiritual, Personal & Mental, or custom) with a `done / total` count, mini progress bar and **+ Add to <category>**; **+ New category** in the section header
+- Each row: name · 🕐 reminder time · 🔥 streak (left, in that order) · edit ✎ / delete 🗑 (right, on hover); Count/Duration rows add the progress line underneath; rows are **drag-and-drop reorderable** within their category
+- **Add / Edit Commitment** modal: name, **Type**, target per day + unit (Count) or minutes/seconds (Duration), category (+ new category), and "Give this a time" (daily reminder time)
+- **Daily reminders:** a commitment with a time fires a notification/banner at that time and a gentler nudge 45 min later if still not done
+- **History** (own section): tabs **Month** (calendar heatmap — each day's compliance % with a green ≥80 / yellow 60–79 / red <60 tint; ‹ › month navigation) and **Year** (12-point monthly-average sparkline; click a point to jump to that month). Clicking a Month day opens a **day-detail modal** listing every commitment that day with ✓ / ○ partial / ✗ missed and the logged amounts
 
-**Supabase tables:** `goals`
-- Read: all goals for user, filtered by `type` ('do' / 'dont')
-- Write: insert (add), update (text or checked), delete
+**State managed:** `state.goals`, `state.goalLogs`, `state.commitPreviewTab`, `state.commitViewMonth`, `state.commitHeatmapYear`; running timers in `localStorage('hq.goalTimers')`
+**Supabase tables:** `goals`, `goal_logs`
 
 ---
 
-### Life: Habits (`life:habits`)
+### Life: Projects (`life:projects`)
 
-**Purpose:** Daily habit tracking with streaks and 7-day history.
-
-**Features:**
-- Grid of habit cards (2 col mobile, 3 col desktop)
-- Each card:
-  - Habit name
-  - Streak count (days)
-  - 7-day dot grid (filled = done)
-  - Checkbox to mark done today
-  - Edit button (✎) — shows inline name input
-  - Delete button (×) — appears on hover (desktop) or long-press (mobile, triggers "delete mode" shake animation)
-- **Add habit:** inline form below grid — name input
-- **Toggle:** updates `doneToday`, `streak`, `log` in state; upserts `habit_logs`; updates `habits.streak`
-- **Long-press mobile:** enters delete mode (card dims, × visible), cancelled by tapping elsewhere
-
-**Supabase tables:** `habits`, `habit_logs`
-- Read: all habits + all habit_logs for user; 7-day log computed client-side
-- Write habits: insert (add), update name (edit), update streak (toggle), delete
-- Write habit_logs: upsert `(habit_id, date)` on toggle; delete all logs when habit deleted
-
----
-
-### Life: Focus (`life:focus`)
-
-**Purpose:** Single main focus statement + supporting sub-tasks.
+**Purpose:** Objectives broken into small tasks, each with a progress bar.
 
 **Features:**
-- Large textarea for main focus statement (autosaves debounced 600ms)
-- Sub-tasks list with done count
-- Each task: checkbox, title, optional description (80 char preview), edit, delete
-- **Add sub-task:** inline form — text + optional description textarea
-- **Edit sub-task:** inline form — text + description textarea
-- **Toggle task:** updates `checked` in `focus_tasks`
+- Header with **+ New Project**; filter pills **All / Active / On Hold / Done**
+- Each project is a collapsible card: name, status and deadline badges, edit ✎ / delete 🗑 (confirmed — cascades to its tasks); collapsed it shows `done/total · %`; expanded it shows the description, a progress bar, and an independently collapsible task list
+- Tasks: checkbox, title, optional description, edit, delete (confirmed), **Assign to Today's Schedule** (creates a schedule event), **Add task**
+- Home's Active-project card deep-links here with the project expanded
 
-**State managed:** `state.focus.main`, `state.focus.tasks`, `focusBoardId` (global UUID)
-
-**Supabase tables:** `focus_board`, `focus_tasks`
-- Read: one `focus_board` row (maybeSingle), all `focus_tasks` for user
-- Write focus_board: upsert on first login; update `main_focus` on textarea change
-- Write focus_tasks: insert (add), update (text/description/checked), delete
+**State managed:** `state.projects`, `state.projectsFilter`, `state.expandedProjectIds`, `state.homeProjectIndex`
+**Supabase tables:** `projects`, `project_tasks` (and `schedule_events` insert for "Assign")
 
 ---
 
@@ -165,28 +144,18 @@ Every page renders `topbar()` which outputs:
 **Purpose:** Freeform rich-text note-taking.
 
 **Features (List view):**
-- Grid or list layout toggle (▦ / ☰)
-- Sort: Newest / Oldest / A–Z (by `updated_at`)
-- Filter: All / Today / This week
-- Each note card: title, 120-char content preview, relative timestamp (auto-refreshes every 60s)
-- Delete from list (× on card)
-- New note → creates DB row → opens editor
+- Header: **+ Add**, sort dropdown (Newest / Oldest / A–Z, by `updated_at`), filter dropdown (All / Today / This week), grid ▦ / list ☰ layout toggle
+- Each note card: title (or "Untitled"), 100-char content preview, relative timestamp (auto-refreshes every 60s), delete 🗑 (confirmed)
+- New note → creates the DB row → opens the editor
 
 **Features (Editor view):**
-- Full-width title input
-- contenteditable rich text area
-- Formatting toolbar: Normal / H1 / H2 / H3 / Bold / Italic / Bullet list (using `document.execCommand`)
-- Collapsible headings (▼ toggle injected into H1/H2/H3)
-- Autosave debounced 1000ms — title + content (HTML from contenteditable)
-- "Saved" label flash on save
-- Delete from editor
-- Back button → returns to list
+- Full-width title input and a contenteditable body
+- Docs/Word-style toolbar: **Style** dropdown (Normal / Title / Subtitle / Heading 1–3, plus an Options flyout to save / use / reset a personal default style), **Font family** (10 fonts, click to expand weight variants), **Font size** stepper with preset dropdown, Bold / Italic / Underline, Bullet / Numbered list, Text colour + Highlight swatches, Insert table (with row/column controls and a confirmed delete)
+- Collapsible headings; pasted tables/markdown tables are converted
+- Autosave debounced 1000ms (title + HTML), "Saved" flash; delete (confirmed); back button returns to the list
 
 **State managed:** `state.notes`, `state.activeNoteId`, `state.notesSort`, `state.notesFilter`, `state.notesDisplay`
-
-**Supabase tables:** `notes` *(schema missing — see CLAUDE.md)*
-- Read: all notes for user, sorted by `updated_at` desc
-- Write: insert (new note), update (title/content/updated_at), delete
+**Supabase tables:** `notes` (and `profiles.note_default_style`)
 
 ---
 
@@ -195,16 +164,12 @@ Every page renders `topbar()` which outputs:
 **Purpose:** Financial health at a glance.
 
 **Features:**
-- 3 metric cards with animated number counters:
-  - Income · this month (sum of `income_entries` where date starts with current YYYY-MM)
-  - Spent · today (sum of `spending_entries` where date = today)
-  - Total debt (sum of unpaid `debts`)
-- Alert pill: "Debt due in N days" if any unpaid debt is due within 7 days
+- 3 metric cards with animated number counters: Income · this month, Spent · today, Total debt (unpaid)
+- Alert pills: "N debts overdue" and a due-soon pill for debts due today / within 7 days
 - 7-day spending bar chart (one bar per day, height proportional to daily total, day-of-week labels)
 
-**Data reads:** `state.income`, `state.spending`, `state.debts`
+**Data reads:** `income_entries`, `spending_entries`, `debts`
 **Data writes:** None
-**Supabase tables:** `income_entries`, `spending_entries`, `debts` (read-only on this page)
 
 ---
 
@@ -213,16 +178,12 @@ Every page renders `topbar()` which outputs:
 **Purpose:** Log and review income entries.
 
 **Features:**
-- This-month total + entry count + average per entry (animated number)
-- Full log sorted by date descending
-- Each entry: date, source, amount (+prefix)
-- **Add income:** inline form — source text, amount number, date
-- **Edit income:** inline form per item — date, source, amount
-- **Delete income:** immediate
+- Header with **+ Log income**
+- Total (animated) + entry count + average for the selected range: filter tabs **This Month / This Year / All Time**, or **Jump to date** (× to clear)
+- Log sorted by date descending, **7 per page** with a pager; each entry: date, source, amount (+prefix), edit ✎, delete 🗑 (confirmed)
+- Add / Edit modals: source, amount, date
 
 **Supabase tables:** `income_entries`
-- Read: all for user, sorted by date desc
-- Write: insert (add), update (date/source/amount), delete
 
 ---
 
@@ -231,17 +192,12 @@ Every page renders `topbar()` which outputs:
 **Purpose:** Log and review spending entries.
 
 **Features:**
-- Today's total (animated number)
-- Category breakdown pills: Food / Transport / Shopping / Other (with per-category totals)
-- Full recent log sorted by date+time desc
-- Each entry: time (today) or date (other days), note/category, amount (−prefix), category sub-label
-- **Add spending:** inline form — category select, amount, note (time auto-set to now)
-- **Edit spending:** inline form per item — category, amount, note, time
-- **Delete spending:** immediate
+- Header with **+ Log spend**
+- Total (animated) for the selected range: **Daily / Weekly (Mon–today) / Monthly**, or **Jump to date** (× to clear); category breakdown pills Food / Transport / Shopping / Other with per-category totals
+- **Recent** list sorted by date+time descending, capped at 5 rows with "Show all N activities" / "Show less"; each entry: category pill, note, time (today) or date, amount (−prefix), edit ✎, delete 🗑 (confirmed)
+- Add modal: category, amount, note (the date is today and the time is set to now); Edit modal: category, amount, note
 
 **Supabase tables:** `spending_entries`
-- Read: all for user, sorted by date desc
-- Write: insert (add), update (category/amount/note/time), delete
 
 ---
 
@@ -250,18 +206,13 @@ Every page renders `topbar()` which outputs:
 **Purpose:** Track money owed with due dates.
 
 **Features:**
-- Open total (animated number) + open/paid counts
-- All debts sorted: unpaid first (by due date), paid last
-- Each debt: creditor name, due label (Paid / Due today / Due in Nd / Overdue), amount
-- Due ≤7 days and not paid: "soon" styling (danger color)
-- Mark paid button (for unpaid debts)
-- **Add debt:** inline form — creditor, amount, due date
-- **Edit debt:** inline form per item — creditor, amount, due date
-- **Delete debt:** immediate
+- Header with **+ Add debt**
+- Open total (animated) + open / paid counts
+- All debts sorted unpaid first (by due date), paid last, **7 per page** with a pager
+- Each debt: creditor, due label (Paid / Due today / Due in Nd / Overdue), amount; due ≤7 days and unpaid gets "soon" (danger) styling; a **paid ↔ unpaid toggle** (✓ marks paid, ↩ marks unpaid again; toasts "Marked as paid/unpaid"), edit ✎, delete 🗑 (confirmed)
+- Add / Edit modals: creditor, amount, due date
 
 **Supabase tables:** `debts`
-- Read: all for user, sorted by due_date
-- Write: insert (add), update (creditor/amount/due_date or paid=true), delete
 
 ---
 
@@ -269,12 +220,12 @@ Every page renders `topbar()` which outputs:
 
 ### Cards
 ```html
-<div class="card" style="animation-delay:Xms">
+<div class="card">
   <div class="section-title">Title <span class="meta">meta text</span></div>
   <!-- content -->
 </div>
 ```
-Cards animate in with `card-in` keyframe (opacity 0→1, translateY 12px→0). Stacked with `margin-top: 16px`.
+Cards stack with `margin-top: var(--gap)`. **Collapsible cards** — used for most Home cards, Schedule's calendar/day cards, Commitments' compliance card and category cards, and each Project — are native `<details class="card cat-card" open>` with a `<summary>` (title, meta, chevron) and a `.cat-body`; they render open on every render.
 
 ### Metric Cards
 ```html
@@ -284,7 +235,7 @@ Cards animate in with `card-in` keyframe (opacity 0→1, translateY 12px→0). S
   <div class="sub">subtitle</div>
 </div>
 ```
-Numbers animate from 0 to `data-target` on render.
+Numbers animate from 0 to `data-target` (600ms) on every render.
 
 ### List Items
 ```html
@@ -299,58 +250,56 @@ Numbers animate from 0 to `data-target` on render.
 </ul>
 ```
 
-### Inline Forms (Add / Edit)
-```html
-<button class="add-btn" data-open-form="form-id">+ Add</button>
-<div class="inline-form" id="form-id">
-  <div class="inner">
-    <div class="field"><label>Label</label><input .../></div>
-    <div class="form-actions">
-      <button class="btn" data-cancel="form-id">Cancel</button>
-      <button class="btn primary" id="save-btn">Add</button>
-    </div>
-  </div>
-</div>
-```
-`max-height` transitions 0→360px on `.open` class. Only one form open at a time. Global click listener closes all open forms.
+### Modals (all Add / Edit flows)
+`showModal({ title, fields, saveLabel, onSave })` renders a form from a field list — types `text`, `number`, `date`, `textarea`, `select`, `toggle`, `time` (hour/minute spinner) and `amount` (live dot-formatted). A field can be shown/hidden by another field with `controls`/`controlsWhen` (toggle or select → one field) or `showWhen: { field, values }` (visible while another field's value is in the list — used by the commitment Type select). Add buttons: `data-modal-add="…"`, `#add-sched-btn`, `data-add-commit`. Edit buttons: `data-edit-XXX="id"`. There are no inline add/edit forms anymore.
+
+### Confirm dialog (all deletes)
+`showConfirmModal({ title, message, confirmLabel, onConfirm })` — used before deleting a commitment, event, project, task, note, table, income, spending or debt. The one exception is Home's Today's-focus delete, which is immediate.
 
 ### Checkboxes
 ```html
 <span class="check [checked]" data-toggle-XXX="id"></span>
 <span class="check-label [done]">Label</span>
 ```
-Styled box with CSS checkmark. `pulse` class triggers scale animation on toggle.
+Styled box with CSS checkmark. `pulse` triggers a scale animation on toggle. `.check.static` is a non-interactive variant that only mirrors state (Duration commitments).
+
+### Progress bar + quick buttons (Count / Duration commitments)
+`.goal-prog` = full-width `.goal-prog-track`/`.goal-prog-fill` (green `.done` when the target is hit), a `count/target unit` value, and `.goal-quick` buttons (`.goal-count-btn` circular `−`, `.goal-quick-btn` pills, `.goal-quick-btn.timer` for Start/Stop).
 
 ### Pills (Navigation)
 ```html
-<button class="mobile-pill [active]" data-go="life:habits">Habits</button>
+<button class="mobile-pill [active]" data-go="life:commitments">Commitments</button>
 ```
 
-### Pills (Category / Info)
+### Pills (Category / Info / Filters)
 ```html
 <span class="pill cat">Food<span class="amt">Rp 35.000</span></span>
+<button class="pill [active]" data-income-filter="month">This Month</button>
 ```
 
 ### Tweaks Panel
-Global settings panel (`#tweaks-panel`, slide-in from right):
-- Your name (text input → updates profile + Supabase)
-- Accent color (6 swatches → CSS `--accent` variable)
-- Density: Comfortable / Compact (→ `data-density` on body)
-- Big number weight: 200 / 300 / 400 (→ `--num-weight`)
-- Today layout: Stacked / Hero focus
-- Quick pills on Today: On / Off
-- Currency prefix (text input, max 3 chars)
+Global settings panel (`#tweaks-panel`, slide-in from the ⚙ button):
+- **Your name** (text input → updates `profiles.name` in Supabase)
+- **Density:** Comfortable / Compact
+- **Today layout:** Stacked / Hero focus
+- **Quick pills on Today:** On / Off
+- **Currency prefix** (text input, max 3 chars)
+- **Custom YouTube stations:** name + link rows, **+ Add station** (persisted in `localStorage('hq.customStations')`)
 
-Settings stored in `window.__HQ_TWEAKS` object (in-page, not persisted to DB except `name`).
+(Accent colour and Big-number-weight controls exist in the markup but are hidden; their values come from the `index.html` defaults.) Settings live in the in-page `window.__HQ_TWEAKS` object and reset to the `index.html` defaults on reload — except the name (Supabase) and the custom stations (localStorage).
 
 ### Toast
 ```js
-showToast('Message text')
+showToast('Message text')            // success (✓)
+showToast('Message text', 'error')   // error (✕)
 ```
-`#toast` element: appears with `.show` class, auto-hides after 3500ms.
+`#toast` element: appears with `.show`, auto-hides after 3500ms.
+
+### Alarm banner
+Persistent fixed banner (`.alarm-banner`) with Dismiss / Snooze 5 min, used by schedule alarms and commitment reminders.
 
 ### Alert
 ```html
 <div class="alert"><span class="glyph">⚠</span> Message</div>
 ```
-Danger-colored pill, used for debt due soon warnings.
+Danger-coloured pill, used for overdue / due-soon debt warnings on Finance → Overview.

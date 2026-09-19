@@ -67,8 +67,8 @@ let draggedGoalId = null; // id of the goal/commitment card currently being drag
 let state = {
   profile: { name: 'Friend', noteDefaultStyle: null },
   schedule: {},   // { [iso-date]: [{id, time, title, sub}] }
-  goals: { items: [] },  // items: {id, text, target_count, unit, category} — target_count=1 renders as a checkbox, >1 renders as a +/- counter. No Do/Don't split — every commitment is something you're building (see CLAUDE.md).
-  goalLogs: [],   // [{id, goal_id, user_id, date, checked, count, completed_at}] — checked is always (count >= goal.target_count); completed_at is set/cleared alongside checked and feeds Home's activity list
+  goals: { items: [] },  // items: {id, text, target_count, unit, category, reminder_time} — kind is derived (getGoalKind in commitments.js): unit menit/detik = Duration (timer-only), other unit or target_count>1 = Count (progress bar + buttons), else Yes/No checkbox. No Do/Don't split — every commitment is something you're building (see CLAUDE.md).
+  goalLogs: [],   // [{id, goal_id, user_id, date, checked, count, completed_at}] — checked is always (count >= goal.target_count) and means "target fully hit"; compliance % uses count/target (partial credit); completed_at is set/cleared alongside checked and feeds Home's activity list
   projects: [],       // [{id, name, status, deadline, tasks:[{id,text,description,checked,completed_at}]}]
   projectsFilter: 'all',
   expandedProjectIds: [],
@@ -104,8 +104,8 @@ let state = {
 /* =========================================================
    AMBIENT MUSIC
    Two playback engines behind one picker: the 3 built-in radios play via a
-   plain <audio> stream; up to 3 user-supplied YouTube links (Tweaks panel,
-   see setCustomStation()) play via the YouTube IFrame Player API, mounted
+   plain <audio> stream; any number of user-supplied YouTube links (Tweaks
+   panel, see addCustomStation()) play via the YouTube IFrame Player API, mounted
    into #yt-audio-player — a node that lives outside #main in index.html so
    it survives render()'s main.innerHTML replacement instead of being torn
    down and recreated on every page navigation.
