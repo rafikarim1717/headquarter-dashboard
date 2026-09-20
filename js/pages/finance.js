@@ -11,6 +11,20 @@ function thisMonthIncome() {
 function todaySpend() {
   return state.spending.filter(s => s.date === todayISO()).reduce((s,i) => s + Number(i.amount||0), 0);
 }
+function thisMonthSpend() {
+  const ym = ymLocal(new Date());
+  return state.spending.filter(s => (s.date||'').startsWith(ym)).reduce((s,i) => s + Number(i.amount||0), 0);
+}
+function lastMonthYm() {
+  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()-1);
+  return ymLocal(d);
+}
+function lastMonthNet() {
+  const ym = lastMonthYm();
+  const inc = state.income.filter(i => (i.date||'').startsWith(ym)).reduce((s,i) => s + Number(i.amount||0), 0);
+  const spent = state.spending.filter(s => (s.date||'').startsWith(ym)).reduce((s,i) => s + Number(i.amount||0), 0);
+  return inc - spent;
+}
 function totalDebt() {
   return state.debts.filter(d => !d.paid).reduce((s,d) => s + Number(d.amount||0), 0);
 }
@@ -25,13 +39,22 @@ function last7DaysSpend() {
     const d = new Date(); d.setDate(d.getDate()-i);
     const iso = isoLocal(d);
     const total = state.spending.filter(s => s.date === iso).reduce((s,x) => s + Number(x.amount||0), 0);
-    out.push({ iso, total, label: d.toLocaleDateString(undefined,{weekday:'short'}).slice(0,1) });
+    out.push({
+      iso, total,
+      isToday: iso === todayISO(),
+      label: d.toLocaleDateString(undefined,{weekday:'short'}).slice(0,3),
+      dateLabel: d.toLocaleDateString(undefined,{month:'short', day:'numeric'})
+    });
   }
   return out;
 }
 
 function renderFinanceOverview() {
   const inc = thisMonthIncome(), spent = todaySpend(), debt = totalDebt();
+  const spentMonth = thisMonthSpend();
+  const net = inc - spentMonth;
+  const netDelta = net - lastMonthNet();
+  const netDeltaLabel = netDelta === 0 ? 'same as last month' : `${netDelta > 0 ? '+' : '−'}${fmtMoney(Math.abs(netDelta))} vs last month`;
   const unpaidDebts = state.debts.filter(d => !d.paid);
   const overdueDebts = unpaidDebts.filter(d => daysUntil(d.due) < 0);
   const urgentDebts  = unpaidDebts.filter(d => { const n = daysUntil(d.due); return n >= 0 && n <= 7; });
@@ -69,13 +92,14 @@ function renderFinanceOverview() {
       <div class="card metric" style="animation-delay:0ms"><div class="label">Income · this month</div><div class="num" data-target="${inc}" data-prefix="${pfx}">${fmtMoney(0)}</div><div class="sub">${state.income.length} entries</div></div>
       <div class="card metric" style="animation-delay:80ms"><div class="label">Spent · today</div><div class="num" data-target="${spent}" data-prefix="${pfx}">${fmtMoney(0)}</div><div class="sub">${state.spending.filter(s=>s.date===todayISO()).length} transactions</div></div>
       <div class="card metric" style="animation-delay:160ms"><div class="label">Total debt</div><div class="num" data-target="${debt}" data-prefix="${pfx}">${fmtMoney(0)}</div><div class="sub">${state.debts.filter(d=>!d.paid).length} open</div></div>
+      <div class="card metric" style="animation-delay:240ms"><div class="label">Net · this month</div><div class="num" data-target="${net}" data-prefix="${pfx}" style="color:${net >= 0 ? 'var(--good)' : 'var(--danger)'}">${fmtMoney(0)}</div><div class="sub">${netDeltaLabel}</div></div>
     </div>
     ${alertsHtml}
     <div class="card" style="margin-top:18px; animation-delay:220ms">
       <div class="section-title" style="margin-top:0">Last 7 days spending <span class="meta">${fmtMoney(days.reduce((a,b)=>a+b.total,0))}</span></div>
       <div class="bar-chart">
         ${days.map((d,i) => `
-          <div class="col ${d.total===0?'dim':''}">
+          <div class="col ${d.total===0?'dim':''}${d.isToday?' today':''}" title="${d.dateLabel}${d.isToday?' (today)':''} · ${fmtMoney(d.total)}" tabindex="0">
             <div class="bar-track">
               <div class="bar" style="height:${d.total===0?6:Math.max(8,(d.total/max)*100)}%"></div>
             </div>

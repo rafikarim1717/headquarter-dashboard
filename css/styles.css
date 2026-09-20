@@ -385,7 +385,7 @@
   .card-row { display: grid; gap: var(--gap); }
 
   .metric-grid {
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); align-items: stretch;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--gap); align-items: stretch;
   }
   .metric-grid > .card { margin-top: 0; display: flex; flex-direction: column; justify-content: space-between; }
   @media (max-width: 520px) { .metric-grid { grid-template-columns: 1fr; } }
@@ -760,11 +760,17 @@
   .focus-task-item .inline-form .inner textarea:focus { border-color: var(--accent); }
 
   /* ============ SPENDING BAR CHART ============ */
-  .bar-chart { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; align-items: end; height: 80px; margin-top: 4px; }
-  .bar-chart .col { display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; }
-  .bar-chart .bar { width: 100%; max-width: 22px; background: var(--accent); opacity: 0.85; border-radius: 4px 4px 0 0; }
+  .bar-chart { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; align-items: end; height: 96px; margin-top: 8px; }
+  .bar-chart .col { display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; border-radius: 6px; outline: none; cursor: default; }
+  .bar-chart .bar { width: 100%; max-width: 22px; background: var(--accent); opacity: 0.85; border-radius: 4px 4px 0 0; transition: opacity var(--t-fast) ease, background var(--t-fast) ease; }
   .bar-chart .col.dim .bar { background: #2f2f2f; opacity: 1; }
-  .bar-chart .lbl { font-size: 10px; color: var(--text-faint); letter-spacing: 0.08em; }
+  .bar-chart .col:hover .bar,
+  .bar-chart .col:focus-visible .bar { opacity: 1; background: color-mix(in oklab, var(--accent) 85%, white); }
+  .bar-chart .col.dim:hover .bar,
+  .bar-chart .col.dim:focus-visible .bar { background: #3c3c3c; }
+  .bar-chart .col:focus-visible { box-shadow: 0 0 0 2px var(--border-strong); }
+  .bar-chart .lbl { font-size: 10px; color: var(--text-faint); letter-spacing: 0.04em; }
+  .bar-chart .col.today .lbl { color: var(--text); font-weight: 600; }
   .bar-track { height: 100%; display: flex; align-items: end; width: 100%; max-width: 22px; }
 
   /* ============ DELETE ============ */
@@ -955,7 +961,7 @@
     .page-title { font-size: 28px; }
     .metric { height: 100%; padding: 20px 24px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; width: 100%; }
     .metric .num { font-size: clamp(20px, 2.5vw, 32px); margin-top: 0; }
-    .metric .sub { margin-top: 0; }
+    .metric .sub { margin-top: 2px; }
     .focus-input { font-size: 28px; }
     .sub-nav { margin-bottom: 8px; }
     .notes-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
