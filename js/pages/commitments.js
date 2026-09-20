@@ -239,6 +239,7 @@ async function setGoalCountToday(id, rawCount) {
   updateCategoryHeaderCount(g.category || 'General');
   updateComplianceRing();
   updateGoalStreakBadge(id);
+  updateCommitTodayHeatmapCell();
   const { data } = await dbCall(() => sb.from('goal_logs').upsert(
     { user_id: currentUser.id, goal_id: id, date: today, checked: newChecked, count: newCount, completed_at: newCompletedAt },
     { onConflict: 'goal_id,date' }
@@ -278,6 +279,35 @@ function getCategoryOptions() {
 //     to open it; ESC or an outside click closes it, mirroring the existing
 //     showConfirmModal() pattern in js/core.js.
 // =========================================================
+
+// Keeps today's already-rendered Month heatmap cell (and the month-average
+// line above it) in sync with setGoalCountToday()'s in-place write path —
+// without this, the cell stays stale (old %) until the next full render(),
+// since renderCommitMonthHeatmap() only re-runs on tab switch/month nav.
+// No-op when today's cell isn't currently on screen (Year tab, or a past
+// month being viewed).
+function updateCommitTodayHeatmapCell() {
+  const today = todayISO();
+  const totalGoals = (state.goals.items || []).length;
+  if (!totalGoals) return;
+  if ((state.commitViewMonth || today.slice(0, 7)) !== today.slice(0, 7)) return;
+  const cell = document.querySelector(`[data-commit-day-select="${today}"]`);
+  if (!cell) return;
+  const checked = (state.goals.items || []).filter(g => getLogByDate(g.id, today)?.checked).length;
+  const pct = Math.round(getDayCompliancePct(today));
+  const tier = pct >= 80 ? 'good' : pct >= 60 ? 'warn' : 'bad';
+  cell.classList.remove('tier-good', 'tier-warn', 'tier-bad');
+  cell.classList.add(`tier-${tier}`);
+  cell.title = `${checked}/${totalGoals} commitments completed`;
+  const pctEl = cell.querySelector('.commit-hm-pct');
+  if (pctEl) pctEl.textContent = `${pct}%`;
+  const statsEl = document.querySelector('.commit-month-stats');
+  if (statsEl) {
+    const pcts = [...document.querySelectorAll('.commit-hm-grid .commit-hm-pct')].map(el => Number(el.textContent) || 0);
+    const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
+    statsEl.textContent = `${avg}% average this month`;
+  }
+}
 
 // Layer 1 — Month heatmap calendar.
 // Colorblind note: the % is always rendered as text inside the cell (not

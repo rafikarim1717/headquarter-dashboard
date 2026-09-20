@@ -298,7 +298,7 @@ function loginFields() {
   };
 }
 
-document.getElementById('email-login-btn').addEventListener('click', async () => {
+document.getElementById('email-login-btn')?.addEventListener('click', async () => {
   const { email, password } = loginFields();
   if (!email || !password) { loginMsg('Enter your email and password.', 'error'); return; }
   loginMsg('', '');
@@ -316,7 +316,7 @@ document.getElementById('email-signup-btn').addEventListener('click', async () =
   else loginMsg('Check your email to confirm your account.', 'success');
 });
 
-document.getElementById('forgot-password-btn').addEventListener('click', async () => {
+document.getElementById('forgot-password-btn')?.addEventListener('click', async () => {
   const email = document.getElementById('login-email').value.trim();
   if (!email) { loginMsg('Enter your email address first.', 'error'); return; }
   const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });

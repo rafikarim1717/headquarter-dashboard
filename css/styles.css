@@ -104,18 +104,18 @@
 
   .ring {
     position: relative;
-    width: 500px; height: 500px;
+    width: 300px; height: 300px;
     display: flex; justify-content: center; align-items: center;
   }
   @media (max-width: 560px) {
-    .ring { width: 340px; height: 340px; }
+    .ring { width: 165px; height: 165px; }
   }
   .ring i {
     position: absolute; inset: 0;
-    border: 2px solid #fff;
+    border: 2px solid var(--clr);
     transition: 0.5s;
     z-index: 0;
-    opacity: 0.15;
+    opacity: 0.315;
   }
   .ring i:nth-child(1) {
     border-radius: 38% 62% 63% 37% / 41% 44% 56% 59%;
@@ -131,6 +131,7 @@
   }
   .ring:hover i {
     border: 6px solid var(--clr);
+    opacity: 1;
     filter: drop-shadow(0 0 20px var(--clr));
   }
   @keyframes ring-spin {
@@ -453,7 +454,7 @@
   }
   .check.checked { background: var(--accent); border-color: var(--accent); }
   .check.checked::after { transform: rotate(-45deg) scale(1); }
-  .check.static { cursor: default; }
+  .check.static { cursor: not-allowed; }
   .check.pulse { animation: pulse 150ms ease; }
   @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
   .check-label { flex: 1; min-width: 0; }
