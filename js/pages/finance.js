@@ -212,6 +212,8 @@ function renderSpending() {
     const mon = new Date(now); mon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1)); mon.setHours(0,0,0,0);
     const monISO = isoLocal(mon);
     filteredSpending = state.spending.filter(s => s.date >= monISO && s.date <= today);
+  } else if (filter === 'all') {
+    filteredSpending = state.spending.slice();
   } else {
     const firstISO = today.slice(0,7) + '-01';
     filteredSpending = state.spending.filter(s => s.date >= firstISO && s.date <= today);
@@ -221,7 +223,7 @@ function renderSpending() {
   const byCat = Object.fromEntries(cats.map(c => [c, filteredSpending.filter(s=>s.cat===c).reduce((s,x)=>s+Number(x.amount||0),0)]));
   const totalLabel = pickedDate
     ? `Total on ${fmtDate(pickedDate)}`
-    : ({daily:"Today's total", weekly:"This week's total", monthly:"This month's total"}[filter]);
+    : ({daily:"Today's total", weekly:"This week's total", monthly:"This month's total", all:"All-time total"}[filter]);
 
   const recent = filteredSpending.slice().sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
   // "Recent" list mirrors Home's Activity feed: capped at 5 rows + a "Show all" /
@@ -245,7 +247,7 @@ function renderSpending() {
       </div>
       <div class="spend-filters">
         <div class="spend-filter-tabs">
-          ${['daily','weekly','monthly'].map(f => `<button class="pill${!pickedDate && filter===f?' active':''}" data-spend-filter="${f}">${{daily:'Daily',weekly:'Weekly',monthly:'Monthly'}[f]}</button>`).join('')}
+          ${['daily','weekly','monthly','all'].map(f => `<button class="pill${!pickedDate && filter===f?' active':''}" data-spend-filter="${f}">${{daily:'Daily',weekly:'Weekly',monthly:'Monthly',all:'All Time'}[f]}</button>`).join('')}
         </div>
         <div class="spend-date-wrap">
           <span class="spend-date-label">Jump to date</span>

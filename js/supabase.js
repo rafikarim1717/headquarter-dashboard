@@ -57,7 +57,7 @@ async function loadFromSupabase(userId) {
   const [
     profileRes, eventsRes, goalsRes, goalLogsRes,
     projectsRes, projectTasksRes,
-    incomeRes, spendingRes, debtsRes, notesRes, todayFocusRes
+    incomeRes, spendingRes, debtsRes, notesRes, todayFocusRes, customStationsRes
   ] = await Promise.all([
     sb.from('profiles').select('*').eq('id', userId).maybeSingle(),
     sb.from('schedule_events').select('*').eq('user_id', userId),
@@ -69,7 +69,8 @@ async function loadFromSupabase(userId) {
     sb.from('spending_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
     sb.from('debts').select('*').eq('user_id', userId).order('due_date'),
     sb.from('notes').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
-    sb.from('today_focus_items').select('*').eq('user_id', userId).order('created_at')
+    sb.from('today_focus_items').select('*').eq('user_id', userId).order('created_at'),
+    sb.from('custom_stations').select('*').eq('user_id', userId).order('created_at')
   ]);
 
   const isNewUser = !profileRes.data;
@@ -120,6 +121,10 @@ async function loadFromSupabase(userId) {
 
   // Today's Focus
   state.todayFocus = (todayFocusRes.data || []).map(f => ({ id: f.id, text: f.text, checked: f.checked, created_at: f.created_at }));
+
+  // Ambient music widget's custom YouTube stations — per-user via Supabase now,
+  // rather than the old localStorage('hq.customStations') (device-only).
+  window.__HQ_TWEAKS.customStations = (customStationsRes.data || []).map(s => ({ id: s.id, name: s.name || '', url: s.url || '' }));
 }
 
 function compute7DayLog(logs) {

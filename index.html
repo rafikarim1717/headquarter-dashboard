@@ -22,14 +22,10 @@
     "showQuickPills": true,
     "currencyPrefix": "Rp ",
     "homeLayout": "stacked",
-    "customStations": []   // { name, url } entries — unbounded list, see addCustomStation() in js/core.js
+    "customStations": []   // { id, name, url } entries — unbounded list; populated per-user from
+                            // Supabase's custom_stations table by loadFromSupabase() at login,
+                            // see addCustomStation() in js/core.js
   };
-  // Custom YouTube stations persist in localStorage (unlike the rest of Tweaks,
-  // which is just an in-memory default reset on refresh) — see js/core.js.
-  try {
-    const savedStations = JSON.parse(localStorage.getItem('hq.customStations') || 'null');
-    if (Array.isArray(savedStations)) window.__HQ_TWEAKS.customStations = savedStations;
-  } catch (e) {}
 </script>
 </head>
 <body>
@@ -161,7 +157,6 @@
 <!-- Tweaks Panel -->
 <div id="tweaks-panel">
   <h4><span>Tweaks</span><button class="x" id="tweaks-close" aria-label="Close">&#x2715;</button></h4>
-  <div class="row"><label>Your name</label><input type="text" id="tw-name"></div>
   <div class="row" style="display:none">
     <label>Accent</label>
     <div class="swatches" id="tw-swatches">
@@ -177,7 +172,7 @@
   <div class="row" style="display:none"><label>Big number weight</label><div class="seg" id="tw-weight"><button data-v="200">200</button><button data-v="300">300</button><button data-v="400">400</button></div></div>
   <div class="row"><label>Today layout</label><div class="seg" id="tw-home"><button data-v="stacked">Stacked</button><button data-v="hero">Hero focus</button></div></div>
   <div class="row"><label>Quick pills on Today</label><div class="seg" id="tw-pills"><button data-v="true">On</button><button data-v="false">Off</button></div></div>
-  <div class="row"><label>Currency prefix</label><input type="text" id="tw-currency" maxlength="3"></div>
+  <div class="row" style="display:none"><label>Currency prefix</label><input type="text" id="tw-currency" maxlength="3"></div>
   <div class="row">
     <label>Custom YouTube stations</label>
     <div class="tw-hint">Paste a YouTube link + a name for as many stations as you want — they'll show up in the music picker next to the built-in radios.</div>

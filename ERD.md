@@ -73,7 +73,7 @@ A commitment's **kind** is *derived* from `target_count` + `unit` (there is no `
 | `order_index` | integer | NOT NULL | `0` | Manual sort position across all commitments. Set on insert; rewritten for every item on drag-and-drop reorder. Load order: `order_index`, then `created_at` |
 | `target_count` | integer | NOT NULL | `1` | Daily target: number of times (Count), minutes/seconds (Duration), or `1` (Yes/No) |
 | `unit` | text | YES | — | Label for the target (`'x'`, `'DM'`, `'waktu'`, `'halaman'`, …) or `'menit'`/`'detik'` for a Duration; `NULL` for Yes/No |
-| `category` | text | NOT NULL | `'General'` | Life area used to group commitments (presets: Olahraga, Kerja, Bahasa, Spiritual, Personal & Mental; any custom text allowed) |
+| `category` | text | NOT NULL | `'General'` | Life area used to group commitments (presets: Olahraga, Kerja, Learning, Spiritual, Personal & Mental; any custom text allowed) |
 | `reminder_time` | text | YES | — | Daily reminder cue "HH:MM"; fires once at that time and once ~45 min later if still not done; `NULL` = none |
 | `created_at` | timestamptz | NOT NULL | `now()` | Row creation timestamp |
 
@@ -168,6 +168,25 @@ Home's "Today's focus" quick priority list.
 **Foreign Keys:** `user_id → auth.users(id)` ON DELETE CASCADE
 **Indexes:** `(user_id)`
 **Operations in code:** `select … order by created_at`, `insert` (Add), `update checked` (toggle), `delete` (immediate, no confirm). Not seeded for new users
+
+---
+
+### `custom_stations`
+
+The ambient music widget's user-added YouTube stations (topbar, Tweaks panel). Loaded into `window.__HQ_TWEAKS.customStations`, not `state`. Previously `localStorage`-only (device-scoped); moved here so stations follow the user across devices.
+
+| Column | Type | Nullable | Default | Description |
+|---|---|---|---|---|
+| `id` | uuid | NOT NULL | `gen_random_uuid()` | **PK** |
+| `user_id` | uuid | NOT NULL | — | **FK** → `auth.users(id)` cascade delete |
+| `name` | text | NOT NULL | `''` | Station label shown in the picker |
+| `url` | text | NOT NULL | `''` | A YouTube link; `extractYouTubeId()` parses the video id client-side |
+| `created_at` | timestamptz | NOT NULL | `now()` | Row creation timestamp; the list loads `order by created_at` |
+
+**Primary Key:** `id`
+**Foreign Keys:** `user_id → auth.users(id)` ON DELETE CASCADE
+**Indexes:** `(user_id)`
+**Operations in code:** `select … order by created_at`, `insert` (+ Add station — a blank row, awaited so it has a real id before it's added to state), `update name/url` (debounced 1000ms per keystroke), `delete` (🗑, immediate, no confirm). Not seeded for new users
 
 ---
 
@@ -293,7 +312,10 @@ auth.users (Supabase managed)
   ├──< debts (1:many)
   │       user_id ─────── auth.users.id
   │
-  └──< notes (1:many)
+  ├──< notes (1:many)
+  │       user_id ─────── auth.users.id
+  │
+  └──< custom_stations (1:many)
           user_id ─────── auth.users.id
 ```
 
@@ -323,6 +345,8 @@ auth.users (Supabase managed)
 
 Home writes: `schedule_events.completed_at` (schedule checkboxes), `goal_logs` (Today's-commitments quick-log — Yes/No and Count only; Duration is read-only there), `project_tasks` (Active-project checkboxes), `today_focus_items`. Home reads `goals`/`goal_logs` for the compliance bars + Daily score, and `projects`/`project_tasks`/`schedule_events`/`goal_logs` for the Activity heatmap/feed. Finance snapshot on Home reads `income_entries`, `spending_entries`, `debts`.
 
+`custom_stations` isn't in the matrix above since it's not page-scoped — R W from the topbar's Tweaks panel, available on every page.
+
 All data is bulk-loaded once on login in `loadFromSupabase()` via a single `Promise.all()` (and again after the tab has been hidden for more than 5 minutes).
 
 ---
@@ -344,6 +368,7 @@ The complete, idempotent migration is `schema_fix.sql` — running the whole fil
 | 19 | `goal_logs.completed_at` | Logging any commitment; Activity feed |
 | 20 | `schedule_events.repeat`, `.series_id` | Adding any schedule event |
 | 21 | `goals.reminder_time` | Adding/editing commitments |
+| 22 | `custom_stations` | Ambient music widget's custom YouTube stations — without it they load empty every login and `+ Add station` fails outright |
 
 The Yes/No / Count / Duration types, duration timers, partial-credit compliance and ring colours introduced on 2026-09-19 need **no schema change** — they only use `goals.target_count`/`unit` and `goal_logs.count`/`checked`.
 

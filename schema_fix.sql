@@ -735,3 +735,49 @@ CREATE INDEX IF NOT EXISTS schedule_events_series ON schedule_events(series_id);
 --     Safe to re-run on an existing goals table that predates this column.
 -- ────────────────────────────────────────────────────────────
 ALTER TABLE goals ADD COLUMN IF NOT EXISTS reminder_time text;
+
+
+-- ────────────────────────────────────────────────────────────
+-- 22. custom_stations
+--     Operations: select / insert / update(name, url) / delete
+--     Columns: name, url
+--     Backs the ambient music widget's user-added YouTube stations
+--     (Tweaks panel → "Custom YouTube stations"). Previously only
+--     persisted to localStorage('hq.customStations') — device-only,
+--     lost on a fresh login elsewhere. Now per-user via this table.
+-- ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS custom_stations (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name       text NOT NULL DEFAULT '',
+  url        text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE custom_stations ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "custom_stations_select" ON custom_stations
+    FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "custom_stations_insert" ON custom_stations
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "custom_stations_update" ON custom_stations
+    FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "custom_stations_delete" ON custom_stations
+    FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS custom_stations_user_id ON custom_stations(user_id);

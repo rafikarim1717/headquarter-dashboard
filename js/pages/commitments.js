@@ -249,7 +249,7 @@ async function setGoalCountToday(id, rawCount) {
     if (localLog && !localLog.id) localLog.id = data.id;
   }
 }
-const GOAL_CATEGORY_PRESET = ['Olahraga', 'Kerja', 'Bahasa', 'Spiritual', 'Personal & Mental'];
+const GOAL_CATEGORY_PRESET = ['Olahraga', 'Kerja', 'Learning', 'Spiritual', 'Personal & Mental'];
 function categoryItems(cat) {
   return (state.goals.items || []).filter(g => (g.category || 'General') === cat);
 }

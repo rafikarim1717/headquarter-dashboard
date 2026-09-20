@@ -262,3 +262,21 @@ create policy "Users can manage own today_focus_items"
   on today_focus_items for all using (auth.uid() = user_id);
 
 create index if not exists today_focus_items_user_id on today_focus_items(user_id);
+
+-- ============================================================
+-- CUSTOM STATIONS (ambient music widget's user-added YouTube stations)
+-- ============================================================
+create table if not exists custom_stations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null default '',
+  url text not null default '',
+  created_at timestamptz not null default now()
+);
+
+alter table custom_stations enable row level security;
+
+create policy "Users can manage own custom_stations"
+  on custom_stations for all using (auth.uid() = user_id);
+
+create index if not exists custom_stations_user_id on custom_stations(user_id);

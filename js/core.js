@@ -253,7 +253,10 @@ function selectStation(idx) {
 // Note icon click: pause/resume only — never picks a station on its own.
 function toggleAmbientMusic() {
   if (ambientPlayer.stationIndex == null) {
-    document.getElementById('music-dropdown')?.classList.toggle('open');
+    const dd = document.getElementById('music-dropdown');
+    const opening = dd && !dd.classList.contains('open');
+    dd?.classList.toggle('open');
+    if (opening) tweaksEl.classList.remove('open');
     return;
   }
   if (ambientPlayer.isPlaying) {
@@ -751,7 +754,10 @@ function bindSharedEvents() {
   const mc = main.querySelector('#music-caret-btn');
   if (mc) mc.addEventListener('click', (e) => {
     e.stopPropagation();
-    main.querySelector('#music-dropdown')?.classList.toggle('open');
+    const dd = main.querySelector('#music-dropdown');
+    const opening = dd && !dd.classList.contains('open');
+    dd?.classList.toggle('open');
+    if (opening) tweaksEl.classList.remove('open');
   });
   main.querySelectorAll('#music-dropdown [data-station-idx]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -816,46 +822,43 @@ document.addEventListener('click', (e) => {
    TWEAKS PANEL
 ========================================================= */
 const tweaksEl = document.getElementById('tweaks-panel');
-function toggleTweaks() { tweaksEl.classList.toggle('open'); }
+function toggleTweaks() {
+  const opening = !tweaksEl.classList.contains('open');
+  tweaksEl.classList.toggle('open');
+  if (opening) document.getElementById('music-dropdown')?.classList.remove('open');
+}
 
 document.getElementById('tweaks-close').addEventListener('click', () => tweaksEl.classList.remove('open'));
 
 function setTweak(key, value) {
   window.__HQ_TWEAKS[key] = value;
   applyTweaks();
-  if (key === 'name') {
-    state.profile.name = value;
-    if (currentUser) dbCall(() => sb.from('profiles').update({ name: value }).eq('id', currentUser.id));
-  }
   render();
   syncTweaksUI();
 }
 
 function syncTweaksUI() {
   const tw = window.__HQ_TWEAKS;
-  const twName = document.getElementById('tw-name');
   const twCurr = document.getElementById('tw-currency');
-  if (twName) twName.value = tw.name || '';
   if (twCurr) twCurr.value = tw.currencyPrefix || '$';
   document.querySelectorAll('#tw-swatches .sw').forEach(s => s.classList.toggle('active', s.dataset.c === tw.accent));
   document.querySelectorAll('#tw-density button').forEach(b => b.classList.toggle('active', b.dataset.v === tw.density));
   document.querySelectorAll('#tw-weight button').forEach(b => b.classList.toggle('active', String(b.dataset.v) === String(tw.numberWeight)));
   document.querySelectorAll('#tw-home button').forEach(b => b.classList.toggle('active', b.dataset.v === tw.homeLayout));
   document.querySelectorAll('#tw-pills button').forEach(b => b.classList.toggle('active', String(b.dataset.v) === String(tw.showQuickPills)));
+  renderCustomStationsList(); // re-sync with window.__HQ_TWEAKS.customStations once loadFromSupabase() has populated it
 }
 
 /* ---- Custom YouTube stations: unbounded list, add/remove from the Tweaks panel ----
-   Persisted to their own localStorage key ('hq.customStations') — unlike the rest of
-   Tweaks (an in-memory-only reset on refresh, see index.html's hardcoded
-   window.__HQ_TWEAKS default), these need to survive a reload since there's nowhere
-   else (no Supabase column) that remembers them per device.
+   Persisted to their own Supabase table ('custom_stations', see schema_fix.sql
+   section 22) — unlike the rest of Tweaks (an in-memory-only reset on refresh,
+   see index.html's hardcoded window.__HQ_TWEAKS default), these need to survive
+   a reload AND follow the user across devices, so they're per-user via Supabase
+   rather than localStorage. loadFromSupabase() populates
+   window.__HQ_TWEAKS.customStations at login, same as it does profile.name.
    #tw-custom-stations-list is rebuilt (renderCustomStationsList()) only when a row is
    added/removed — never on every keystroke, via delegated input/click listeners below
    — so typing in a row never fights a rebuild for focus. */
-function persistCustomStations() {
-  try { localStorage.setItem('hq.customStations', JSON.stringify(window.__HQ_TWEAKS.customStations || [])); } catch (e) {}
-}
-
 function renderCustomStationsList() {
   const el = document.getElementById('tw-custom-stations-list');
   if (!el) return;
@@ -868,10 +871,12 @@ function renderCustomStationsList() {
     </div>`).join('') || `<div class="tw-hint" style="margin-bottom:8px">No custom stations yet — add one below.</div>`;
 }
 
-function addCustomStation() {
+async function addCustomStation() {
   if (!window.__HQ_TWEAKS.customStations) window.__HQ_TWEAKS.customStations = [];
-  window.__HQ_TWEAKS.customStations.push({ name: '', url: '' });
-  persistCustomStations();
+  if (!currentUser) return;
+  const { data } = await dbCall(() => sb.from('custom_stations').insert({ user_id: currentUser.id, name: '', url: '' }).select().single());
+  if (!data) return;
+  window.__HQ_TWEAKS.customStations.push({ id: data.id, name: '', url: '' });
   renderCustomStationsList();
   render();
   const names = document.querySelectorAll('#tw-custom-stations-list .tw-custom-name');
@@ -879,18 +884,26 @@ function addCustomStation() {
 }
 
 function removeCustomStation(i) {
+  const s = (window.__HQ_TWEAKS.customStations || [])[i];
+  if (!s) return;
   window.__HQ_TWEAKS.customStations.splice(i, 1);
-  persistCustomStations();
   renderCustomStationsList();
   render();
+  dbCall(() => sb.from('custom_stations').delete().eq('id', s.id));
 }
 
+// Debounced per-row so fast typing doesn't fire a write on every keystroke —
+// mirrors Notes' 1000ms autosave debounce in js/pages/notes.js.
+const customStationSaveTimers = {};
 function setCustomStationField(i, field, value) {
   const s = (window.__HQ_TWEAKS.customStations || [])[i];
   if (!s) return;
   s[field] = value;
-  persistCustomStations();
   render(); // refreshes the topbar's music dropdown; #tweaks-panel itself is untouched by render(), so the input keeps focus
+  clearTimeout(customStationSaveTimers[s.id]);
+  customStationSaveTimers[s.id] = setTimeout(() => {
+    dbCall(() => sb.from('custom_stations').update({ [field]: value }).eq('id', s.id));
+  }, 1000);
 }
 
 renderCustomStationsList();
@@ -905,7 +918,6 @@ document.getElementById('tw-custom-stations-list')?.addEventListener('click', (e
   if (delBtn) removeCustomStation(Number(delBtn.dataset.i));
 });
 
-document.getElementById('tw-name').addEventListener('input', (e) => setTweak('name', e.target.value));
 document.getElementById('tw-currency').addEventListener('input', (e) => setTweak('currencyPrefix', e.target.value));
 document.querySelectorAll('#tw-swatches .sw').forEach(s => s.addEventListener('click', () => setTweak('accent', s.dataset.c)));
 document.querySelectorAll('#tw-density button').forEach(b => b.addEventListener('click', () => setTweak('density', b.dataset.v)));

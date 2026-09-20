@@ -113,7 +113,7 @@ Every page renders `topbar()` which outputs:
 
 **Features:**
 - **Today's Compliance** card (collapsible): a ring showing today's % — **partial credit** (dzikir 20/33 ≈ 61%, not 0) — coloured **red below 10%**, normal white **10–70%**, **green from 70% (light) deepening to dark green at 100%**; per-category bars; the % also stays visible in the collapsed header
-- **⚔️ Main Quest**: collapsible **category cards** (Olahraga, Kerja, Bahasa, Spiritual, Personal & Mental, or custom) with a `done / total` count, mini progress bar and **+ Add to <category>**; **+ New category** in the section header
+- **⚔️ Main Quest**: collapsible **category cards** (Olahraga, Kerja, Learning, Spiritual, Personal & Mental, or custom) with a `done / total` count, mini progress bar and **+ Add to <category>**; **+ New category** in the section header
 - Each row: name · 🕐 reminder time · 🔥 streak (left, in that order) · edit ✎ / delete 🗑 (right, on hover); Count/Duration rows add the progress line underneath; rows are **drag-and-drop reorderable** within their category
 - **Add / Edit Commitment** modal: name, **Type**, target per day + unit (Count) or minutes/seconds (Duration), category (+ new category), and "Give this a time" (daily reminder time)
 - **Daily reminders:** a commitment with a time fires a notification/banner at that time and a gentler nudge 45 min later if still not done
@@ -193,7 +193,7 @@ Every page renders `topbar()` which outputs:
 
 **Features:**
 - Header with **+ Log spend**
-- Total (animated) for the selected range: **Daily / Weekly (Mon–today) / Monthly**, or **Jump to date** (× to clear); category breakdown pills Food / Transport / Shopping / Other with per-category totals
+- Total (animated) for the selected range: **Daily / Weekly (Mon–today) / Monthly / All Time**, or **Jump to date** (× to clear); category breakdown pills Food / Transport / Shopping / Other with per-category totals
 - **Recent** list sorted by date+time descending, capped at 5 rows with "Show all N activities" / "Show less"; each entry: category pill, note, time (today) or date, amount (−prefix), edit ✎, delete 🗑 (confirmed)
 - Add modal: category, amount, note (the date is today and the time is set to now); Edit modal: category, amount, note
 
@@ -284,9 +284,9 @@ Global settings panel (`#tweaks-panel`, slide-in from the ⚙ button):
 - **Today layout:** Stacked / Hero focus
 - **Quick pills on Today:** On / Off
 - **Currency prefix** (text input, max 3 chars)
-- **Custom YouTube stations:** name + link rows, **+ Add station** (persisted in `localStorage('hq.customStations')`)
+- **Custom YouTube stations:** name + link rows, **+ Add station** (persisted per-user in the `custom_stations` Supabase table)
 
-(Accent colour and Big-number-weight controls exist in the markup but are hidden; their values come from the `index.html` defaults.) Settings live in the in-page `window.__HQ_TWEAKS` object and reset to the `index.html` defaults on reload — except the name (Supabase) and the custom stations (localStorage).
+(Accent colour and Big-number-weight controls exist in the markup but are hidden; their values come from the `index.html` defaults.) Settings live in the in-page `window.__HQ_TWEAKS` object and reset to the `index.html` defaults on reload — except the name and the custom stations, both Supabase-backed.
 
 ### Toast
 ```js
