@@ -193,6 +193,22 @@
      or playback would be torn down and restarted on every unrelated re-render). -->
 <div id="yt-audio-player-wrap" style="position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden" aria-hidden="true"><div id="yt-audio-player"></div></div>
 
+<!-- Quick-action FAB (bottom-right) — Focus mode / Note mode. Lives outside #main
+     so it survives render()'s main.innerHTML replacement on every navigation. -->
+<div id="quick-fab" class="quick-fab" style="display:none">
+  <div class="quick-fab-options" id="quick-fab-options">
+    <button class="quick-fab-option" id="fab-focus-btn" title="Focus mode" aria-label="Focus mode">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+    </button>
+    <button class="quick-fab-option" id="fab-note-btn" title="Note mode" aria-label="Note mode">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    </button>
+  </div>
+  <button class="quick-fab-main" id="quick-fab-main" aria-label="Quick actions" aria-expanded="false">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+</div>
+
 <!-- Tooltip for collapsed sidebar -->
 <div id="nav-tooltip"></div>
 

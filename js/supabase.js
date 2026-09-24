@@ -232,6 +232,7 @@ function displayNameFromUser(user) {
 function showLogin() {
   document.getElementById('app').style.display = 'none';
   document.getElementById('bottom-nav').style.display = 'none';
+  document.getElementById('quick-fab').style.display = 'none';
   _fadeOutLoading(() => {
     document.getElementById('login-screen').classList.remove('hidden');
   });
@@ -241,6 +242,7 @@ function showApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').style.display = '';
   document.getElementById('bottom-nav').style.display = '';
+  document.getElementById('quick-fab').style.display = '';
   _fadeOutLoading();
 }
 

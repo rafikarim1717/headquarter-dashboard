@@ -1112,6 +1112,137 @@
   .alarm-banner-dismiss:hover { color: var(--text); }
   @media (min-width: 900px) { .alarm-banner { top: 24px; } }
 
+  /* ============ QUICK FAB (Focus mode / Note mode) ============
+     z-index sits above .focus-overlay (2000) so it stays reachable even while
+     the Focus mode overlay itself is open. */
+  .quick-fab {
+    position: fixed; right: 16px; bottom: 90px; z-index: 2100;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .quick-fab-options {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    opacity: 0; pointer-events: none; transform: translateY(8px);
+    transition: opacity var(--t-mid) ease, transform var(--t-mid) ease;
+  }
+  .quick-fab.open .quick-fab-options { opacity: 1; pointer-events: auto; transform: translateY(0); }
+  .quick-fab-option, .quick-fab-main {
+    width: 46px; height: 46px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border-strong); cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+    transition: transform var(--t-fast) ease, background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .quick-fab-option { background: var(--card); color: var(--text-dim); }
+  .quick-fab-option:hover { color: var(--text); transform: scale(1.06); }
+  .quick-fab-main { background: var(--accent); color: #111; }
+  .quick-fab-main:hover { transform: scale(1.06); }
+  .quick-fab.open .quick-fab-main { transform: rotate(45deg); }
+  @media (min-width: 769px) { .quick-fab { bottom: 24px; } }
+
+  /* ============ FOCUS MODE (Pomodoro overlay) ============
+     Purple accent (--focus-accent) is local to this overlay — distinct from
+     the app's own --accent token, to match the Forest/Flow-style reference. */
+  .focus-overlay {
+    --focus-accent: #7C3AED;
+    position: fixed; inset: 0; z-index: 2000;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--t-mid) ease;
+    overflow: hidden;
+  }
+  .focus-overlay.open { opacity: 1; pointer-events: auto; }
+  .focus-bg { position: absolute; inset: 0; background-size: cover; background-position: center; transition: background var(--t-mid) ease; }
+  .focus-overlay.theme-forest .focus-bg { background-image: linear-gradient(180deg, rgba(10,8,20,0.55) 0%, rgba(10,8,20,0.72) 55%, rgba(8,6,16,0.92) 100%), url('../assets/focus-bg.jpg'); }
+  .focus-overlay.theme-dark .focus-bg { background-image: radial-gradient(circle at 50% 20%, #1c1730 0%, #0d0b16 65%, #08070e 100%); }
+  .focus-overlay.theme-light .focus-bg { background-image: linear-gradient(180deg, #f3efff 0%, #e8e2fb 100%); }
+  .focus-overlay.theme-light { color: #1a1530; }
+  .focus-overlay.theme-light .focus-label,
+  .focus-overlay.theme-light .focus-tab,
+  .focus-overlay.theme-light .focus-sound-item,
+  .focus-overlay.theme-light .focus-btn:not(.primary),
+  .focus-overlay.theme-light .focus-theme-btn { color: rgba(26,21,48,0.6); }
+  .focus-overlay.theme-light .focus-time { color: #1a1530; }
+  .focus-overlay.theme-light .focus-flyout { background: rgba(255,255,255,0.85); border-color: rgba(26,21,48,0.12); }
+  .focus-overlay.theme-light .focus-sound-item,
+  .focus-overlay.theme-light .focus-btn:not(.primary) { background: rgba(255,255,255,0.6); border-color: rgba(26,21,48,0.14); }
+
+  .focus-content {
+    position: relative; z-index: 1; width: 100%; max-width: 460px; max-height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    overflow-y: auto;
+  }
+
+  /* ---- icon buttons: sound (bottom-left), fullscreen + theme (bottom-right, above
+     the app's own quick-fab). Always a dark circle with a white icon in every theme —
+     keeps them legible and visually consistent instead of flipping color per theme. ---- */
+  .focus-icon-btn {
+    width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); color: #fff; cursor: pointer;
+    transition: background var(--t-fast) ease;
+  }
+  .focus-icon-btn:hover { background: rgba(0,0,0,0.6); }
+
+  .focus-top { display: flex; flex-direction: column; align-items: center; }
+  .focus-label { font-size: 13.5px; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(255,255,255,0.65); margin-bottom: 16px; font-weight: 600; }
+  .focus-time { font-size: 64px; font-weight: 200; font-variant-numeric: tabular-nums; color: #fff; margin-bottom: 20px; }
+  .focus-controls { display: flex; justify-content: center; gap: 14px; }
+  .focus-btn {
+    width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08); color: #fff; cursor: pointer;
+    transition: transform var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .focus-btn svg { width: 21px; height: 21px; }
+  .focus-btn:hover { transform: scale(1.06); }
+  .focus-btn.primary { background: var(--focus-accent); border-color: var(--focus-accent); box-shadow: 0 6px 20px rgba(124,58,237,0.45); }
+  .focus-btn:disabled { opacity: 0.35; cursor: default; transform: none; }
+
+  /* ---- bottom corners: small icon toggles that pop a compact flyout upward —
+     replaces the old always-visible panel. The right corner sits in the SAME row
+     as the app's global quick-fab (bottom-right "+", which stays visible on top of
+     this overlay — see #quick-fab z-index), immediately to its left, bottom-aligned
+     so all bottom-right controls read as one row despite the fab being bigger. ---- */
+  .focus-corner { position: absolute; bottom: 20px; z-index: 3; }
+  .focus-corner-left { left: 20px; }
+  .focus-corner-right { right: 72px; bottom: 94px; } /* 16px fab gap + 46px fab width + 10px = 72px; 90px fab bottom + 4px to center against the taller fab = 94px */
+  @media (min-width: 769px) { .focus-corner-right { bottom: 28px; } } /* desktop fab bottom 24px + 4px */
+  .focus-corner-btn-row { display: flex; gap: 10px; }
+
+  .focus-flyout {
+    position: absolute; bottom: 52px; width: 270px; max-width: calc(100vw - 40px);
+    padding: 14px 12px 16px; border-radius: var(--r-card);
+    background: rgba(20,16,32,0.75); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(12px);
+    opacity: 0; pointer-events: none; transform: translateY(8px) scale(0.97); transform-origin: bottom;
+    transition: opacity var(--t-fast) ease, transform var(--t-fast) ease;
+  }
+  .focus-corner-left .focus-flyout { left: 0; }
+  .focus-corner-right .focus-flyout { right: 0; }
+  .focus-corner.open .focus-flyout { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+
+  .focus-tabs { display: flex; gap: 4px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .focus-tab {
+    padding: 5px 8px; border-radius: var(--r-pill); font-size: 10.5px; color: rgba(255,255,255,0.55); white-space: nowrap;
+    background: transparent; border: none; cursor: pointer; transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .focus-tab.sel { background: rgba(255,255,255,0.12); color: #fff; }
+  .focus-sound-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .focus-sound-item {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px;
+    border-radius: var(--r-sm); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.75); cursor: pointer; transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .focus-sound-item span { font-size: 10px; text-align: center; line-height: 1.2; }
+  .focus-sound-item:hover { background: rgba(255,255,255,0.11); }
+  .focus-sound-item.sel { border-color: var(--focus-accent); background: rgba(124,58,237,0.22); color: #fff; }
+  .focus-sound-empty { grid-column: 1 / -1; text-align: center; font-size: 12px; color: rgba(255,255,255,0.45); padding: 12px 0; }
+
+  .focus-theme-picker { display: flex; justify-content: center; gap: 6px; }
+  .focus-theme-btn {
+    flex: 1; padding: 6px 0; border-radius: var(--r-pill); font-size: 11px; color: rgba(255,255,255,0.6);
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); cursor: pointer;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .focus-theme-btn.sel { background: var(--focus-accent); color: #fff; border-color: var(--focus-accent); }
+
   /* ============ LOADING OVERLAY ============ */
   #app-loading {
     position: fixed; inset: 0; background: #0f0f0f;

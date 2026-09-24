@@ -59,6 +59,8 @@ function initGlobalBindings() {
   }
   document.getElementById('sidebar-logout-btn')?.addEventListener('click', signOut);
 
+  initQuickFab(); // js/core.js — bottom-right Focus mode / Note mode FAB
+
   const tooltip = document.getElementById('nav-tooltip');
   const tooltipTargets = document.querySelectorAll('.sidebar .nav-item[data-tooltip], .sidebar-signout[data-tooltip]');
   if (tooltip) {
