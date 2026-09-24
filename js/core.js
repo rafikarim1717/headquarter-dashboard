@@ -531,23 +531,11 @@ const ICON_BULLET_LIST   = `<svg width="16" height="16" viewBox="0 0 24 24" fill
 const ICON_NUMBERED_LIST = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>`;
 const ICON_PLAY  = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>`;
 const ICON_PAUSE = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>`;
-const ICON_SOUND_RAIN    = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 16a4.5 4.5 0 01.5-8.98A5.5 5.5 0 0117.5 9 4 4 0 0117 17H7"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg>`;
-const ICON_SOUND_OCEAN   = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0 3 1.5 4.5 0"/><path d="M2 16c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0 3 1.5 4.5 0"/><path d="M2 20c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0 3 1.5 4.5 0"/></svg>`;
-const ICON_SOUND_CAFE    = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h13v6a4 4 0 01-4 4H8a4 4 0 01-4-4V9z"/><path d="M17 10h1.5a2.5 2.5 0 010 5H17"/><path d="M8 3c0 1-1 1-1 2s1 1 1 2M12 3c0 1-1 1-1 2s1 1 1 2"/></svg>`;
-const ICON_SOUND_AIRPLANE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2.5 1.5V22l4-1 4 1v-1.5L13 19v-5.5z"/></svg>`;
-const ICON_SOUND_EXAM    = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-1.5-1-4-1.5-6-1v13c2 0 4.5.5 6 1.5V6z"/><path d="M12 6c1.5-1 4-1.5 6-1v13c-2 0-4.5.5-6 1.5V6z"/></svg>`;
 const ICON_MUSIC_NOTE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
 const ICON_TAG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41L11 3.83A2 2 0 009.59 3.24L4 3a1 1 0 00-1 1l.24 5.59a2 2 0 00.59 1.41l9.58 9.58a2 2 0 002.83 0l4.35-4.35a2 2 0 000-2.82z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/></svg>`;
 const ICON_PALETTE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 110-18 7 7 0 017 7c0 1.5-1 2.5-2.5 2.5H15a1.5 1.5 0 00-1 2.6c.4.4.6.9.6 1.4 0 1.5-1.2 2.5-2.6 2.5z"/><circle cx="7.5" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="7" r="1" fill="currentColor" stroke="none"/></svg>`;
 const ICON_FULLSCREEN_ENTER = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg>`;
 const ICON_FULLSCREEN_EXIT = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v3a2 2 0 01-2 2H4M15 3v3a2 2 0 002 2h3M9 21v-3a2 2 0 00-2-2H4M15 21v-3a2 2 0 012-2h3"/></svg>`;
-const FOCUS_SOUNDS = [
-  { id: 'rain',     label: 'Rain',            icon: ICON_SOUND_RAIN },
-  { id: 'ocean',    label: 'Ocean',           icon: ICON_SOUND_OCEAN },
-  { id: 'cafe',     label: 'Bustling Café',   icon: ICON_SOUND_CAFE },
-  { id: 'airplane', label: 'Airplane Cabin',  icon: ICON_SOUND_AIRPLANE },
-  { id: 'exam',     label: 'Exam Hall',       icon: ICON_SOUND_EXAM }
-];
 
 
 function paginationHtml(page, total, prevAttr, nextAttr) {
@@ -766,14 +754,17 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
    it down.
 ========================================================= */
 const FOCUS_DEFAULT_MINUTES = 25;
+// The picker plays the SAME stations as the topbar ambient music widget
+// (AMBIENT_STREAMS / getCustomStations() / getAllStations(), all in this file,
+// above) — not a separate parallel sound feature.
 const FOCUS_SOUND_TABS = [
-  { id: 'sounds',   label: 'Sounds' },
-  { id: 'mymusic',  label: 'My Music' },
-  { id: 'playlist', label: 'Playlist Library' }
+  { id: 'mymusic', label: 'My Music' },
+  { id: 'radio',   label: 'Radio' },
+  { id: 'all',     label: 'All' }
 ];
 let focusTimer = loadFocusTimer();   // { totalSeconds, endsAt, remainingSeconds, running, tag } | null
-let focusPrefs = loadFocusPrefs();   // { theme: 'light'|'dark'|'forest', sound: string|null } — persisted
-let focusSoundTab = 'sounds';        // not persisted — always reopens on the Sounds tab
+let focusPrefs = loadFocusPrefs();   // { theme: 'light'|'dark'|'forest' } — persisted
+let focusSoundTab = 'radio';         // not persisted — always reopens on Radio (guaranteed non-empty)
 let focusOpenPanel = null;           // null | 'sound' | 'theme' — which bottom-corner flyout is open
 let focusTags = loadFocusTags();     // string[] — persisted, grows as the user adds tags
 let focusSelectedTag = focusTimer?.tag || null; // what this session is for; restored from a running timer
@@ -798,8 +789,8 @@ function saveFocusTimer() {
 function loadFocusPrefs() {
   try {
     const raw = localStorage.getItem('hq.focusPrefs');
-    return raw ? JSON.parse(raw) : { theme: 'forest', sound: null };
-  } catch (e) { return { theme: 'forest', sound: null }; }
+    return raw ? JSON.parse(raw) : { theme: 'forest' };
+  } catch (e) { return { theme: 'forest' }; }
 }
 function saveFocusPrefs() {
   try { localStorage.setItem('hq.focusPrefs', JSON.stringify(focusPrefs)); } catch (e) {}
@@ -937,11 +928,6 @@ function setFocusSoundTab(tab) {
   focusSoundTab = tab;
   renderFocusOverlay();
 }
-function selectFocusSound(id) {
-  focusPrefs.sound = focusPrefs.sound === id ? null : id;
-  saveFocusPrefs();
-  renderFocusOverlay();
-}
 function toggleFocusTagPanel() {
   focusTagPanelOpen = !focusTagPanelOpen;
   focusTagAdding = false;
@@ -972,14 +958,21 @@ function focusTagDropdownHtml() {
     : `<button class="focus-tag-add focus-tag-noclose" id="focus-tag-add-btn">+ Add tag</button>`;
   return opts + addRow;
 }
-function focusSoundGridHtml() {
-  if (focusSoundTab !== 'sounds') {
-    return `<div class="focus-sound-empty">No ${focusSoundTab === 'mymusic' ? 'tracks' : 'playlists'} yet.</div>`;
+// idx is always an index into getAllStations() (built-ins first, then custom),
+// the same indexing selectStation()/ambientPlayer.stationIndex already use —
+// so picking a station here IS picking it in the topbar widget, not a separate state.
+function focusStationListHtml() {
+  const built = AMBIENT_STREAMS;
+  const custom = getCustomStations();
+  const entries = focusSoundTab === 'radio' ? built.map((s, i) => [s, i])
+    : focusSoundTab === 'mymusic' ? custom.map((s, i) => [s, built.length + i])
+    : getAllStations().map((s, i) => [s, i]);
+  if (!entries.length) {
+    return `<div class="focus-sound-empty">Add your own YouTube stations in ⚙ Tweaks.</div>`;
   }
-  return FOCUS_SOUNDS.map(s => `
-    <button class="focus-sound-item${focusPrefs.sound === s.id ? ' sel' : ''}" data-focus-sound="${s.id}" aria-label="${s.label}">
-      ${s.icon}
-      <span>${s.label}</span>
+  return entries.map(([s, idx]) => `
+    <button class="focus-sound-item${ambientPlayer.isPlaying && ambientPlayer.stationIndex === idx ? ' sel' : ''}" data-focus-station-idx="${idx}">
+      <span class="focus-sound-dot"></span><span>${escapeHtml(s.name)}</span>
     </button>`).join('');
 }
 function renderFocusOverlay() {
@@ -1020,7 +1013,7 @@ function renderFocusOverlay() {
         <div class="focus-tabs">
           ${FOCUS_SOUND_TABS.map(t => `<button class="focus-tab${focusSoundTab === t.id ? ' sel' : ''}" data-focus-tab="${t.id}">${t.label}</button>`).join('')}
         </div>
-        <div class="focus-sound-grid">${focusSoundGridHtml()}</div>
+        <div class="focus-sound-list">${focusStationListHtml()}</div>
       </div>
       <button class="focus-icon-btn focus-corner-btn" id="focus-sound-toggle" aria-label="Sounds">${ICON_MUSIC_NOTE}</button>
     </div>
@@ -1043,7 +1036,10 @@ function renderFocusOverlay() {
   el.querySelector('#focus-sound-toggle').addEventListener('click', () => toggleFocusPanel('sound'));
   el.querySelector('#focus-theme-toggle').addEventListener('click', () => toggleFocusPanel('theme'));
   el.querySelectorAll('[data-focus-tab]').forEach(btn => btn.addEventListener('click', () => setFocusSoundTab(btn.dataset.focusTab)));
-  el.querySelectorAll('[data-focus-sound]').forEach(btn => btn.addEventListener('click', () => selectFocusSound(btn.dataset.focusSound)));
+  el.querySelectorAll('[data-focus-station-idx]').forEach(btn => btn.addEventListener('click', () => {
+    selectStation(Number(btn.dataset.focusStationIdx)); // js/core.js — same picker the topbar music widget uses
+    renderFocusOverlay();
+  }));
   el.querySelectorAll('[data-focus-theme]').forEach(btn => btn.addEventListener('click', () => setFocusTheme(btn.dataset.focusTheme)));
   el.querySelectorAll('[data-focus-add-min]').forEach(btn => btn.addEventListener('click', () => addFocusMinutes(Number(btn.dataset.focusAddMin))));
   el.querySelector('#focus-tag-toggle').addEventListener('click', toggleFocusTagPanel);
