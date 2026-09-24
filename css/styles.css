@@ -1159,18 +1159,27 @@
   .focus-overlay.theme-light .focus-label,
   .focus-overlay.theme-light .focus-tab,
   .focus-overlay.theme-light .focus-sound-item,
-  .focus-overlay.theme-light .focus-btn:not(.primary),
+  .focus-overlay.theme-light .focus-tag-btn,
+  .focus-overlay.theme-light .focus-adjust-btn,
+  .focus-overlay.theme-light .focus-reset-btn,
   .focus-overlay.theme-light .focus-theme-btn { color: rgba(26,21,48,0.6); }
   .focus-overlay.theme-light .focus-time { color: #1a1530; }
-  .focus-overlay.theme-light .focus-flyout { background: rgba(255,255,255,0.85); border-color: rgba(26,21,48,0.12); }
+  .focus-overlay.theme-light .focus-flyout,
+  .focus-overlay.theme-light .focus-tag-dropdown { background: rgba(255,255,255,0.85); border-color: rgba(26,21,48,0.12); }
+  .focus-overlay.theme-light .focus-tag-opt,
+  .focus-overlay.theme-light .focus-tag-input { color: rgba(26,21,48,0.75); }
   .focus-overlay.theme-light .focus-sound-item,
-  .focus-overlay.theme-light .focus-btn:not(.primary) { background: rgba(255,255,255,0.6); border-color: rgba(26,21,48,0.14); }
+  .focus-overlay.theme-light .focus-tag-btn,
+  .focus-overlay.theme-light .focus-adjust-btn,
+  .focus-overlay.theme-light .focus-reset-btn { background: rgba(255,255,255,0.6); border-color: rgba(26,21,48,0.14); }
 
   .focus-content {
     position: relative; z-index: 1; width: 100%; max-width: 460px; max-height: 100%;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    overflow-y: auto;
+    padding: 32px 20px; box-sizing: border-box;
+    overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; /* fallback scroll on very short screens, bar hidden so it never shows as a stray line */
   }
+  .focus-content::-webkit-scrollbar { display: none; }
 
   /* ---- icon buttons: sound (bottom-left), fullscreen + theme (bottom-right, above
      the app's own quick-fab). Always a dark circle with a white icon in every theme —
@@ -1182,19 +1191,72 @@
   }
   .focus-icon-btn:hover { background: rgba(0,0,0,0.6); }
 
-  .focus-top { display: flex; flex-direction: column; align-items: center; }
-  .focus-label { font-size: 13.5px; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(255,255,255,0.65); margin-bottom: 16px; font-weight: 600; }
-  .focus-time { font-size: 64px; font-weight: 200; font-variant-numeric: tabular-nums; color: #fff; margin-bottom: 20px; }
-  .focus-controls { display: flex; justify-content: center; gap: 14px; }
-  .focus-btn {
-    width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  .focus-top { display: flex; flex-direction: column; align-items: center; gap: 18px; width: 100%; }
+
+  /* ---- tag selector — topmost control; names what the session is for ---- */
+  .focus-tag-wrap { position: relative; }
+  .focus-tag-btn {
+    display: flex; align-items: center; gap: 6px; max-width: 240px; padding: 7px 16px; border-radius: var(--r-pill);
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18); color: rgba(255,255,255,0.85);
+    font-size: 12.5px; cursor: pointer; transition: background var(--t-fast) ease;
+  }
+  .focus-tag-btn:hover { background: rgba(255,255,255,0.16); }
+  .focus-tag-btn svg { flex: none; width: 14px; height: 14px; }
+  .focus-tag-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .focus-tag-dropdown {
+    position: absolute; top: calc(100% + 8px); left: 50%; z-index: 4;
+    width: 220px; max-width: calc(100vw - 40px); max-height: 220px; overflow-y: auto;
+    padding: 8px; border-radius: var(--r-sm);
+    background: rgba(20,16,32,0.85); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(12px);
+    opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(4px) scale(0.97); transform-origin: top center;
+    transition: opacity var(--t-fast) ease, transform var(--t-fast) ease;
+  }
+  .focus-tag-dropdown.open { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0) scale(1); }
+  .focus-tag-opt, .focus-tag-add {
+    display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 6px;
+    background: transparent; border: none; font-size: 12.5px; cursor: pointer;
+    transition: background var(--t-fast) ease;
+  }
+  .focus-tag-opt { color: rgba(255,255,255,0.8); }
+  .focus-tag-opt:hover { background: rgba(255,255,255,0.08); }
+  .focus-tag-opt.sel { background: rgba(124,58,237,0.3); color: #fff; }
+  .focus-tag-add { color: var(--focus-accent); font-weight: 700; margin-top: 2px; }
+  .focus-tag-add:hover { background: rgba(124,58,237,0.14); }
+  .focus-tag-input {
+    width: 100%; box-sizing: border-box; padding: 7px 10px; border-radius: 6px; margin-top: 2px;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.22); color: #fff; font-size: 12.5px;
+  }
+  .focus-tag-input::placeholder { color: rgba(255,255,255,0.4); }
+
+  .focus-label { font-size: 13.5px; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(255,255,255,0.65); font-weight: 600; }
+  .focus-time { font-size: 77px; font-weight: 200; font-variant-numeric: tabular-nums; color: #fff; line-height: 1; }
+
+  /* ---- +1 / +5 / +10 minute adjusters, under the clock ---- */
+  .focus-adjust { display: flex; justify-content: center; gap: 8px; }
+  .focus-adjust-btn {
+    padding: 6px 15px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); color: rgba(255,255,255,0.8);
+    cursor: pointer; transition: background var(--t-fast) ease, transform var(--t-fast) ease;
+  }
+  .focus-adjust-btn:hover { background: rgba(255,255,255,0.16); transform: scale(1.05); }
+
+  .focus-controls { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .focus-start-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 15px 44px; border-radius: var(--r-pill); font-size: 15px; font-weight: 700; letter-spacing: 0.02em;
+    background: var(--focus-accent); border: 1px solid var(--focus-accent); color: #fff; cursor: pointer;
+    box-shadow: 0 6px 20px rgba(124,58,237,0.45);
+    transition: transform var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .focus-start-btn svg { width: 18px; height: 18px; }
+  .focus-start-btn:hover { transform: scale(1.04); }
+  .focus-reset-btn {
+    width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
     border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08); color: #fff; cursor: pointer;
     transition: transform var(--t-fast) ease, background var(--t-fast) ease;
   }
-  .focus-btn svg { width: 21px; height: 21px; }
-  .focus-btn:hover { transform: scale(1.06); }
-  .focus-btn.primary { background: var(--focus-accent); border-color: var(--focus-accent); box-shadow: 0 6px 20px rgba(124,58,237,0.45); }
-  .focus-btn:disabled { opacity: 0.35; cursor: default; transform: none; }
+  .focus-reset-btn svg { width: 18px; height: 18px; }
+  .focus-reset-btn:hover { transform: scale(1.06); background: rgba(255,255,255,0.15); }
 
   /* ---- bottom corners: small icon toggles that pop a compact flyout upward —
      replaces the old always-visible panel. The right corner sits in the SAME row

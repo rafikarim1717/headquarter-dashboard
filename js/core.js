@@ -537,6 +537,7 @@ const ICON_SOUND_CAFE    = `<svg width="20" height="20" viewBox="0 0 24 24" fill
 const ICON_SOUND_AIRPLANE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2.5 1.5V22l4-1 4 1v-1.5L13 19v-5.5z"/></svg>`;
 const ICON_SOUND_EXAM    = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-1.5-1-4-1.5-6-1v13c2 0 4.5.5 6 1.5V6z"/><path d="M12 6c1.5-1 4-1.5 6-1v13c-2 0-4.5.5-6 1.5V6z"/></svg>`;
 const ICON_MUSIC_NOTE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+const ICON_TAG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41L11 3.83A2 2 0 009.59 3.24L4 3a1 1 0 00-1 1l.24 5.59a2 2 0 00.59 1.41l9.58 9.58a2 2 0 002.83 0l4.35-4.35a2 2 0 000-2.82z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/></svg>`;
 const ICON_PALETTE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 110-18 7 7 0 017 7c0 1.5-1 2.5-2.5 2.5H15a1.5 1.5 0 00-1 2.6c.4.4.6.9.6 1.4 0 1.5-1.2 2.5-2.6 2.5z"/><circle cx="7.5" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="7" r="1" fill="currentColor" stroke="none"/></svg>`;
 const ICON_FULLSCREEN_ENTER = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg>`;
 const ICON_FULLSCREEN_EXIT = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v3a2 2 0 01-2 2H4M15 3v3a2 2 0 002 2h3M9 21v-3a2 2 0 00-2-2H4M15 21v-3a2 2 0 012-2h3"/></svg>`;
@@ -770,10 +771,15 @@ const FOCUS_SOUND_TABS = [
   { id: 'mymusic',  label: 'My Music' },
   { id: 'playlist', label: 'Playlist Library' }
 ];
-let focusTimer = loadFocusTimer();   // { totalSeconds, endsAt, remainingSeconds, running } | null
+let focusTimer = loadFocusTimer();   // { totalSeconds, endsAt, remainingSeconds, running, tag } | null
 let focusPrefs = loadFocusPrefs();   // { theme: 'light'|'dark'|'forest', sound: string|null } — persisted
 let focusSoundTab = 'sounds';        // not persisted — always reopens on the Sounds tab
 let focusOpenPanel = null;           // null | 'sound' | 'theme' — which bottom-corner flyout is open
+let focusTags = loadFocusTags();     // string[] — persisted, grows as the user adds tags
+let focusSelectedTag = focusTimer?.tag || null; // what this session is for; restored from a running timer
+let focusTagPanelOpen = false;       // is the "select a tag" dropdown open
+let focusTagAdding = false;          // is the dropdown showing its "new tag" text input
+let focusStagedMinutes = FOCUS_DEFAULT_MINUTES; // duration to start with, adjustable via +1/+5/+10 before Start
 let focusTickInterval = null;
 let focusOverlayEl = null;
 
@@ -797,6 +803,15 @@ function loadFocusPrefs() {
 }
 function saveFocusPrefs() {
   try { localStorage.setItem('hq.focusPrefs', JSON.stringify(focusPrefs)); } catch (e) {}
+}
+function loadFocusTags() {
+  try {
+    const raw = localStorage.getItem('hq.focusTags');
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function saveFocusTags() {
+  try { localStorage.setItem('hq.focusTags', JSON.stringify(focusTags)); } catch (e) {}
 }
 function focusRemainingSeconds() {
   if (!focusTimer) return 0;
@@ -823,9 +838,21 @@ function tickFocusTimer() {
 }
 function startFocusTimer(minutes) {
   const totalSeconds = minutes * 60;
-  focusTimer = { totalSeconds, remainingSeconds: totalSeconds, endsAt: Date.now() + totalSeconds * 1000, running: true };
+  focusTimer = { totalSeconds, remainingSeconds: totalSeconds, endsAt: Date.now() + totalSeconds * 1000, running: true, tag: focusSelectedTag };
   saveFocusTimer();
   ensureFocusTicker();
+  renderFocusOverlay();
+}
+function addFocusMinutes(mins) {
+  if (focusTimer) {
+    const addSec = mins * 60;
+    focusTimer.totalSeconds += addSec;
+    if (focusTimer.running) focusTimer.endsAt += addSec * 1000;
+    else focusTimer.remainingSeconds += addSec;
+    saveFocusTimer();
+  } else {
+    focusStagedMinutes = Math.min(180, focusStagedMinutes + mins);
+  }
   renderFocusOverlay();
 }
 function pauseFocusTimer() {
@@ -847,12 +874,14 @@ function resumeFocusTimer() {
 function resetFocusTimer() {
   stopFocusTicker();
   focusTimer = null;
+  focusStagedMinutes = FOCUS_DEFAULT_MINUTES;
   saveFocusTimer();
   renderFocusOverlay();
 }
 function finishFocusTimer() {
   stopFocusTicker();
   focusTimer = null;
+  focusStagedMinutes = FOCUS_DEFAULT_MINUTES;
   saveFocusTimer();
   if ('Notification' in window && Notification.permission === 'granted') {
     new Notification('HQ — Focus session complete', { icon: '/icon-192.png' });
@@ -872,6 +901,15 @@ function ensureFocusOverlay() {
     // clicking anywhere outside an open corner flyout (but still inside the overlay) closes it
     if (focusOpenPanel && !e.target.closest('.focus-flyout') && !e.target.closest('.focus-corner-btn')) {
       focusOpenPanel = null;
+      renderFocusOverlay();
+    }
+    // same for the tag dropdown, which lives up top rather than in a bottom corner.
+    // .focus-tag-noclose (self-matched, so it survives the toggle/add button's own
+    // click handler re-rendering — and detaching e.target — before this listener runs)
+    // covers the buttons that open the panel/input, so opening it doesn't also close it.
+    if (focusTagPanelOpen && !e.target.closest('.focus-tag-wrap') && !e.target.closest('.focus-tag-noclose')) {
+      focusTagPanelOpen = false;
+      focusTagAdding = false;
       renderFocusOverlay();
     }
   });
@@ -904,6 +942,36 @@ function selectFocusSound(id) {
   saveFocusPrefs();
   renderFocusOverlay();
 }
+function toggleFocusTagPanel() {
+  focusTagPanelOpen = !focusTagPanelOpen;
+  focusTagAdding = false;
+  renderFocusOverlay();
+}
+function selectFocusTag(name) {
+  focusSelectedTag = name;
+  if (focusTimer) { focusTimer.tag = name; saveFocusTimer(); }
+  focusTagPanelOpen = false;
+  renderFocusOverlay();
+}
+function startFocusTagAdd() {
+  focusTagAdding = true;
+  renderFocusOverlay();
+  setTimeout(() => focusOverlayEl?.querySelector('#focus-tag-input')?.focus(), 30);
+}
+function submitFocusTagAdd(raw) {
+  const name = (raw || '').trim().slice(0, 30);
+  focusTagAdding = false;
+  if (!name) { renderFocusOverlay(); return; }
+  if (!focusTags.includes(name)) { focusTags.push(name); saveFocusTags(); }
+  selectFocusTag(name);
+}
+function focusTagDropdownHtml() {
+  const opts = focusTags.map(t => `<button class="focus-tag-opt${focusSelectedTag === t ? ' sel' : ''}" data-focus-tag-select="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('');
+  const addRow = focusTagAdding
+    ? `<input type="text" id="focus-tag-input" class="focus-tag-input" placeholder="Tag name" maxlength="30">`
+    : `<button class="focus-tag-add focus-tag-noclose" id="focus-tag-add-btn">+ Add tag</button>`;
+  return opts + addRow;
+}
 function focusSoundGridHtml() {
   if (focusSoundTab !== 'sounds') {
     return `<div class="focus-sound-empty">No ${focusSoundTab === 'mymusic' ? 'tracks' : 'playlists'} yet.</div>`;
@@ -920,21 +988,29 @@ function renderFocusOverlay() {
   el.className = 'focus-overlay theme-' + focusPrefs.theme + (wasOpen ? ' open' : '');
   const active = !!focusTimer;
   const running = !!(focusTimer && focusTimer.running);
-  const remaining = active ? focusRemainingSeconds() : FOCUS_DEFAULT_MINUTES * 60;
+  const remaining = active ? focusRemainingSeconds() : focusStagedMinutes * 60;
   el.innerHTML = `
     <div class="focus-bg"></div>
     <div class="focus-content">
       <div class="focus-top">
-        <div class="focus-label">Focus</div>
+        <div class="focus-tag-wrap">
+          <button class="focus-tag-btn focus-tag-noclose" id="focus-tag-toggle">${ICON_TAG}<span>${escapeHtml(focusSelectedTag || 'Select a tag')}</span></button>
+          <div class="focus-tag-dropdown${focusTagPanelOpen ? ' open' : ''}">${focusTagDropdownHtml()}</div>
+        </div>
         <div class="focus-time" id="focus-time-display">${focusTimeLabel(remaining)}</div>
+        <div class="focus-adjust">
+          <button class="focus-adjust-btn" data-focus-add-min="1">+1</button>
+          <button class="focus-adjust-btn" data-focus-add-min="5">+5</button>
+          <button class="focus-adjust-btn" data-focus-add-min="10">+10</button>
+        </div>
         <div class="focus-controls">
           ${!active
-            ? `<button class="focus-btn primary" id="focus-start-btn" aria-label="Start">${ICON_PLAY}</button>`
+            ? `<button class="focus-start-btn" id="focus-start-btn">${ICON_PLAY} Start</button>`
             : running
-              ? `<button class="focus-btn" id="focus-pause-btn" aria-label="Pause">${ICON_PAUSE}</button>
-                 <button class="focus-btn" id="focus-reset-btn" aria-label="Reset">${ICON_UNDO}</button>`
-              : `<button class="focus-btn primary" id="focus-resume-btn" aria-label="Resume">${ICON_PLAY}</button>
-                 <button class="focus-btn" id="focus-reset-btn" aria-label="Reset">${ICON_UNDO}</button>`
+              ? `<button class="focus-start-btn" id="focus-pause-btn">${ICON_PAUSE} Pause</button>
+                 <button class="focus-reset-btn" id="focus-reset-btn" aria-label="Reset">${ICON_UNDO}</button>`
+              : `<button class="focus-start-btn" id="focus-resume-btn">${ICON_PLAY} Resume</button>
+                 <button class="focus-reset-btn" id="focus-reset-btn" aria-label="Reset">${ICON_UNDO}</button>`
           }
         </div>
       </div>
@@ -960,7 +1036,7 @@ function renderFocusOverlay() {
       </div>
     </div>`;
   el.querySelector('#focus-fullscreen-btn').addEventListener('click', toggleFocusFullscreen);
-  el.querySelector('#focus-start-btn')?.addEventListener('click', () => startFocusTimer(FOCUS_DEFAULT_MINUTES));
+  el.querySelector('#focus-start-btn')?.addEventListener('click', () => startFocusTimer(focusStagedMinutes));
   el.querySelector('#focus-pause-btn')?.addEventListener('click', pauseFocusTimer);
   el.querySelector('#focus-resume-btn')?.addEventListener('click', resumeFocusTimer);
   el.querySelector('#focus-reset-btn')?.addEventListener('click', resetFocusTimer);
@@ -969,9 +1045,19 @@ function renderFocusOverlay() {
   el.querySelectorAll('[data-focus-tab]').forEach(btn => btn.addEventListener('click', () => setFocusSoundTab(btn.dataset.focusTab)));
   el.querySelectorAll('[data-focus-sound]').forEach(btn => btn.addEventListener('click', () => selectFocusSound(btn.dataset.focusSound)));
   el.querySelectorAll('[data-focus-theme]').forEach(btn => btn.addEventListener('click', () => setFocusTheme(btn.dataset.focusTheme)));
+  el.querySelectorAll('[data-focus-add-min]').forEach(btn => btn.addEventListener('click', () => addFocusMinutes(Number(btn.dataset.focusAddMin))));
+  el.querySelector('#focus-tag-toggle').addEventListener('click', toggleFocusTagPanel);
+  el.querySelectorAll('[data-focus-tag-select]').forEach(btn => btn.addEventListener('click', () => selectFocusTag(btn.dataset.focusTagSelect)));
+  el.querySelector('#focus-tag-add-btn')?.addEventListener('click', startFocusTagAdd);
+  el.querySelector('#focus-tag-input')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') submitFocusTagAdd(this.value);
+    else if (e.key === 'Escape') { focusTagAdding = false; renderFocusOverlay(); }
+  });
 }
 function openFocusOverlay() {
   focusOpenPanel = null;
+  focusTagPanelOpen = false;
+  focusTagAdding = false;
   renderFocusOverlay();
   ensureFocusOverlay().classList.add('open');
   ensureFocusTicker();
