@@ -47,13 +47,10 @@ function initGlobalBindings() {
   const sidebar = document.getElementById('sidebar');
   const toggleBtn = document.getElementById('sidebar-toggle');
   if (sidebar && toggleBtn) {
-    if (localStorage.getItem('hq.sidebar') === 'collapsed') {
-      sidebar.classList.add('collapsed');
-      toggleBtn.textContent = '»';
-    }
+    // chevron icon direction is pure CSS (.sidebar.collapsed .sidebar-toggle svg)
+    if (localStorage.getItem('hq.sidebar') === 'collapsed') sidebar.classList.add('collapsed');
     toggleBtn.addEventListener('click', () => {
       const isCollapsed = sidebar.classList.toggle('collapsed');
-      toggleBtn.textContent = isCollapsed ? '»' : '«';
       localStorage.setItem('hq.sidebar', isCollapsed ? 'collapsed' : 'expanded');
     });
   }

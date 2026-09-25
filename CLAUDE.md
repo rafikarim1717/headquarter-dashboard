@@ -1,10 +1,10 @@
 # CLAUDE.md — HQ Dashboard
 
-> Last audited against the code on 2026-09-19. Companion docs: `ERD.md` (tables/columns/relations), `IA.md` (pages, navigation, components), `README.md` (setup/deploy).
+> Last audited against the code on 2026-09-25. Companion docs: `ERD.md` (tables/columns/relations), `IA.md` (pages, navigation, components), `README.md` (setup/deploy).
 
 ## Project Overview
 
-**Headquarter (HQ Dashboard)** is a personal life + finance management Progressive Web App (PWA). It gives a single user a unified dashboard to manage their daily schedule, **commitments** (daily habits — yes/no, counted, or timed — with streaks and a compliance history), **projects** (objective → small tasks), a Today's-focus list, freeform rich-text notes, income, spending, and debts. The app is dark-mode, mobile-first, and fully backed by Supabase with Google OAuth and email/password authentication.
+**Headquarter (HQ Dashboard)** is a personal life + finance management Progressive Web App (PWA). It gives a single user a unified dashboard to manage their daily schedule, **commitments** (daily habits — yes/no, counted, or timed — with streaks and a compliance history), **projects** (objective → small tasks), a Today's-focus list, freeform rich-text notes, income, spending, and debts — plus a fullscreen Pomodoro-style **Focus mode** opened from a floating quick-action button. The app is dark-mode, mobile-first, and fully backed by Supabase with Google OAuth and email/password authentication.
 
 ---
 
@@ -12,9 +12,9 @@
 
 | File/Dir | Role |
 |---|---|
-| `index.html` | Single HTML shell — login screen, loading screen, app shell (sidebar + `<main>`), mobile bottom nav, Tweaks panel, toast, modal containers, hidden YouTube player mount. Loads all JS/CSS. Also holds the hardcoded `window.__HQ_TWEAKS` defaults. |
-| `css/styles.css` | All styles — design tokens, layout, components, responsive rules. No preprocessor. Contains some dead leftovers from removed pages (`.habit*`, `.inline-form*`, `.focus-task-item*`) that no JS emits anymore. |
-| `js/core.js` | Shared foundation, split out of the old monolithic `js/app.js` (2026-09-13): `state` + `defaultState()`, date/format helpers, the modal system (`showModal`/`showConfirmModal`, see "Modal system" below), tweaks panel logic, ambient music widget, shared `ICON_*` SVGs, `paginationHtml()`, `animateNumbers()`, `bindSharedEvents()` (topbar tweaks/logout/music toggle, nav pills), and the `bindMainEvents()` orchestrator that calls every page's `bind*Events()` after each render. Loads first — every page file depends on it. |
+| `index.html` | Single HTML shell — login screen, loading screen, app shell (sidebar + `<main>`), mobile bottom nav, Tweaks panel, toast, modal containers, hidden YouTube player mount, bottom-right quick-action FAB (`#quick-fab`), and the hidden `<svg><defs>` holding the theme's SVG filters (`hq-brush`, `hq-brush-sm`, `hq-dry`, `hq-stamp`). Loads all JS/CSS. Also holds the hardcoded `window.__HQ_TWEAKS` defaults. |
+| `css/styles.css` | All styles — design tokens (the "Sumi & Washi" theme, see "Design System"), layout, components, responsive rules. No preprocessor. Contains some dead leftovers from removed pages (`.habit*`, `.inline-form*`, `.focus-task-item*`) that no JS emits anymore. |
+| `js/core.js` | Shared foundation, split out of the old monolithic `js/app.js` (2026-09-13): `state` + `defaultState()`, date/format helpers, the modal system (`showModal`/`showConfirmModal`, see "Modal system" below), tweaks panel logic, ambient music widget, shared `ICON_*` SVGs, `paginationHtml()`, `animateNumbers()`, Focus mode + the quick-action FAB (see "Focus mode & quick-action FAB" below), `bindSharedEvents()` (topbar tweaks/logout/music toggle, nav pills), and the `bindMainEvents()` orchestrator that calls every page's `bind*Events()` after each render. Loads first — every page file depends on it. |
 | `js/pages/home.js` | `life:home` — `renderLifeHome()`, the Home Activity heatmap (`buildHomeActivityEvents/Data`, `renderHomeActivityHeatmap`), the Today's Focus quick-add widget, `bindHomeEvents()`. |
 | `js/pages/schedule.js` | `life:schedule` — `buildMonthGrid()`, `renderSchedule()`, recurrence/reminder helpers, the alarm system (`checkAlarms`/`fireAlarm`/`showAlarmBanner`/`playAlarmBeep`), `bindScheduleEvents()`. |
 | `js/pages/commitments.js` | `life:commitments` — commitment kinds (`getGoalKind`), partial-credit progress (`goalProgress`/`avgProgressPct`/`getDayCompliancePct`), the write path `setGoalCountToday()`, duration timers, ring colour (`complianceColor`), streak/reminder helpers, the History layers, `renderCommitments()`, `bindCommitmentsEvents()`. |
@@ -24,11 +24,13 @@
 | `js/navigation.js` | `ROUTES` map, `setActiveTab()`, `render()`, `initGlobalBindings()` (sidebar toggle, nav clicks, tooltips). |
 | `js/supabase.js` | Supabase client init, `dbCall()`, `loadFromSupabase()`, `seedSampleData()`, all auth handlers (Google OAuth, email/password, forgot password), session management, visibility-change refresh. |
 | `schema.sql` | DB schema for a fresh project — run once in the Supabase SQL Editor. Has every table/column the app uses **except `projects` / `project_tasks`** (those are only in `schema_fix.sql`), and still contains the legacy `habits`/`habit_logs`/`focus_board`/`focus_tasks` tables. |
-| `schema_fix.sql` | Safe idempotent version (uses `IF NOT EXISTS` + `DO $$ EXCEPTION WHEN duplicate_object`) organized as numbered sections 1–21 that also backfill columns onto an existing DB. Re-run safe. This is the file to run on the live DB after schema changes. |
+| `schema_fix.sql` | Safe idempotent version (uses `IF NOT EXISTS` + `DO $$ EXCEPTION WHEN duplicate_object`) organized as numbered sections 1–22 that also backfill columns onto an existing DB. Re-run safe. This is the file to run on the live DB after schema changes. |
 | `ERD.md` / `IA.md` / `README.md` | Table reference / page + navigation reference / setup + deploy guide. |
 | `manifest.json` | PWA manifest — `standalone` display, icons 192/512, theme `#0f0f0f`. |
 | `sw.js` | Service worker — network-first with cache fallback, caches `'hq-v1'`. Registered from `js/core.js` on `window.load`. |
-| `icon-192.png` / `icon-512.png` | PWA icons. |
+| `icon-192.png` / `icon-512.png` | PWA icons — the 本部 hanko on sumi (see "Design System"). |
+| `assets/focus-bg.jpg` | Background photo for Focus mode's `forest` theme. |
+| `sounds/alarm.mp3` | Alarm sound played by `playAlarmBeep()` (schedule alarms, commitment reminders/timers, Focus-session completion). |
 
 **Script load order in `index.html`:** `core.js` → `pages/home.js` → `pages/schedule.js` → `pages/commitments.js` → `pages/projects.js` → `pages/notes.js` → `pages/finance.js` → `navigation.js` → `supabase.js` (then the YouTube IFrame API script last, so `onYouTubeIframeAPIReady` already exists). These are plain classic scripts (no bundler, no `type="module"`), so every file shares one global scope — `core.js` must load first since it defines `state`, `main`, and every shared helper the page files call; the six page files may load in any order relative to each other, since none of them execute page-rendering code at parse time (only function declarations and constants), and each only runs later via `ROUTES`/`bindMainEvents()` once all scripts have finished loading. Cross-file calls resolve at call time, e.g. `home.js` uses `complianceColor()`/`avgProgressPct()`/`getGoalKind()` from `commitments.js`, and `commitments.js` uses `fireAlarm()`/`playAlarmBeep()` from `schedule.js`.
 
@@ -40,7 +42,7 @@
 
 ### App Shell (Desktop vs Mobile)
 
-- **Desktop (≥768px):** Left sidebar (`<aside class="sidebar">`), 200px wide, collapsible to 60px icon-only mode. Sidebar state persisted in `localStorage('hq.sidebar')`.
+- **Desktop (≥768px):** Left sidebar (`<aside class="sidebar">`), 200px wide, collapsible to 60px kanji-only mode (each nav item's "icon" is a kanji — see "Design System → Signature details"). Sidebar state persisted in `localStorage('hq.sidebar')`.
 - **Mobile (<768px):** Sidebar hidden. Bottom tab bar (`<nav class="bottom-nav">`) with **Life** and **Finance** tabs. Sub-navigation rendered as horizontal pills inside `<div class="mobile-sub-nav">` at top of each page.
 - Both nav systems call `setActiveTab(route)` which sets `state.activeTab`, saves prefs, and calls `render()`.
 
@@ -106,7 +108,7 @@ let state = {
 
 `goals`/`goalLogs` together implement "Commitments" — `goals` are the static commitment items (one flat list), `goalLogs` is one row per `(goal_id, date)` recording that day's logged amount (`count`) and whether the target was reached (`checked`). This is what powers the daily compliance ring, per-item streaks, and the Month/Year history on the Commitments page (see below).
 
-UI navigation prefs (`activeTab`, `selectedDay`, `viewMonth`) are also saved to `localStorage('hq.prefs')` and restored on login. Other per-device `localStorage` keys: `hq.sidebar` (sidebar collapsed/expanded), `hq.goalTimers` (running duration timers). (Custom YouTube stations moved from a `localStorage` key to the `custom_stations` Supabase table — see "Ambient Music Widget" below — so they're per-user, not per-device.)
+UI navigation prefs (`activeTab`, `selectedDay`, `viewMonth`) are also saved to `localStorage('hq.prefs')` and restored on login. Other per-device `localStorage` keys: `hq.sidebar` (sidebar collapsed/expanded), `hq.goalTimers` (running duration timers), `hq.focusTimer` / `hq.focusPrefs` / `hq.focusTags` (Focus mode's running timer, theme, and tag list). (Custom YouTube stations moved from a `localStorage` key to the `custom_stations` Supabase table — see "Ambient Music Widget" below — so they're per-user, not per-device.)
 
 ---
 
@@ -143,7 +145,7 @@ Index on `(user_id, date)` and on `series_id`.
 
 **Reminder offset** (`js/pages/schedule.js`): the Add/Edit Event modals expose a single "Remind me" dropdown (`REMINDER_OPTIONS`: No reminder / At event time / 5–60 min before / Custom time…) instead of a raw alarm-time picker; `computeAlarmTime()` converts the choice into the stored `alarm_time` (`offsetMinutes()` handles the midnight rollover), and `reminderValueFromAlarm()` reverses that mapping to pre-fill the dropdown on Edit. The "Custom time…" option reveals the underlying time-picker field — wired via `showModal()`'s `controls`/`controlsWhen` (in `js/core.js`).
 
-**Alarm banner (snooze)** (`js/pages/schedule.js`): `fireAlarm(ev, sub)` fires a Web Notification (if permission is granted), plays `playAlarmBeep()`, and calls `showAlarmBanner()`, which injects a persistent fixed-position banner (`.alarm-banner` in `css/styles.css`) with Dismiss / Snooze 5 min buttons and repeats the beep every 20s until dismissed. Snooze re-fires the same alarm via `setTimeout` 5 minutes later. `sub` overrides the subtitle (used by commitment reminders). This is foreground-only (the tab must be open) — a lock-screen-capable version needs Web Push + a scheduled server-side check, intentionally out of scope.
+**Alarm banner (snooze)** (`js/pages/schedule.js`): `fireAlarm(ev, sub)` fires a Web Notification (if permission is granted), plays `playAlarmBeep()` (`sounds/alarm.mp3` via `new Audio()` — replaced the old generated Web Audio sine beep on 2026-09-24), and calls `showAlarmBanner()`, which injects a persistent fixed-position banner (`.alarm-banner` in `css/styles.css`) with Dismiss / Snooze 5 min buttons and repeats the beep every 20s until dismissed. Snooze re-fires the same alarm via `setTimeout` 5 minutes later. `sub` overrides the subtitle (used by commitment reminders). This is foreground-only (the tab must be open) — a lock-screen-capable version needs Web Push + a scheduled server-side check, intentionally out of scope.
 
 ### `goals`
 | Column | Type | Notes |
@@ -276,6 +278,8 @@ In both schema files (`schema.sql`, `schema_fix.sql` section 14).
 ## Auth Method
 
 - **Google OAuth:** `sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })`
+- **Login screen look** (2026-09-25): `#login-screen.seigaiha` wave field, a washi-grain panel with the large 本部 hanko, "Headquarters" in Shippori Mincho, and a squared Google button.
+- **Login screen is Google-only** (2026-09-20): the email/password inputs, the Sign in button and "Forgot password?" are **commented out** (not deleted) in `index.html`; their `supabase.js` listeners use `?.addEventListener` so they no-op while the elements are missing. Un-comment the markup to bring them back — the handlers below are still wired.
 - **Email/Password sign-in:** `sb.auth.signInWithPassword({ email, password })`
 - **Sign-up:** `sb.auth.signUp({ email, password })` (min 6 chars) — the button (`#email-signup-btn`) is hidden by default (`display:none`), can be re-enabled
 - **Forgot password:** `sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href })`
@@ -288,42 +292,54 @@ In both schema files (`schema.sql`, `schema_fix.sql` section 14).
 
 ---
 
-## Design System
+## Design System — "Sumi & Washi" (2026-09-25)
 
-### Color Tokens (CSS custom properties)
+A Japanese wabi-sabi theme: sumi-ink blacks, washi-paper text and grain, and **one** bright accent — vermillion *shu*, the colour of a hanko seal — used sparingly (hanko logo, the active nav kanji, Home's Up next row/`次` countdown, `.btn.primary`). Colour names are traditional Japanese *wairo*. The approved design preview (before/after mock, palette, type, details) was a claude.ai artifact: https://claude.ai/artifact/UmeuGRG3NPQSzwnk1yR8T5. Keep new UI inside this system: no new bright hues, no pure greys (neutrals are warm), no sakura/torii-style decoration.
+
+### Color Tokens (CSS custom properties, `:root` in `css/styles.css`)
 
 | Token | Value | Usage |
 |---|---|---|
-| `--bg` | `#0f0f0f` | Page background |
-| `--card` | `#1a1a1a` | Card background |
-| `--card-2` | `#161616` | Inline form / secondary control background |
-| `--border` | `#2a2a2a` | Default borders |
-| `--border-strong` | `#353535` | Focused / emphasized borders |
-| `--text` | `#f4f4f4` | Primary text |
-| `--text-dim` | `#9a9a9a` | Secondary text |
-| `--text-faint` | `#6a6a6a` | Placeholder / meta text |
-| `--accent` | `#f5f0e8` | Warm off-white — checkboxes, active states, bars. Set from `window.__HQ_TWEAKS.accent` by `applyTweaks()`; the accent swatch row in the Tweaks panel is currently hidden (`display:none` in `index.html`), so in practice it is the `index.html` default. |
-| `--danger` | `#d97a6c` | Delete actions, debt warnings, "bad" heatmap tier |
-| `--good` | `#8aa888` | Success states, "good" heatmap tier, completed progress bars |
-| `--warn` | `#c8a850` | Mid-tier warning (the Commitments Month heatmap's yellow tier) |
+| `--bg` | `#121110` (墨 sumi) | Page background (plus `--washi-grain` on `body`) |
+| `--card` | `#1b1a18` (消炭 keshizumi) | Card background (plus `--washi-grain`) |
+| `--card-2` | `#171614` | Inline form / secondary control background |
+| `--border` | `#2c2925` | Default borders |
+| `--border-strong` | `#3a3631` | Focused / emphasized borders, ensō track |
+| `--text` | `#ece6d9` (和紙 washi) | Primary text |
+| `--text-dim` | `#a39a8a` | Secondary text, idle nav labels |
+| `--text-faint` | `#6e675c` | Placeholder / meta text, idle nav kanji |
+| `--accent` | `#ece6d9` | Washi — checkboxes, active pills, bars. Set from `window.__HQ_TWEAKS.accent` by `applyTweaks()` (swatch row hidden in Tweaks, so it is the `index.html` default). |
+| `--shu` | `#d9472b` (朱 shu) | The one bright accent — see above. Text on it is `#f7efe3`. |
+| `--danger` | `#c0473e` (紅 beni) | Delete actions, debt warnings, Missed, "bad" heatmap tier |
+| `--good` | `#9aab66` (抹茶 matcha) | Success states, "good" heatmap tier, Net ≥ 0 |
+| `--warn` | `#c7913a` (金茶 kincha) | Mid-tier warning (the Commitments Month heatmap's yellow tier) |
 
-The Commitments/Home compliance **ring** uses its own colours rather than these tokens — see "Commitments — compliance ring colour".
+`--washi-grain` is an inline-SVG noise tile (no image file) layered on `body`, `.card`, modals and the Tweaks panel. Leftover hardcoded greys in the CSS were remapped to these warm values. The compliance **ring** colours come from `complianceColor()` — see "Commitments — compliance ring colour".
+
+### Signature details
+
+- **本部 hanko** (`.hanko` / `.hanko.lg` in `css/styles.css`): *honbu* = "headquarters". A tilted vermillion seal with vertical text, a worn edge from the `#hq-stamp` SVG filter. Used as the sidebar brand (26px), on the login panel and the loading screen (72px), and as the PWA icons (`icon-192.png`/`icon-512.png`, rendered from the same design in headless Chrome).
+- **Kanji instead of nav icons** (sidebar only, `.nav-kanji`): 今日 Today · 予定 Schedule · 習慣 Commitments · 計画 Projects · 覚書 Notes · 概要 Overview · 収入 Income · 支出 Spending · 借金 Debts. The kanji sits in the old icon slot (idle `--text-faint`, active page `--shu`); collapsed (60px) the sidebar is a column of kanji with the hanko and chevron stacked on top. The **Life / Finance section labels and the mobile bottom nav stay English/icon-only** on purpose (the user found kanji there too busy). Sign out keeps its SVG icon.
+- **円相 ensō compliance rings**: the Commitments ring and Home's Daily-score ring are brush strokes — `#hq-brush` / `#hq-brush-sm` (turbulence displacement) on the track + main arc, plus on Commitments a thinner dry-brush inner arc (`#hq-dry`) that is also a `.compliance-arc`, so `animateComplianceRing()`/`updateComplianceRing()` drive it with no extra code. Stroke starts at −72° and draws in over 900ms (off under `prefers-reduced-motion`).
+- **青海波 seigaiha** (`.seigaiha`, pure CSS gradients, tunable via `--sg-b`/`--sg-w`): only on the login screen and Focus mode's dark theme — not on cards.
+- All four SVG filters (`hq-brush`, `hq-brush-sm`, `hq-dry`, `hq-stamp`) live in one hidden `<svg><defs>` at the bottom of `index.html`.
 
 ### Typography
 
-- **Body font:** `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif`
-- **Login screen font:** `Quicksand` (Google Fonts, 400 + 600)
+- **Body font:** `Zen Kaku Gothic New` (Google Fonts 400/500/700), `--font`, falling back to Hiragino Sans / Yu Gothic / system UI.
+- **Display font:** `Shippori Mincho` (Google Fonts 400–800), `--font-display` — page titles, the topbar greeting, sidebar "Headquarters", modal titles, login title, every `.num` (metrics, totals), ring numbers (`.compliance-pct-text`/`.score-ring-text`), Focus mode's clock and the nav kanji. Keep Mincho out of small running text (it gets hard to read at 13px).
+- Both are loaded by the `@import` at the top of `css/styles.css` (Quicksand is gone).
 - **Base size:** `13px`
-- **Number weight:** CSS var `--num-weight` (200 / 300 / 400), applied from `window.__HQ_TWEAKS.numberWeight`; its Tweaks control is currently hidden, so it is the `index.html` default (400)
+- **Number weight:** CSS var `--num-weight`, applied from `window.__HQ_TWEAKS.numberWeight`; its Tweaks control is hidden, so it is the `index.html` default (700 — Mincho numerals read best bold).
 - **Density:** `body[data-density="comfortable"|"compact"]` (Tweaks → Density; default `compact`) tightens card padding, gaps and list rows
 
 ### Spacing & Shape
 
 | Token | Value |
 |---|---|
-| `--r-card` | `16px` |
-| `--r-sm` | `10px` |
-| `--r-pill` | `50px` |
+| `--r-card` | `6px` (was 16px — crisper, paper-like) |
+| `--r-sm` | `4px` (was 10px) |
+| `--r-pill` | `50px` (pills/filter chips stay round) |
 | `--pad-card` | `24px` (18px in compact density) |
 | `--gap` | `16px` (12px in compact density) |
 
@@ -339,10 +355,10 @@ The Commitments/Home compliance **ring** uses its own colours rather than these 
 
 - **Number counter:** `animateNumbers()` animates every `.num[data-target]` from 0 to its target over `600ms` with cubic ease-out, using `requestAnimationFrame` (re-runs for the whole page on every full `render()`).
 - **Checkbox pulse:** 150ms scale 1→1.15→1 on check/uncheck (`pulse()` in `core.js`).
-- **Progress fills:** commitment progress bars ease width over 300ms; the compliance ring eases its stroke/fill colour over 300ms when it crosses a tier.
+- **Progress fills:** commitment progress bars ease width over 300ms; the compliance ring eases its stroke/fill colour over 300ms when it crosses a tier, and the ensō stroke draws in over 900ms (`stroke-dashoffset`; `animateComplianceRing()` forces a reflow first so the transition actually runs).
 - **Timer dot:** the running-timer dot blinks (`goal-timer-blink`, 1.2s).
 - **Modals:** `modal-fade-in` (overlay) / `modal-scale-in` (card).
-- **Login / loading / music:** spinning rings on the login screen, dot-pulse on the loading screen, equalizer bars while ambient music plays.
+- **Login / loading / music:** the login screen is static (seigaiha field + hanko panel — the old spinning coloured ring blobs were removed; the markup keeps its `.ring`/`.ring-login`/`.ring-*` class names); the loading screen shows the hanko over faint spinning circles with a dot-pulse; equalizer bars while ambient music plays.
 - There is **no** page fade or card-entrance animation in the CSS: the inline `animation-delay:Nms` styles that render functions still emit have no keyframes to drive, and the bar-chart has no height animation. `.habit*`/`habit-shake` CSS is dead code from the removed Habits page.
 
 ---
@@ -359,6 +375,20 @@ Two playback engines behind one station picker, always visible in the topbar (ri
 **`#yt-audio-player-wrap` lives outside `#main`** (in `index.html`, alongside `#toast`/`#modal-container`) — it must not be inside `#main`, or `render()`'s `main.innerHTML = ...` on every page navigation would tear down and recreate the YouTube player (interrupting playback) on every unrelated click. The built-in `<audio>` streams don't have this constraint since they're plain JS objects (`ambientPlayer.audio`), not DOM nodes.
 
 **Interaction model** (deliberately not "click cycles through streams", the old behavior): the note icon (`#music-toggle`) only ever pauses/resumes whatever station is already selected (`toggleAmbientMusic()` → `pauseCurrentStation()`, which keeps the `Audio`/yt player loaded for resume — distinct from `stopCurrentStation()`, which fully discards the `Audio` object when switching to a different station). The small `▾` caret (`#music-caret-btn`) opens a dropdown (`#music-dropdown`, reuses `.notes-dropdown` styling) listing every station — built-ins first, then a separator, then custom ones (or a hint pointing at Tweaks if none are configured yet); picking one calls `selectStation(idx)`. If nothing has ever been selected, clicking the note icon also opens the dropdown (there's nothing to resume). While playing, the button shows the equalizer-bar animation instead of the note icon, and `#music-label` shows the current station's name.
+
+---
+
+## Focus mode & quick-action FAB (`js/core.js`, added 2026-09-24)
+
+**Quick-action FAB** (`#quick-fab` in `index.html`, `initQuickFab()`/`toggleQuickFab()`, called from `initGlobalBindings()` in `navigation.js`): a round `+` button fixed bottom-right (above the mobile bottom nav; `bottom: 24px` on desktop). Clicking it expands two icon-only options — **Focus mode** (`#fab-focus-btn` → `openFocusOverlay()`) and **Note mode** (`#fab-note-btn` → `setActiveTab('life:notes')`); clicking anywhere outside closes it. Like `#yt-audio-player-wrap`, it lives **outside `#main`** so `render()` never tears it down. `showApp()`/`showLogin()` in `supabase.js` show/hide it together with the bottom nav.
+
+**Focus mode** — a fullscreen Pomodoro-style overlay (`#focus-overlay`, created lazily by `ensureFocusOverlay()` and appended to `<body>`, re-rendered wholesale by `renderFocusOverlay()` — not part of `render()` or `state`):
+- **Timer**: default 25 min (`FOCUS_DEFAULT_MINUTES`). Before starting, `+1`/`+5`/`+10` adjust the staged duration (`focusStagedMinutes`, capped at 180); during a session they extend it. Start → Pause/Resume + Reset (↺). At 0, `finishFocusTimer()` fires a Web Notification (if permitted), `playAlarmBeep()` and a "Focus session complete" toast. Sessions are **not logged** anywhere (no DB table; they don't feed Activity or Commitments).
+- **Persistence**: `focusTimer = { totalSeconds, endsAt, remainingSeconds, running, tag }` is mirrored to `localStorage['hq.focusTimer']` (wall-clock `endsAt`, same idea as `goalTimers`), so it survives reload, navigation and closing the overlay; `initQuickFab()` restarts the 1s ticker (`ensureFocusTicker()`) on load if a timer was running. Device-only — not synced to Supabase.
+- **Tag selector** (top): a "Select a tag" dropdown labelling what the session is for; `+ Add tag` adds one (≤30 chars, Enter saves, Esc cancels). Tags persist in `localStorage['hq.focusTags']`; the selected tag is stored on the running timer.
+- **Sound picker** (bottom-left ♪ flyout): tabs **My Music / Radio / All** listing the **same stations as the topbar ambient music widget** — picking one calls `selectStation(idx)`, i.e. it drives the topbar player, not a separate audio feature. Always reopens on the Radio tab.
+- **Theme** (bottom-right palette flyout): `light` (washi paper + grain, sumi-brown text) / `dark` (sumi under a faint vignetted seigaiha — `.focus-bg` always carries `.seigaiha`, the light/forest rules override it) / `forest` (`assets/focus-bg.jpg` under a sumi gradient), persisted in `localStorage['hq.focusPrefs']`. Next to it, a fullscreen toggle (Fullscreen API on `document.documentElement`).
+- Clicking the overlay backdrop closes it (`closeFocusOverlay()`); the timer keeps running in the background. Clicks elsewhere inside the overlay close any open flyout / tag dropdown.
 
 ---
 
@@ -382,7 +412,7 @@ Two playback engines behind one station picker, always visible in the topbar (ri
 - **Yes/No**: a plain `.check` checkbox (`data-toggle-goal`); tapping sets today's `count` to 1 / back to 0.
 - **Count** (`goalProgressRow()`): a full-width progress bar (`.goal-prog-track`/`.goal-prog-fill`, turns `--good` green once the target is hit), the value `count/target unit` (click it to type an exact amount — replaced by an inline `.goal-count-input`, committed on Enter/blur, Esc cancels), then buttons: a `−` (−1), a **`+1`** (`.goal-quick-btn.primary` — same size/shape as its neighbours, only slightly brighter/bolder text; deliberately *not* a filled white pill, which clashed with the theme) and a **`+10`** when `target_count ≥ 20` (`goalQuickSteps()`), so 33× dzikir isn't 33 taps. Buttons carry `data-goal-bump="<delta>|<id>"`; there is no upper clamp (overshooting is allowed), count clamps at ≥ 0. The left checkbox is a shortcut: mark fully done (`count = target`) / reset to 0.
 - **Duration**: **timer-only** — see "Commitments — duration timers". No `−`/`+`/quick buttons, no typing, the value is read-only (`.goal-count-val.ro`), and the left checkbox is a non-interactive `.check.static` that only mirrors done/not-done. Home shows durations read-only too.
-- **Write path** (`setGoalCountToday(id, rawCount)`): the single function behind every count change (checkbox, `+N/−1`, typed amount, timer). It clamps to ≥ 0, sets `checked = count >= target`, stamps/clears `completed_at` only on a checked-boundary crossing, mutates `state.goalLogs`, updates the row **in place** (value text, progress fill + `done` colour, checkbox, `.goal-done`/strike-through, category header count + mini bar via `updateCategoryHeaderCount()`, the ring/bars/summary % via `updateComplianceRing()`, the streak badge via `updateGoalStreakBadge()`) and upserts `{ user_id, goal_id, date, checked, count, completed_at }` on `(goal_id, date)` — no full `render()`.
+- **Write path** (`setGoalCountToday(id, rawCount)`): the single function behind every count change (checkbox, `+N/−1`, typed amount, timer). It clamps to ≥ 0, sets `checked = count >= target`, stamps/clears `completed_at` only on a checked-boundary crossing, mutates `state.goalLogs`, updates the row **in place** (value text, progress fill + `done` colour, checkbox, `.goal-done`/strike-through, category header count + mini bar via `updateCategoryHeaderCount()`, the ring/bars/summary % via `updateComplianceRing()`, the streak badge via `updateGoalStreakBadge()`, today's History Month-heatmap cell + month-average line via `updateCommitTodayHeatmapCell()` — a no-op when today's cell isn't on screen) and upserts `{ user_id, goal_id, date, checked, count, completed_at }` on `(goal_id, date)` — no full `render()`.
 
 **Commitments — duration timers** (2026-09-19, `startGoalTimer()`/`finishGoalTimer()`/`tickGoalTimers()`/`toggle` binding in `bindCommitmentsEvents()`, `js/pages/commitments.js`): a Duration commitment can only be logged by running its timer — "press Start and wait".
 - **Start** counts down the time still missing to today's target (`(target_count − count) × unit`), shown on the button as `mm:ss left · Stop` with a blinking dot; the progress bar advances live each second (`count` + elapsed). Nothing starts if the target is already met.
@@ -395,7 +425,7 @@ Two playback engines behind one station picker, always visible in the topbar (ri
 
 **Commitments — partial-credit compliance** (2026-09-19, `goalProgress()`/`avgProgressPct()`/`getDayCompliancePct()`, `js/pages/commitments.js`): compliance percentages count **how far along** each commitment is, not just whether it is fully done. `goalProgress(goal, log)` is `0..1`: Yes/No is all-or-nothing (`checked ? 1 : 0`); Count/Duration earn `min(count / target_count, 1)` (dzikir 20/33 ≈ 0.61, previously 0). `avgProgressPct(items, dateIso)` averages that over a set of commitments and is the single formula behind: the Today's Compliance ring and its summary %, every per-category bar (Commitments and Home), category-header mini bars, `computeDailyScore()` (Home's Daily score ring), the Month heatmap cells, the Year sparkline and the day-detail modal's "N% complete". What deliberately still uses `checked` ("target fully hit"): per-item **streaks**, **reminders** (a commitment stops nagging once done), the "N / M" counts in category/compliance headers and Home's "N of M done today", the day-detail ✓ status and Home's Activity feed/heatmap.
 
-**Commitments — compliance ring colour** (2026-09-19, `complianceColor(pct, hasGoals)`/`paintComplianceRingColor()`, `js/pages/commitments.js`): the ring (arc + the number in its centre) is coloured by the ratio: **below 10%** bright red (`#ff4d4f`); **10% up to 70%** the normal accent (warm white, unchanged); **70% and up** green that starts light (`rgb(168,230,161)`) at 70% and deepens linearly to dark green (`rgb(31,143,70)`) at 100%. With no commitments at all there is no ratio, so it stays the accent instead of red. Applied in three places so it never lags: the ring on Commitments (set by `animateComplianceRing()` after each render and by `updateComplianceRing()` on every in-place change; `.compliance-arc`/`.compliance-pct-text` ease colour over 300ms) and the Daily score ring in Home's Commitments card (`renderLifeHome()` calls the same `complianceColor()`). At exactly 0% only the "0" is red because the arc has zero length. The summary "N%" text in the card header is not coloured.
+**Commitments — compliance ring colour** (2026-09-19, `complianceColor(pct, hasGoals)`/`paintComplianceRingColor()`, `js/pages/commitments.js`): the ring (arc + the number in its centre) is coloured by the ratio: **below 10%** beni red (`#c0473e`, = `--danger`); **10% up to 70%** the normal accent (washi); **70% and up** matcha that starts light (`rgb(190,204,138)`) at 70% and deepens linearly to deep matcha (`rgb(118,138,60)`) at 100% (values retuned for Sumi & Washi on 2026-09-25; were bright red / bright greens). The ring itself is drawn as an ensō brush stroke — see "Design System → Signature details". With no commitments at all there is no ratio, so it stays the accent instead of red. Applied in three places so it never lags: the ring on Commitments (set by `animateComplianceRing()` after each render and by `updateComplianceRing()` on every in-place change; `.compliance-arc`/`.compliance-pct-text` ease colour over 300ms) and the Daily score ring in Home's Commitments card (`renderLifeHome()` calls the same `complianceColor()`). At exactly 0% only the "0" is red because the arc has zero length. The summary "N%" text in the card header is not coloured.
 
 **Commitments — per-item streak** (2026-09-17, `computeGoalStreak()` in `js/pages/commitments.js`): each `goalRow()` shows a `🔥N` badge (`.goal-streak`, hidden via `:empty` when streak is 0) right after the name (and the reminder-time badge, if any) — consecutive days that commitment's `goal_logs.checked` (target fully hit) was true, ending today. Grace period: if today isn't checked yet, counting starts from yesterday instead of zeroing out immediately (the day isn't over) — this supersedes the older, unused `computeStreak()` in `js/supabase.js`, which broke on the instant today was unchecked. Updated in-place (`updateGoalStreakBadge()`) by `setGoalCountToday()`, no full re-render needed.
 
@@ -457,7 +487,7 @@ Two playback engines behind one station picker, always visible in the topbar (ri
 
 | Route | Page | Description |
 |---|---|---|
-| `finance:overview` | Overview | 3 metric cards (income this month, spent today, total debt). Alert pills for debts that are overdue and for debts due within 7 days (worded for today / N days / several). 7-day spending bar chart. |
+| `finance:overview` | Overview | 4 metric cards: income this month, spent today, total debt, and **Net · this month** (income − spending this month, green when ≥ 0 / red when negative, with a `±X vs last month` delta — `thisMonthSpend()`/`lastMonthNet()`). Alert pills for debts that are overdue and for debts due within 7 days (worded for today / N days / several). 7-day spending bar chart with 3-letter weekday labels, today's column highlighted (`.col.today`), and a native `title` tooltip (date + amount) on each focusable column. (The old "This month by category" card was removed as clutter.) |
 | `finance:income` | Income | Big total + entry count + average for the selected range: filter tabs **This Month / This Year / All Time**, or a "Jump to date" picker (× clears it). Log below, sorted by date descending, **7 per page** with a pager. `+ Log income` sits top-right of the page header (`.projects-header`/`.add-btn-inline`, reused from Projects), not at the bottom of the card. Add/edit via modals, delete with confirmation. |
 | `finance:spending` | Spending | Total + category breakdown pills (Food/Transport/Shopping/Other) for the selected range: filter tabs **Daily / Weekly (Mon–today) / Monthly / All Time**, or a "Jump to date" picker. "Recent" list capped at 5 rows + a "Show all N activities"/"Show less" toggle (`state.spendingShowAll`, `.act-feed-toggle`), mirroring Home's Activity feed — resets to capped whenever the filter or the date picker changes. `+ Log spend` sits top-right of the page header, same as Income. Add via modal (category, amount, note — the date is today and the time is set to now), edit via modal (category, amount, note), delete with confirmation. |
 | `finance:debts` | Debts | Open total + open/paid counts. All debts sorted by paid status then due date, **7 per page**. Paid / Due today / Due in Nd / Overdue labels, "soon" (≤7 days) styling. A paid ↔ unpaid toggle button (✓ / ↩; awaits the DB write, then toasts "Marked as paid/unpaid"), edit, delete (confirmed). `+ Add debt` in the page header. |
@@ -526,7 +556,7 @@ Title + content changes debounced 1000ms, then `sb.from('notes').update(...)`.
 - **Environment:** No `.env` file — Supabase URL and anon key are hardcoded in `js/supabase.js`. For production, these should be public anon keys (safe to expose).
 - **PWA:** `manifest.json` + `sw.js`. Service worker uses network-first strategy with `'hq-v1'` cache. Registered on `window.load` from `js/core.js`.
 - **No build step** — vanilla HTML/CSS/JS served as static files. Locally: `python -m http.server` / `npx serve .` (Google OAuth needs a real origin, not `file://`).
-- **Notifications:** Requests `Notification` permission on first login. Schedule alarms, commitment reminders and duration-timer resumption are checked on a 60-second `setInterval` (`checkAlarms()`), plus a 1-second interval while a duration timer is running. All foreground-only.
+- **Notifications:** Requests `Notification` permission on first login. Schedule alarms, commitment reminders and duration-timer resumption are checked on a 60-second `setInterval` (`checkAlarms()`), plus a 1-second interval while a duration timer or a Focus-mode timer is running. All foreground-only.
 - **After schema changes:** run `schema_fix.sql` in the Supabase SQL Editor (see below).
 
 ---

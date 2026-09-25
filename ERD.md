@@ -1,8 +1,8 @@
 # ERD.md — Entity Relationship Document
 
-> Last audited against `js/supabase.js` (`loadFromSupabase()`), the page files and both schema files on 2026-09-19.
+> Last audited against `js/supabase.js` (`loadFromSupabase()`), the page files and both schema files on 2026-09-25 (no schema changes since `custom_stations` on 2026-09-20).
 >
-> **Schema files:** `schema.sql` is a fresh-project schema (every table below **except `projects` and `project_tasks`**). `schema_fix.sql` is the idempotent, numbered (sections 1–21) version that also backfills columns onto an existing DB — run it on the live DB after any schema change; it contains every table below.
+> **Schema files:** `schema.sql` is a fresh-project schema (every table below **except `projects` and `project_tasks`**). `schema_fix.sql` is the idempotent, numbered (sections 1–22) version that also backfills columns onto an existing DB — run it on the live DB after any schema change; it contains every table below.
 >
 > **Legacy tables** `habits`, `habit_logs`, `focus_board`, `focus_tasks` still exist in both schema files but **no code reads or writes them** — they were replaced by Commitments (`goals` + `goal_logs`) and Projects (`projects` + `project_tasks`) and are safe to drop.
 
@@ -345,7 +345,9 @@ auth.users (Supabase managed)
 
 Home writes: `schedule_events.completed_at` (schedule checkboxes), `goal_logs` (Today's-commitments quick-log — Yes/No and Count only; Duration is read-only there), `project_tasks` (Active-project checkboxes), `today_focus_items`. Home reads `goals`/`goal_logs` for the compliance bars + Daily score, and `projects`/`project_tasks`/`schedule_events`/`goal_logs` for the Activity heatmap/feed. Finance snapshot on Home reads `income_entries`, `spending_entries`, `debts`.
 
-`custom_stations` isn't in the matrix above since it's not page-scoped — R W from the topbar's Tweaks panel, available on every page.
+`custom_stations` isn't in the matrix above since it's not page-scoped — R W from the topbar's Tweaks panel, available on every page (Focus mode's sound picker only reads it, via the same in-memory station list).
+
+**Focus mode** (global overlay from the bottom-right FAB) has **no table** — its timer, theme and tags live only in `localStorage` (`hq.focusTimer`, `hq.focusPrefs`, `hq.focusTags`) and sessions are never written to Supabase.
 
 All data is bulk-loaded once on login in `loadFromSupabase()` via a single `Promise.all()` (and again after the tab has been hidden for more than 5 minutes).
 

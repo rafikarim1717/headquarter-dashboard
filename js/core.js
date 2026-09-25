@@ -310,7 +310,7 @@ function showConfirmModal({ title, message, confirmLabel = 'Delete', onConfirm, 
   const cancelBtn = overlay.querySelector('.hq-confirm-cancel');
   btn.textContent = confirmLabel;
   btn.style.background = danger ? '#c0392b' : 'var(--accent)';
-  btn.style.color = danger ? '#fff' : '#111';
+  btn.style.color = danger ? '#ece6d9' : '#121110';
 
   function close() { hideConfirmModal(); document.removeEventListener('keydown', escHandler); }
   function escHandler(e) {
@@ -558,7 +558,7 @@ function animateNumbers() {
     const start = performance.now();
     const dur = 600;
     (function step(now) {
-      const t = Math.min(1, (now - start) / dur);
+      const t = Math.min(1, Math.max(0, (now - start) / dur)); // rAF's timestamp can predate `start` → would count up from a negative number
       el.textContent = fmt(target * (1 - Math.pow(1 - t, 3)));
       if (t < 1) requestAnimationFrame(step);
     })(performance.now());
@@ -983,7 +983,7 @@ function renderFocusOverlay() {
   const running = !!(focusTimer && focusTimer.running);
   const remaining = active ? focusRemainingSeconds() : focusStagedMinutes * 60;
   el.innerHTML = `
-    <div class="focus-bg"></div>
+    <div class="focus-bg seigaiha"></div>
     <div class="focus-content">
       <div class="focus-top">
         <div class="focus-tag-wrap">
@@ -1082,6 +1082,9 @@ function initQuickFab() {
   });
   document.getElementById('fab-note-btn')?.addEventListener('click', () => {
     toggleQuickFab(false);
+    // the FAB sits above the Focus overlay (z-index), so this can be clicked from inside
+    // Focus mode — close it, or Notes renders hidden behind it. The timer keeps running.
+    closeFocusOverlay();
     setActiveTab('life:notes');
   });
   document.addEventListener('click', e => {

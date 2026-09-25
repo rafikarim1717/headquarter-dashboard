@@ -296,11 +296,11 @@ function renderLifeHome() {
     const r = 22, c = 2 * Math.PI * r;
     const offset = c - (score / 100) * c;
     return `<svg width="52" height="52" viewBox="0 0 52 52" aria-hidden="true" style="flex-shrink:0">
-      <circle cx="26" cy="26" r="${r}" fill="none" stroke="#2a2a2a" stroke-width="5"/>
-      <circle cx="26" cy="26" r="${r}" fill="none" stroke="${scoreColor}" stroke-width="5" stroke-linecap="round"
-        stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"
-        style="transform:rotate(-90deg);transform-origin:26px 26px"/>
-      <text x="26" y="26" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="500" fill="${scoreColor}">${score}</text>
+      <circle cx="26" cy="26" r="${r}" fill="none" stroke="var(--border-strong)" stroke-width="1.2" filter="url(#hq-brush-sm)"/>
+      <circle cx="26" cy="26" r="${r}" fill="none" stroke="${scoreColor}" stroke-width="5.5" stroke-linecap="round"
+        stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" filter="url(#hq-brush-sm)"
+        style="transform:rotate(-72deg);transform-origin:26px 26px"/>
+      <text x="26" y="27" text-anchor="middle" dominant-baseline="middle" font-size="15" fill="${scoreColor}" class="score-ring-text">${score}</text>
     </svg>`;
   })();
 

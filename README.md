@@ -1,9 +1,11 @@
 # HQ Dashboard
 
-Personal life + finance dashboard (installable PWA) with a Supabase backend and Google / email login.
+Personal life + finance dashboard (installable PWA) with a Supabase backend and Google login.
 
 **Life:** Today overview · Schedule (reminders, recurring events) · Commitments (yes/no, counted and timed habits with streaks, reminders and a compliance history) · Projects · Notes (rich text)
-**Finance:** Overview · Income · Spending · Debts
+**Finance:** Overview (incl. net this month) · Income · Spending · Debts
+**Look:** "Sumi & Washi" — a Japanese ink-and-paper dark theme (Shippori Mincho + Zen Kaku Gothic New, a 本部 hanko logo, kanji navigation, ensō progress rings). Tokens and details in [`CLAUDE.md`](CLAUDE.md#design-system--sumi--washi-2026-09-25).
+**Everywhere:** Focus mode (fullscreen Pomodoro timer with tags, themes and ambient music) and a quick Note shortcut, both from the floating `+` button bottom-right
 
 Docs: [`CLAUDE.md`](CLAUDE.md) (architecture + feature reference) · [`IA.md`](IA.md) (pages & navigation) · [`ERD.md`](ERD.md) (database tables)
 
@@ -33,7 +35,7 @@ Docs: [`CLAUDE.md`](CLAUDE.md) (architecture + feature reference) · [`IA.md`](I
 4. Copy the **Client ID** and **Client Secret** into the Supabase Google provider fields
 5. Save
 
-Email + password sign-in also works (Supabase → Authentication → Providers → Email).
+The login screen only shows **Continue with Google**. Email/password sign-in and "Forgot password?" still exist in the code but are commented out in `index.html`. To bring them back, un-comment that markup and enable Supabase → Authentication → Providers → Email.
 
 ### 3. Open or deploy
 
@@ -70,11 +72,12 @@ The Supabase project URL and public (anon) key are set in `js/supabase.js`; poin
 
 ## How it works
 
-- **Auth**: Google OAuth or email/password via Supabase. A login screen is shown until the user authenticates. Session persists across page loads.
+- **Auth**: Google OAuth via Supabase (email/password is wired but hidden, see above). A login screen is shown until the user authenticates. Session persists across page loads.
 - **Data**: All data lives in Supabase (Postgres) with row-level security, so each user only sees their own rows. On login, everything is fetched in parallel and held in memory. Every create/update/delete immediately updates the in-memory state (so the UI stays snappy) and syncs to Supabase in the background. If the tab has been hidden for more than 5 minutes, data is re-fetched when you come back.
 - **Errors**: If a sync fails, a toast appears at the bottom of the screen and the call is retried once automatically.
 - **First login**: Sample data is auto-inserted so the dashboard isn't empty on first use.
 - **Commitments**: each commitment is Yes/No, a Count (e.g. 33× dzikir) or a Duration (e.g. 10 menit) that is logged only with a Start timer. Compliance uses partial credit, and the daily ring turns red below 10% and green from 70%.
-- **Reminders & timers**: schedule alarms, commitment reminders and running duration timers work while the app is open in a browser tab (Web Notification permission is requested on first login). They are not push notifications, so nothing fires when the tab/PWA is closed — a timer that was running when you closed the app completes the next time you open it.
+- **Reminders & timers**: schedule alarms, commitment reminders, running duration timers and Focus-mode sessions work while the app is open in a browser tab (Web Notification permission is requested on first login; the alarm sound is `sounds/alarm.mp3`). They are not push notifications, so nothing fires when the tab/PWA is closed — a timer that was running when you closed the app completes the next time you open it.
+- **Focus mode**: tap the `+` button (bottom-right) → target icon. You get a fullscreen countdown (25 min by default, `+1`/`+5`/`+10` to adjust) with an optional tag, a Light/Dark/Forest theme, fullscreen, and a sound picker that plays the same stations as the topbar music widget. The session isn't saved to the database. It only lives on this device, and it keeps running if you close the overlay or reload.
 - **PWA**: `manifest.json` + a network-first service worker (`sw.js`) make it installable to the home screen.
-- **UI preferences** (active tab, selected day, sidebar state, running timers, custom YouTube stations) are stored in `localStorage` per device — they don't sync across devices. The Tweaks panel (density, Today layout, currency prefix, …) resets to the defaults in `index.html` on reload; only your name (Supabase) and custom music stations (localStorage) persist.
+- **UI preferences** (active tab, selected day, sidebar state, running commitment/Focus timers, Focus theme and tags) are stored in `localStorage` per device — they don't sync across devices. The Tweaks panel (density, Today layout, currency prefix, …) resets to the defaults in `index.html` on reload. Only your name and your custom YouTube music stations persist, and both are saved in Supabase, so they follow you across devices.

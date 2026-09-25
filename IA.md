@@ -1,6 +1,6 @@
 # IA.md — Information Architecture
 
-> Last audited against the code on 2026-09-19. For implementation detail (functions, state, edge cases) see `CLAUDE.md`; for tables and columns see `ERD.md`.
+> Last audited against the code on 2026-09-25 (incl. the Sumi & Washi theme). For implementation detail (functions, state, edge cases) see `CLAUDE.md`; for tables and columns see `ERD.md`.
 
 ## App Overview
 
@@ -28,10 +28,10 @@ App
 ```
 
 ### Desktop Navigation (sidebar)
-- Left sidebar: 200px expanded, 60px collapsed (icon-only)
-- Toggle button (« / ») collapses/expands; state persisted in `localStorage('hq.sidebar')`
-- Each nav item has an outline SVG icon + label text
-- Active item highlighted
+- Left sidebar: 200px expanded, 60px collapsed (kanji-only)
+- Brand: 本部 hanko seal + "Headquarters"; chevron toggle button next to it (points down when expanded, right when collapsed) collapses/expands; state persisted in `localStorage('hq.sidebar')`. Collapsed, the hanko and chevron stack vertically.
+- Each nav item has a kanji in the icon slot + English label: 今日 Today · 予定 Schedule · 習慣 Commitments · 計画 Projects · 覚書 Notes · 概要 Overview · 収入 Income · 支出 Spending · 借金 Debts
+- Active item highlighted; its kanji turns vermillion (shu)
 - Collapsed mode: labels hidden, tooltip shown on hover via `#nav-tooltip`
 - Section labels ("Life", "Finance") fade out when collapsed
 - Footer: Sign out button
@@ -50,7 +50,30 @@ Every page renders `topbar()` which outputs:
 - Horizontal sub-nav pills for the current section (shown on mobile)
 
 ### Login / loading
-- **Login screen** (`#login-screen`): Google OAuth button, email + password sign-in, "Forgot password". The sign-up button exists but is hidden.
+- **Login screen** (`#login-screen`): a seigaiha wave background with a centred panel — 本部 hanko, "Headquarters", and only **Continue with Google**. The email + password fields, Sign in button and "Forgot password" are commented out in `index.html` (handlers still wired, no-op while the elements are missing); the sign-up button exists but is hidden.
+
+### Quick-action FAB (global, bottom-right)
+- `#quick-fab` — a round `+` button fixed bottom-right on every page once logged in (sits above the mobile bottom nav). Lives outside `<main>`, so it isn't re-rendered on navigation.
+- Tapping it expands two icon-only options: **Focus mode** (target icon → opens the Focus overlay, see below) and **Note mode** (pen icon → goes to `life:notes`). Tapping outside collapses it.
+
+### Focus mode (global overlay)
+Fullscreen Pomodoro-style overlay (`#focus-overlay`) opened from the FAB — not a route, `state.activeTab` doesn't change.
+```
+┌─────────────────────────────────────┐
+│          [🏷 Select a tag ▾]          │
+│               25:00                 │
+│          [+1] [+5] [+10]            │
+│      [▶ Start]  (→ Pause/Resume + ↺) │
+│                                     │
+│ [♪]                        [⛶] [🎨] │
+└─────────────────────────────────────┘
+```
+- **Top:** tag dropdown (pick a tag or `+ Add tag`), big countdown (default 25:00), `+1/+5/+10` minute buttons (before start: adjust the duration, max 180; during: extend it), Start → Pause/Resume + Reset
+- **Bottom-left ♪:** sound flyout with tabs **My Music / Radio / All** — the same stations as the topbar music widget (picking one plays it in that widget)
+- **Bottom-right:** fullscreen toggle + 🎨 theme flyout (**Light** = washi paper / **Dark** = sumi + seigaiha / **Forest** = photo)
+- Finishing a session → Web Notification + alarm sound + "Focus session complete" toast
+- Click the backdrop to close; the timer keeps running in the background and survives reload
+- **Persisted (per device):** `localStorage('hq.focusTimer')`, `('hq.focusPrefs')` (theme), `('hq.focusTags')`. **No Supabase data** — sessions aren't logged.
 - **Loading screen** (`#app-loading`): shown while the session is checked and data loads (minimum 800ms, then fades out). New users (no `profiles` row) get sample data seeded first.
 
 ---
@@ -164,9 +187,9 @@ Every page renders `topbar()` which outputs:
 **Purpose:** Financial health at a glance.
 
 **Features:**
-- 3 metric cards with animated number counters: Income · this month, Spent · today, Total debt (unpaid)
+- 4 metric cards with animated number counters: Income · this month, Spent · today, Total debt (unpaid), **Net · this month** (income − spending; green when ≥ 0, red when negative; sub-line "±X vs last month")
 - Alert pills: "N debts overdue" and a due-soon pill for debts due today / within 7 days
-- 7-day spending bar chart (one bar per day, height proportional to daily total, day-of-week labels)
+- 7-day spending bar chart (one bar per day, height proportional to daily total, 3-letter weekday labels, today's column highlighted, hover/focus tooltip with date + amount)
 
 **Data reads:** `income_entries`, `spending_entries`, `debts`
 **Data writes:** None
@@ -296,7 +319,7 @@ showToast('Message text', 'error')   // error (✕)
 `#toast` element: appears with `.show`, auto-hides after 3500ms.
 
 ### Alarm banner
-Persistent fixed banner (`.alarm-banner`) with Dismiss / Snooze 5 min, used by schedule alarms and commitment reminders.
+Persistent fixed banner (`.alarm-banner`) with Dismiss / Snooze 5 min, used by schedule alarms and commitment reminders. The alarm sound (`sounds/alarm.mp3`) is shared with duration-timer and Focus-session completion.
 
 ### Alert
 ```html

@@ -551,13 +551,13 @@ function computeDailyScore() {
 }
 
 // Colour of the Today's Compliance ring by ratio:
-//   < 10%    bright red (nothing done yet — a loud "go do something")
-//   10–70%   the theme accent, unchanged
-//   70–100%  light green at 70% deepening to dark green at 100% — the closer to done, the darker
+//   < 10%    beni red (nothing done yet — a loud "go do something")
+//   10–70%   the theme accent (washi)
+//   70–100%  light matcha at 70% deepening to deep matcha at 100% — the closer to done, the darker
 // With no commitments at all there is no ratio to judge, so it stays the accent.
-const COMPLIANCE_RED = '#ff4d4f';
-const COMPLIANCE_GREEN_LIGHT = [168, 230, 161]; // at 70%
-const COMPLIANCE_GREEN_DARK = [31, 143, 70];    // at 100%
+const COMPLIANCE_RED = '#c0473e';               // 紅 beni (= --danger)
+const COMPLIANCE_GREEN_LIGHT = [190, 204, 138]; // light matcha, at 70%
+const COMPLIANCE_GREEN_DARK = [118, 138, 60];   // deep matcha, at 100%
 function complianceColor(pct, hasGoals = true) {
   if (!hasGoals) return 'var(--accent)';
   if (pct < 10) return COMPLIANCE_RED;
@@ -575,6 +575,7 @@ function paintComplianceRingColor(card, pct) {
 function animateComplianceRing() {
   const card = document.getElementById('commit-compliance-card');
   if (!card) return;
+  void card.offsetWidth; // flush the freshly-rendered empty ring so the ensō stroke transitions in
   card.querySelectorAll('.compliance-arc').forEach(arc => {
     const full = parseFloat(arc.dataset.full || arc.getAttribute('stroke-dasharray') || 213.63);
     const pct  = parseFloat(arc.dataset.pct || 0);
@@ -711,29 +712,41 @@ function renderCommitments() {
       </summary>
       <div class="cat-body">
         <div class="compliance-inner">
+          <!-- 円相 ensō: brush-textured track + main stroke + a thinner dry-brush inner stroke.
+               Every .compliance-arc (incl. the dry one) is driven by animateComplianceRing()/updateComplianceRing(). -->
           <svg class="compliance-ring-desktop" width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
-            <circle cx="40" cy="40" r="34" fill="none" stroke="#2a2a2a" stroke-width="6"/>
+            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border-strong)" stroke-width="1.5" filter="url(#hq-brush)"/>
             <circle class="compliance-arc" cx="40" cy="40" r="34" fill="none"
-              stroke="var(--accent)" stroke-width="6" stroke-linecap="round"
-              stroke-dasharray="213.63"
-              style="stroke-dashoffset:213.63;transform:rotate(-90deg);transform-origin:40px 40px"
+              stroke="var(--accent)" stroke-width="7" stroke-linecap="round"
+              stroke-dasharray="213.63" filter="url(#hq-brush)"
+              style="stroke-dashoffset:213.63;transform:rotate(-72deg);transform-origin:40px 40px"
               data-pct="${overallPct}" data-full="213.63"/>
-            <text x="40" y="40" text-anchor="middle" dominant-baseline="middle"
-              font-size="18" font-weight="300" fill="var(--accent)"
+            <circle class="compliance-arc" cx="40" cy="40" r="29.5" fill="none"
+              stroke="var(--accent)" stroke-opacity="0.5" stroke-width="2.2" stroke-linecap="round"
+              stroke-dasharray="185.35" filter="url(#hq-dry)"
+              style="stroke-dashoffset:185.35;transform:rotate(-70deg);transform-origin:40px 40px"
+              data-pct="${overallPct}" data-full="185.35"/>
+            <text x="40" y="41" text-anchor="middle" dominant-baseline="middle"
+              font-size="19" fill="var(--accent)"
               class="compliance-pct-text">0</text>
           </svg>
           <svg class="compliance-ring-mobile" width="100" height="100" viewBox="0 0 100 100" aria-hidden="true">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="#2a2a2a" stroke-width="7"/>
+            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border-strong)" stroke-width="1.5" filter="url(#hq-brush)"/>
             <circle class="compliance-arc" cx="50" cy="50" r="42" fill="none"
-              stroke="var(--accent)" stroke-width="7" stroke-linecap="round"
-              stroke-dasharray="263.89"
-              style="stroke-dashoffset:263.89;transform:rotate(-90deg);transform-origin:50px 50px"
+              stroke="var(--accent)" stroke-width="8" stroke-linecap="round"
+              stroke-dasharray="263.89" filter="url(#hq-brush)"
+              style="stroke-dashoffset:263.89;transform:rotate(-72deg);transform-origin:50px 50px"
               data-pct="${overallPct}" data-full="263.89"/>
-            <text x="50" y="46" text-anchor="middle" dominant-baseline="middle"
-              font-size="20" font-weight="300" fill="var(--accent)"
+            <circle class="compliance-arc" cx="50" cy="50" r="36.5" fill="none"
+              stroke="var(--accent)" stroke-opacity="0.5" stroke-width="2.5" stroke-linecap="round"
+              stroke-dasharray="229.34" filter="url(#hq-dry)"
+              style="stroke-dashoffset:229.34;transform:rotate(-70deg);transform-origin:50px 50px"
+              data-pct="${overallPct}" data-full="229.34"/>
+            <text x="50" y="47" text-anchor="middle" dominant-baseline="middle"
+              font-size="21" fill="var(--accent)"
               class="compliance-pct-text">0</text>
-            <text x="50" y="64" text-anchor="middle" dominant-baseline="middle"
-              font-size="9" fill="#6a6a6a">today</text>
+            <text x="50" y="65" text-anchor="middle" dominant-baseline="middle"
+              font-size="9" fill="#6e675c">today</text>
           </svg>
           <div class="compliance-bars">
             <div class="compliance-label">TODAY'S COMPLIANCE</div>
