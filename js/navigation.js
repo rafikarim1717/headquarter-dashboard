@@ -47,11 +47,15 @@ function initGlobalBindings() {
   const sidebar = document.getElementById('sidebar');
   const toggleBtn = document.getElementById('sidebar-toggle');
   if (sidebar && toggleBtn) {
-    // chevron icon direction is pure CSS (.sidebar.collapsed .sidebar-toggle svg)
+    // the chevron is hidden while collapsed (CSS) — the hanko is the expand button then
     if (localStorage.getItem('hq.sidebar') === 'collapsed') sidebar.classList.add('collapsed');
-    toggleBtn.addEventListener('click', () => {
-      const isCollapsed = sidebar.classList.toggle('collapsed');
-      localStorage.setItem('hq.sidebar', isCollapsed ? 'collapsed' : 'expanded');
+    const setCollapsed = collapsed => {
+      sidebar.classList.toggle('collapsed', collapsed);
+      localStorage.setItem('hq.sidebar', collapsed ? 'collapsed' : 'expanded');
+    };
+    toggleBtn.addEventListener('click', () => setCollapsed(true));
+    sidebar.querySelector('.sidebar-brand .hanko')?.addEventListener('click', () => {
+      if (sidebar.classList.contains('collapsed')) setCollapsed(false);
     });
   }
   document.getElementById('sidebar-logout-btn')?.addEventListener('click', signOut);

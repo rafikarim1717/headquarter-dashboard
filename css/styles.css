@@ -254,13 +254,13 @@
     transition: max-width 200ms ease, opacity 200ms ease;
   }
   .sidebar.collapsed .sidebar-brand .brand-label { max-width: 0; opacity: 0; }
-  /* collapsed (60px): hanko on top, chevron toggle under it */
+  /* collapsed (60px): just the hanko, no chevron — clicking the hanko expands the sidebar */
   .sidebar.collapsed .sidebar-brand { flex-direction: column; gap: 10px; padding: 4px 0 16px; }
-  .sidebar.collapsed .sidebar-brand .hanko { margin-left: 0; }
-  .sidebar.collapsed .sidebar-toggle { margin-left: 0; }
+  .sidebar.collapsed .sidebar-brand .hanko { margin-left: 0; cursor: pointer; }
+  .sidebar.collapsed .sidebar-toggle { display: none; }
   .sidebar-toggle {
     margin-left: auto; flex-shrink: 0;
-    width: 20px; height: 20px; border-radius: 4px;
+    width: 24px; height: 24px; border-radius: 4px;
     background: rgba(255,255,255,0.06); border: none;
     color: rgba(255,255,255,0.5); font-size: 11px;
     display: flex; align-items: center; justify-content: center;
@@ -268,7 +268,6 @@
   }
   .sidebar-toggle:hover { color: rgba(255,255,255,0.9); }
   .sidebar-toggle svg { transition: transform var(--t-fast) ease; }
-  .sidebar.collapsed .sidebar-toggle svg { transform: rotate(-90deg); }
   .sidebar-nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 8px; }
   .nav-section-label {
     font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
