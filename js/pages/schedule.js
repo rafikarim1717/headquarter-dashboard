@@ -330,10 +330,22 @@ function bindScheduleEvents() {
 /* =========================================================
    ALARMS
 ========================================================= */
+// The one alarm sound currently playing — kept so Dismiss/Snooze can cut it off
+// mid-clip, and so a repeat beep restarts it instead of stacking a second copy.
+let alarmAudio = null;
+
 function playAlarmBeep() {
   try {
-    new Audio('sounds/alarm.mp3').play().catch(() => {});
+    stopAlarmSound();
+    alarmAudio = new Audio('sounds/alarm.mp3');
+    alarmAudio.play().catch(() => {});
   } catch (e) {}
+}
+
+function stopAlarmSound() {
+  if (!alarmAudio) return;
+  try { alarmAudio.pause(); alarmAudio.currentTime = 0; } catch (e) {}
+  alarmAudio = null;
 }
 
 // Persistent in-app banner shown while an alarm is active — stays up (with a
@@ -355,6 +367,7 @@ function ensureAlarmBanner() {
 
 function dismissAlarmBanner() {
   if (alarmBeepInterval) { clearInterval(alarmBeepInterval); alarmBeepInterval = null; }
+  stopAlarmSound();
   if (alarmBannerEl) alarmBannerEl.classList.remove('show');
 }
 
