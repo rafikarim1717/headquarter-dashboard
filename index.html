@@ -17,7 +17,7 @@
   window.__HQ_TWEAKS = {
     "name": "Alex",
     "accent": "#ece6d9",
-    "density": "compact",
+    "density": "compact",   // locked, since the Tweaks panel that switched it is retired
     "numberWeight": 700,
     "showQuickPills": true,
     "currencyPrefix": "Rp ",
@@ -152,7 +152,10 @@
   </button>
 </nav>
 
-<!-- Tweaks Panel -->
+<!-- Tweaks Panel: retired 2026-09-29 and kept here commented out for reference.
+     Density is locked to compact (the window.__HQ_TWEAKS default above), Today layout and
+     quick pills keep their defaults, and custom YouTube stations moved to the music
+     picker's "Manage stations" modal (showStationsModal() in js/core.js).
 <div id="tweaks-panel">
   <h4><span>Tweaks</span><button class="x" id="tweaks-close" aria-label="Close">&#x2715;</button></h4>
   <div class="row" style="display:none">
@@ -178,6 +181,7 @@
   <div id="tw-custom-stations-list"></div>
   <button class="add-btn-inline" id="tw-custom-add-btn" style="width:100%; text-align:center; margin-top:2px; margin-bottom:12px">+ Add station</button>
 </div>
+-->
 
 <!-- Toast -->
 <div id="toast"></div>

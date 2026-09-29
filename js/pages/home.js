@@ -601,10 +601,18 @@ function bindHomeEvents() {
     if (!input) return;
     const text = input.value.trim();
     if (!text || !currentUser) return;
+    const btn = main.querySelector('#tf-add-btn');
+    if (btn?.classList.contains('is-loading')) return;
     input.value = '';
-    const { data } = await dbCall(() =>
-      sb.from('today_focus_items').insert({ user_id: currentUser.id, text, checked: false }).select().single()
-    );
+    let data;
+    try {
+      ({ data } = await withBtnLoading(btn, () =>
+        dbCall(() => sb.from('today_focus_items').insert({ user_id: currentUser.id, text, checked: false }).select().single())
+      ));
+    } catch (e) {
+      if (!input.value) input.value = text; // give the text back so it can be retried
+      return;
+    }
     if (data) {
       state.todayFocus.push({ id: data.id, text: data.text, checked: data.checked, created_at: data.created_at });
       render();

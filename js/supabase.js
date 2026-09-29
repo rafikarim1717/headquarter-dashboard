@@ -31,7 +31,13 @@ function _fadeOutLoading(cb) {
 /* =========================================================
    DB HELPER — retry once on failure
 ========================================================= */
+// Every call raises the global "Saving…" pill (beginBusy in core.js) — it only
+// appears if the call is still pending after BUSY_DELAY_MS.
 async function dbCall(fn) {
+  beginBusy('Saving…');
+  try { return await dbCallInner(fn); } finally { endBusy(); }
+}
+async function dbCallInner(fn) {
   try {
     const result = await fn();
     if (result.error) throw result.error;
@@ -265,7 +271,7 @@ async function handleSession(session) {
   applyTweaks();
   restoreUIPrefs();
   showApp();
-  syncTweaksUI();
+  // syncTweaksUI();   // Tweaks panel retired 2026-09-29 (see js/core.js)
   render();
   initGlobalBindings();
 
@@ -278,18 +284,24 @@ async function handleSession(session) {
   }
 }
 
-async function signOut() {
-  await sb.auth.signOut();
+async function signOut(e) {
+  const btn = e?.currentTarget; // sidebar / topbar sign-out button, spins while waiting
+  if (btn?.classList.contains('is-loading')) return;
+  await withBtnLoading(btn, () => sb.auth.signOut());
   currentUser = null;
   showLogin();
 }
 
-document.getElementById('google-login-btn').addEventListener('click', async () => {
+document.getElementById('google-login-btn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  if (btn.classList.contains('is-loading')) return;
+  // Stays spinning on success — the page is about to redirect to Google.
+  setBtnLoading(btn, true);
   const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: window.location.origin }
   });
-  if (error) showToast('Login failed: ' + error.message, 'error');
+  if (error) { setBtnLoading(btn, false); showToast('Login failed: ' + error.message, 'error'); }
 });
 
 // Email / password auth
@@ -305,28 +317,34 @@ function loginFields() {
   };
 }
 
-document.getElementById('email-login-btn')?.addEventListener('click', async () => {
+document.getElementById('email-login-btn')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
   const { email, password } = loginFields();
   if (!email || !password) { loginMsg('Enter your email and password.', 'error'); return; }
   loginMsg('', '');
-  const { error } = await sb.auth.signInWithPassword({ email, password });
+  const { error } = await withBtnLoading(btn, () => sb.auth.signInWithPassword({ email, password })) || {};
   if (error) loginMsg(error.message, 'error');
 });
 
-document.getElementById('email-signup-btn').addEventListener('click', async () => {
+document.getElementById('email-signup-btn')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
   const { email, password } = loginFields();
   if (!email || !password) { loginMsg('Enter your email and password.', 'error'); return; }
   if (password.length < 6) { loginMsg('Password must be at least 6 characters.', 'error'); return; }
   loginMsg('', '');
-  const { error } = await sb.auth.signUp({ email, password });
-  if (error) loginMsg(error.message, 'error');
+  const res = await withBtnLoading(btn, () => sb.auth.signUp({ email, password }));
+  if (!res) return; // a click while already spinning
+  if (res.error) loginMsg(res.error.message, 'error');
   else loginMsg('Check your email to confirm your account.', 'success');
 });
 
-document.getElementById('forgot-password-btn')?.addEventListener('click', async () => {
+document.getElementById('forgot-password-btn')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
   const email = document.getElementById('login-email').value.trim();
   if (!email) { loginMsg('Enter your email address first.', 'error'); return; }
-  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+  const res = await withBtnLoading(btn, () => sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href }));
+  if (!res) return;
+  const { error } = res;
   if (error) loginMsg(error.message, 'error');
   else loginMsg('Password reset email sent — check your inbox.', 'success');
 });
@@ -359,7 +377,7 @@ document.addEventListener('visibilitychange', () => {
     hiddenAt = null;
     if (hiddenDuration < 5 * 60 * 1000) return;
     if (!currentUser) return;
-    loadFromSupabase(currentUser.id).then(() => { render(); checkAlarms(); }).catch(e => {
+    withBusy(() => loadFromSupabase(currentUser.id), 'Refreshing…').then(() => { render(); checkAlarms(); }).catch(e => {
       console.error('Failed to refresh data', e);
     });
   }

@@ -963,7 +963,8 @@
     .notes-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
   }
 
-  /* ============ TWEAKS PANEL ============ */
+  /* ============ TWEAKS PANEL: retired 2026-09-29, kept commented out (see index.html) ============
+
   #tweaks-panel {
     display: none; position: fixed; right: 16px; bottom: 16px;
     width: 280px; max-height: 80vh; overflow-y: auto;
@@ -992,6 +993,7 @@
     color: var(--text-faint); transition: color var(--t-fast) ease;
   }
   #tweaks-panel .tw-custom-del:hover { color: var(--danger); }
+  */
 
   /* density */
   body[data-density="compact"] { --pad-card: 18px; --gap: 12px; }
@@ -1075,6 +1077,49 @@
   #toast.toast-success { background: #17241a; color: #a9d6a5; border-color: #2e4a32; }
   #toast.toast-error { background: #2a1215; color: #ff8a80; border-color: #5c2b2e; }
   @media (min-width: 900px) { #toast { bottom: 24px; } }
+
+  /* ============ LOADING (setBtnLoading / beginBusy in core.js) ============ */
+  @keyframes hq-spin { to { transform: rotate(360deg); } }
+  /* Button spinner: the label goes invisible (keeps the button's width), a ring spins in its place */
+  button.is-loading { position: relative; color: transparent !important; pointer-events: none; cursor: progress; }
+  button.is-loading > * { visibility: hidden; }
+  button.is-loading::after {
+    content: ''; position: absolute; inset: 0; margin: auto;
+    width: 14px; height: 14px; box-sizing: border-box; border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--spin-c, var(--text)) 25%, transparent);
+    border-top-color: var(--spin-c, var(--text));
+    animation: hq-spin 700ms linear infinite;
+  }
+  .btn.primary.is-loading { --spin-c: #121110; }
+  .modal-card.is-saving .modal-fields { opacity: 0.6; pointer-events: none; transition: opacity var(--t-fast); }
+  .modal-card.is-saving #modal-cancel, .modal-card.is-saving .modal-x { opacity: 0.4; pointer-events: none; }
+
+  .hq-spinner {
+    width: 12px; height: 12px; flex-shrink: 0; box-sizing: border-box; border-radius: 50%;
+    border: 2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor;
+    animation: hq-spin 700ms linear infinite;
+  }
+  /* Global "Saving…" pill — top centre, so it never collides with the bottom toast/FAB */
+  #hq-busy {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%) translateY(-8px);
+    display: flex; align-items: center; gap: 8px;
+    background: var(--card) var(--washi-grain); color: var(--text-dim);
+    border: 1px solid var(--border-strong); border-radius: var(--r-pill);
+    padding: 7px 14px; font-size: 12px; z-index: 10000;
+    opacity: 0; pointer-events: none; white-space: nowrap;
+    transition: opacity var(--t-mid) ease, transform var(--t-mid) ease;
+  }
+  #hq-busy.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  /* Notes autosave label: small inline spinner before "Saving…" */
+  .note-saved-lbl.is-loading { display: inline-flex; align-items: center; gap: 6px; }
+  .note-saved-lbl.is-loading::before {
+    content: ''; width: 9px; height: 9px; box-sizing: border-box; border-radius: 50%;
+    border: 1.5px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor;
+    animation: hq-spin 700ms linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    button.is-loading::after, .hq-spinner, .note-saved-lbl.is-loading::before { animation-duration: 2s; }
+  }
 
   /* ============ ALARM BANNER (persistent — stays until dismissed/snoozed) ============ */
   .alarm-banner {
@@ -2093,6 +2138,95 @@
   .music-dropdown .music-dd-hint {
     padding: 9px 14px; font-size: 11px; color: var(--text-faint); line-height: 1.4; white-space: normal;
   }
+  .music-dropdown .music-dd-label {
+    padding: 6px 14px 2px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint);
+  }
+  .music-dropdown .music-dd-manage { color: var(--text-faint); font-size: 11.5px; }
+  .music-dropdown .music-dd-manage:hover { color: var(--text); }
+
+  /* ---- "Manage stations" modal (showStationsModal in core.js). Sits above Focus mode (z 2000). ---- */
+  .hq-modal-overlay.stations-modal-overlay { z-index: 2100; }
+  .stations-modal-card { max-width: 440px; max-height: calc(100vh - 32px); }
+  .stations-modal-card .hq-modal-body { overflow-y: auto; min-height: 0; }
+  .stations-modal-card .hq-modal-footer { justify-content: space-between; }
+  .stations-sub { margin-top: 4px; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
+  .stations-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .stations-empty {
+    padding: 18px 14px; text-align: center; font-size: 12px; line-height: 1.55; color: var(--text-faint);
+    border: 1px dashed var(--border-strong); border-radius: var(--r-sm);
+  }
+  .station-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--card-2);
+  }
+  .station-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .hq-modal-body .station-fields input { background: var(--bg); padding: 7px 9px; font-size: 12.5px; }
+  .hq-modal-body .station-fields .station-name { font-weight: 500; }
+  .station-status { font-size: 11px; color: var(--text-faint); padding-left: 2px; }
+  .station-status.ok { color: var(--good); }
+  .station-status.ok::before { content: '\2713  '; }
+  .station-status.bad { color: var(--danger); }
+  .station-del {
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: var(--r-sm);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-faint); transition: color var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .station-del:hover { color: var(--danger); background: rgba(192,71,62,0.08); }
+
+  /* Focus mode's sound flyout: same "Manage stations" entry as the topbar picker */
+  .focus-sound-manage {
+    margin-top: 4px; padding: 8px 10px; border-radius: 6px; text-align: left;
+    font-size: 11.5px; color: rgba(255,255,255,0.45); transition: color var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .focus-sound-manage:hover { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.08); }
+  .focus-overlay.theme-light .focus-sound-manage { color: rgba(42,37,32,0.5); }
+  .focus-overlay.theme-light .focus-sound-manage:hover { color: rgba(42,37,32,0.85); background: rgba(42,37,32,0.06); }
+
+  /* ---- Volume row (musicVolumeHtml in core.js) — top of #music-dropdown, bottom of
+     Focus mode's sound flyout. --vol is the fill %, kept in sync by syncMusicVolumeUI(). ---- */
+  .music-vol { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px; }
+  .music-dropdown .music-vol .music-vol-mute,
+  .music-vol .music-vol-mute {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 26px; height: 26px; padding: 0; border-radius: var(--r-sm);
+    color: var(--text-dim); background: transparent; transition: color var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .music-dropdown .music-vol .music-vol-mute:hover,
+  .music-vol .music-vol-mute:hover { color: var(--text); background: rgba(236,230,217,0.06); }
+  .music-vol-val {
+    width: 22px; flex-shrink: 0; text-align: right;
+    font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums;
+  }
+  .music-vol-range {
+    -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 18px;
+    background: transparent; cursor: pointer; margin: 0;
+    --vol-fill: var(--accent); --vol-track: var(--border-strong);
+  }
+  .music-vol-range:focus { outline: none; }
+  .music-vol-range::-webkit-slider-runnable-track {
+    height: 3px; border-radius: 2px;
+    background: linear-gradient(to right, var(--vol-fill) var(--vol), var(--vol-track) var(--vol));
+  }
+  .music-vol-range::-moz-range-track { height: 3px; border-radius: 2px; background: var(--vol-track); }
+  .music-vol-range::-moz-range-progress { height: 3px; border-radius: 2px; background: var(--vol-fill); }
+  .music-vol-range::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 12px; height: 12px; margin-top: -4.5px;
+    border-radius: 50%; background: var(--vol-fill); border: none;
+    transition: transform var(--t-fast) ease;
+  }
+  .music-vol-range::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--vol-fill); border: none; }
+  .music-vol-range:hover::-webkit-slider-thumb,
+  .music-vol-range:focus-visible::-webkit-slider-thumb { transform: scale(1.2); }
+  .music-vol-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(236,230,217,0.2); }
+
+  .focus-sound-flyout .music-vol { margin-top: 10px; padding: 10px 4px 0; border-top: 1px solid rgba(255,255,255,0.1); }
+  .focus-sound-flyout .music-vol .music-vol-mute { color: rgba(255,255,255,0.6); }
+  .focus-sound-flyout .music-vol-val { color: rgba(255,255,255,0.45); }
+  .focus-sound-flyout .music-vol-range { --vol-track: rgba(255,255,255,0.15); }
+  .focus-overlay.theme-light .focus-sound-flyout .music-vol { border-top-color: rgba(42,37,32,0.12); }
+  .focus-overlay.theme-light .focus-sound-flyout .music-vol .music-vol-mute { color: rgba(42,37,32,0.6); }
+  .focus-overlay.theme-light .focus-sound-flyout .music-vol-val { color: rgba(42,37,32,0.5); }
+  .focus-overlay.theme-light .focus-sound-flyout .music-vol-range { --vol-fill: #2a2520; --vol-track: rgba(42,37,32,0.15); }
 
   /* ============ MODAL SYSTEM ============ */
   .hq-modal-overlay {

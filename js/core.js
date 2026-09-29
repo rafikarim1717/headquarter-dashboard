@@ -104,8 +104,8 @@ let state = {
 /* =========================================================
    AMBIENT MUSIC
    Two playback engines behind one picker: the 3 built-in radios play via a
-   plain <audio> stream; any number of user-supplied YouTube links (Tweaks
-   panel, see addCustomStation()) play via the YouTube IFrame Player API, mounted
+   plain <audio> stream; any number of user-supplied YouTube links ("Manage
+   stations" modal, see showStationsModal()) play via the YouTube IFrame Player API, mounted
    into #yt-audio-player — a node that lives outside #main in index.html so
    it survives render()'s main.innerHTML replacement instead of being torn
    down and recreated on every page navigation.
@@ -140,7 +140,7 @@ function createYtPlayer(videoId) {
     height: '1', width: '1', videoId,
     playerVars: { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1 },
     events: {
-      onReady: (e) => { e.target.setVolume(40); e.target.playVideo(); },
+      onReady: (e) => { e.target.setVolume(effectiveMusicVolume()); e.target.playVideo(); },
       onStateChange: (e) => {
         if (e.data === YT.PlayerState.PLAYING)  { ambientPlayer.isPlaying = true;  updateMusicBtn(true); }
         if (e.data === YT.PlayerState.PAUSED)   { ambientPlayer.isPlaying = false; updateMusicBtn(false); }
@@ -214,7 +214,7 @@ function playAudioStation(idx, station) {
   ambientPlayer.stationIndex = idx;
   const audio = new Audio(station.url);
   audio.crossOrigin = 'anonymous';
-  audio.volume = 0.4;
+  audio.volume = effectiveMusicVolume() / 100;
   ambientPlayer.audio = audio;
   const fail = () => {
     showToast(`${station.name} isn't reachable right now`, 'error');
@@ -254,9 +254,7 @@ function selectStation(idx) {
 function toggleAmbientMusic() {
   if (ambientPlayer.stationIndex == null) {
     const dd = document.getElementById('music-dropdown');
-    const opening = dd && !dd.classList.contains('open');
     dd?.classList.toggle('open');
-    if (opening) tweaksEl.classList.remove('open');
     return;
   }
   if (ambientPlayer.isPlaying) {
@@ -268,15 +266,148 @@ function toggleAmbientMusic() {
   }
 }
 
+/* ---- Volume — one level shared by both engines (<audio> takes 0..1, the YT
+   player 0..100), persisted per device in localStorage['hq.musicVolume'].
+   The slider appears at the top of the topbar picker and in Focus mode's sound
+   flyout; syncMusicVolumeUI() keeps every copy in step without a render(). ---- */
+const MUSIC_VOLUME_KEY = 'hq.musicVolume';
+const MUSIC_VOLUME_DEFAULT = 40;
+let musicVolume = (() => {
+  try {
+    const v = JSON.parse(localStorage.getItem(MUSIC_VOLUME_KEY));
+    if (v && typeof v.level === 'number') return { level: Math.max(0, Math.min(100, Math.round(v.level))), muted: !!v.muted };
+  } catch (e) {}
+  return { level: MUSIC_VOLUME_DEFAULT, muted: false };
+})();
+function effectiveMusicVolume() { return musicVolume.muted ? 0 : musicVolume.level; }
+function applyMusicVolume() {
+  const v = effectiveMusicVolume();
+  if (ambientPlayer.audio) ambientPlayer.audio.volume = v / 100;
+  if (ytPlayer && typeof ytPlayer.setVolume === 'function') { try { ytPlayer.setVolume(v); } catch (e) {} }
+}
+function saveMusicVolume() {
+  try { localStorage.setItem(MUSIC_VOLUME_KEY, JSON.stringify(musicVolume)); } catch (e) {}
+}
+function setMusicVolume(level) {
+  musicVolume.level = Math.max(0, Math.min(100, Math.round(level)));
+  musicVolume.muted = false;
+  applyMusicVolume();
+  saveMusicVolume();
+  syncMusicVolumeUI();
+}
+function toggleMusicMute() {
+  // Unmuting from a slider dragged all the way down restores an audible level.
+  if (musicVolume.level === 0) { setMusicVolume(MUSIC_VOLUME_DEFAULT); return; }
+  musicVolume.muted = !musicVolume.muted;
+  applyMusicVolume();
+  saveMusicVolume();
+  syncMusicVolumeUI();
+}
+function musicVolumeIcon(v) {
+  const speaker = '<path d="M4 9h3l4-4v14l-4-4H4z" fill="currentColor" stroke="none"/>';
+  const waves = v === 0 ? '<path d="M16 9l5 6M21 9l-5 6"/>'
+    : v < 50 ? '<path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/>'
+    : '<path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18 7a7 7 0 0 1 0 10"/>';
+  return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${speaker}${waves}</svg>`;
+}
+function musicVolumeHtml() {
+  const v = effectiveMusicVolume();
+  return `<div class="music-vol" data-music-vol style="--vol:${v}%">
+    <button type="button" class="music-vol-mute" data-music-mute aria-label="${v === 0 ? 'Unmute' : 'Mute'}" title="${v === 0 ? 'Unmute' : 'Mute'}">${musicVolumeIcon(v)}</button>
+    <input type="range" class="music-vol-range" data-music-vol-range min="0" max="100" step="1" value="${v}" aria-label="Volume">
+    <span class="music-vol-val">${v}</span>
+  </div>`;
+}
+function syncMusicVolumeUI() {
+  const v = effectiveMusicVolume();
+  document.querySelectorAll('[data-music-vol]').forEach(el => {
+    el.style.setProperty('--vol', v + '%');
+    const range = el.querySelector('[data-music-vol-range]');
+    if (range && Number(range.value) !== v) range.value = v;
+    const val = el.querySelector('.music-vol-val');
+    if (val) val.textContent = v;
+    const mute = el.querySelector('[data-music-mute]');
+    if (mute) {
+      mute.innerHTML = musicVolumeIcon(v);
+      mute.setAttribute('aria-label', v === 0 ? 'Unmute' : 'Mute');
+      mute.title = v === 0 ? 'Unmute' : 'Mute';
+    }
+  });
+}
+function bindMusicVolume(root) {
+  root.querySelectorAll('[data-music-vol]').forEach(el => {
+    // Clicks inside must not bubble into the picker's station/close handlers.
+    el.addEventListener('click', e => e.stopPropagation());
+    el.querySelector('[data-music-vol-range]')?.addEventListener('input', e => setMusicVolume(Number(e.target.value)));
+    el.querySelector('[data-music-mute]')?.addEventListener('click', toggleMusicMute);
+  });
+}
+
 function musicDropdownHtml() {
   const built = AMBIENT_STREAMS;
   const custom = getCustomStations();
   const item = (s, i) => `<button data-station-idx="${i}" class="${ambientPlayer.isPlaying && ambientPlayer.stationIndex === i ? 'sel' : ''}"><span class="music-dd-dot"></span>${escapeHtml(s.name)}</button>`;
   return `
+    ${musicVolumeHtml()}
+    <div class="music-dd-sep"></div>
     ${built.map((s, i) => item(s, i)).join('')}
-    ${custom.length ? `<div class="music-dd-sep"></div>${custom.map((s, i) => item(s, built.length + i)).join('')}`
-      : `<div class="music-dd-sep"></div><div class="music-dd-hint">Add your own YouTube stations in ⚙ Tweaks.</div>`}
+    <div class="music-dd-sep"></div>
+    ${custom.length ? `<div class="music-dd-label">My stations</div>${custom.map((s, i) => item(s, built.length + i)).join('')}` : ''}
+    <button class="music-dd-manage" data-manage-stations>${custom.length ? 'Manage stations' : '+ Add a YouTube station'}</button>
   `;
+}
+
+/* =========================================================
+   LOADING — anything that waits on the network shows it.
+   Two levels: a spinner on the button that started the wait (setBtnLoading /
+   withBtnLoading, also blocks double-clicks), and a small top "Saving…" pill
+   (beginBusy/endBusy) that every dbCall() raises — shown only once a wait
+   passes BUSY_DELAY_MS so quick writes don't flicker, and skipped while a
+   button spinner is already on screen.
+========================================================= */
+const BUSY_DELAY_MS = 300;
+let busyCount = 0;
+let busyTimer = null;
+function beginBusy(label = 'Saving…') {
+  busyCount++;
+  let el = document.getElementById('hq-busy');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'hq-busy';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span class="hq-spinner"></span><span>${escapeHtml(label)}</span>`;
+  if (!busyTimer && !el.classList.contains('show')) {
+    busyTimer = setTimeout(() => {
+      busyTimer = null;
+      if (busyCount > 0 && !document.querySelector('.is-loading')) el.classList.add('show');
+    }, BUSY_DELAY_MS);
+  }
+}
+function endBusy() {
+  busyCount = Math.max(0, busyCount - 1);
+  if (busyCount) return;
+  clearTimeout(busyTimer);
+  busyTimer = null;
+  document.getElementById('hq-busy')?.classList.remove('show');
+}
+async function withBusy(fn, label) {
+  beginBusy(label);
+  try { return await fn(); } finally { endBusy(); }
+}
+function setBtnLoading(btn, on) {
+  if (!btn) return;
+  btn.classList.toggle('is-loading', on);
+  btn.disabled = on;
+  if (on) btn.setAttribute('aria-busy', 'true'); else btn.removeAttribute('aria-busy');
+}
+// Runs fn with btn spinning; ignores clicks while it's already spinning.
+async function withBtnLoading(btn, fn) {
+  if (btn?.classList.contains('is-loading')) return;
+  setBtnLoading(btn, true);
+  try { return await fn(); } finally { setBtnLoading(btn, false); }
 }
 
 /* =========================================================
@@ -311,21 +442,43 @@ function showConfirmModal({ title, message, confirmLabel = 'Delete', onConfirm, 
   btn.textContent = confirmLabel;
   btn.style.background = danger ? '#c0392b' : 'var(--accent)';
   btn.style.color = danger ? '#ece6d9' : '#121110';
+  btn.style.setProperty('--spin-c', danger ? '#ece6d9' : '#121110');
+  setBtnLoading(btn, false);
 
-  function close() { hideConfirmModal(); document.removeEventListener('keydown', escHandler); }
+  // A later showConfirmModal() (e.g. the recurring-series follow-up) reuses this
+  // overlay — the token stops an older async confirm from closing the newer one.
+  const token = {};
+  overlay._hqToken = token;
+  let busy = false;
+  function close() {
+    document.removeEventListener('keydown', escHandler);
+    if (overlay._hqToken === token) hideConfirmModal();
+  }
+  // Sync onConfirm → close first, as before. Async onConfirm → stay open with a
+  // spinner until it settles; on failure stay open so it can be retried.
+  function confirm() {
+    if (busy) return;
+    const result = onConfirm();
+    if (!result || typeof result.then !== 'function') { close(); return; }
+    busy = true;
+    setBtnLoading(btn, true);
+    result.then(() => { busy = false; setBtnLoading(btn, false); close(); },
+                e  => { busy = false; setBtnLoading(btn, false); console.error(e); });
+  }
   function escHandler(e) {
+    if (busy) return;
     if (e.key === 'Escape') { close(); return; }
     if (e.key === 'Enter' && !e.shiftKey) {
       const tag = document.activeElement?.tagName;
       if (tag === 'TEXTAREA' || tag === 'SELECT') return;
       e.preventDefault();
-      close(); onConfirm();
+      confirm();
     }
   }
 
-  btn.onclick       = () => { close(); onConfirm(); };
-  cancelBtn.onclick = (e) => { e.stopPropagation(); close(); };
-  overlay.onclick   = (e) => { if (e.target === overlay) close(); };
+  btn.onclick       = confirm;
+  cancelBtn.onclick = (e) => { e.stopPropagation(); if (!busy) close(); };
+  overlay.onclick   = (e) => { if (e.target === overlay && !busy) close(); };
   document.addEventListener('keydown', escHandler);
 
   overlay.classList.add('open');
@@ -513,7 +666,9 @@ function topbar() {
           <button class="music-caret-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-caret-btn" title="Choose a station" aria-label="Choose a station">&#9662;</button>
           <div class="notes-dropdown music-dropdown" id="music-dropdown">${musicDropdownHtml()}</div>
         </div>
+        <!-- Tweaks retired 2026-09-29, see index.html:
         <button class="icon-btn" id="open-tweaks" title="Tweaks" aria-label="Tweaks">&#x2699;&#xFE0E;</button>
+        -->
       </div>
     </header>
     <div class="mobile-sub-nav">${pillsHtml}</div>`;
@@ -703,12 +858,20 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
     });
   });
 
+  // True while an async onSave (an insert waiting on Supabase) is in flight —
+  // the modal stays open with a spinner and can't be dismissed meanwhile.
+  let saving = false;
+  const card = document.getElementById('modal-card');
   function closeModal() {
-    container.innerHTML = '';
+    if (saving) return;
     document.removeEventListener('keydown', modalKeyHandler);
+    // onSave may have opened another modal into the same container — leave it be.
+    if (!container.contains(card)) return;
+    container.innerHTML = '';
     if (onClose) onClose();
   }
   function modalKeyHandler(e) {
+    if (saving) return;
     if (e.key === 'Escape') { closeModal(); return; }
     if (e.key === 'Enter' && !e.shiftKey) {
       const tag = document.activeElement?.tagName;
@@ -724,7 +887,9 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
   document.getElementById('modal-x').addEventListener('click', closeModal);
   document.getElementById('modal-cancel').addEventListener('click', closeModal);
 
-  document.getElementById('modal-save').addEventListener('click', () => {
+  const saveBtn = document.getElementById('modal-save');
+  saveBtn.addEventListener('click', async () => {
+    if (saving) return;
     const values = {};
     fields.forEach(f => {
       const el = document.getElementById('modal-f-' + f.id);
@@ -735,8 +900,23 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
       else if (f.type === 'time') values[f.id] = el.dataset.value || '00:00';
       else values[f.id] = el.value;
     });
-    closeModal();
-    if (onSave) onSave(values);
+    const result = onSave ? onSave(values) : null;
+    if (!result || typeof result.then !== 'function') { closeModal(); return; }
+    // Async save: keep the form up with a spinner until the write lands. On
+    // failure (dbCall already toasted) it stays open so the input isn't lost.
+    saving = true;
+    setBtnLoading(saveBtn, true);
+    card.classList.add('is-saving');
+    try {
+      await result;
+      saving = false;
+      closeModal();
+    } catch (e) {
+      console.error(e);
+      saving = false;
+      setBtnLoading(saveBtn, false);
+      card.classList.remove('is-saving');
+    }
   });
 
   // Focus first text input
@@ -967,13 +1147,15 @@ function focusStationListHtml() {
   const entries = focusSoundTab === 'radio' ? built.map((s, i) => [s, i])
     : focusSoundTab === 'mymusic' ? custom.map((s, i) => [s, built.length + i])
     : getAllStations().map((s, i) => [s, i]);
+  const manage = focusSoundTab === 'radio' ? ''
+    : `<button class="focus-sound-manage" data-manage-stations>${custom.length ? 'Manage stations' : '+ Add a YouTube station'}</button>`;
   if (!entries.length) {
-    return `<div class="focus-sound-empty">Add your own YouTube stations in ⚙ Tweaks.</div>`;
+    return `<div class="focus-sound-empty">No YouTube stations yet.</div>${manage}`;
   }
   return entries.map(([s, idx]) => `
     <button class="focus-sound-item${ambientPlayer.isPlaying && ambientPlayer.stationIndex === idx ? ' sel' : ''}" data-focus-station-idx="${idx}">
       <span class="focus-sound-dot"></span><span>${escapeHtml(s.name)}</span>
-    </button>`).join('');
+    </button>`).join('') + manage;
 }
 function renderFocusOverlay() {
   const el = ensureFocusOverlay();
@@ -1014,6 +1196,7 @@ function renderFocusOverlay() {
           ${FOCUS_SOUND_TABS.map(t => `<button class="focus-tab${focusSoundTab === t.id ? ' sel' : ''}" data-focus-tab="${t.id}">${t.label}</button>`).join('')}
         </div>
         <div class="focus-sound-list">${focusStationListHtml()}</div>
+        ${musicVolumeHtml()}
       </div>
       <button class="focus-icon-btn focus-corner-btn" id="focus-sound-toggle" aria-label="Sounds">${ICON_MUSIC_NOTE}</button>
     </div>
@@ -1040,6 +1223,8 @@ function renderFocusOverlay() {
     selectStation(Number(btn.dataset.focusStationIdx)); // js/core.js — same picker the topbar music widget uses
     renderFocusOverlay();
   }));
+  el.querySelector('[data-manage-stations]')?.addEventListener('click', showStationsModal);
+  bindMusicVolume(el);
   el.querySelectorAll('[data-focus-theme]').forEach(btn => btn.addEventListener('click', () => setFocusTheme(btn.dataset.focusTheme)));
   el.querySelectorAll('[data-focus-add-min]').forEach(btn => btn.addEventListener('click', () => addFocusMinutes(Number(btn.dataset.focusAddMin))));
   el.querySelector('#focus-tag-toggle').addEventListener('click', toggleFocusTagPanel);
@@ -1100,9 +1285,9 @@ function initQuickFab() {
 ========================================================= */
 
 function bindSharedEvents() {
-  // tweaks + logout (inside main, re-bound on each render)
-  const ot = main.querySelector('#open-tweaks');
-  if (ot) ot.addEventListener('click', toggleTweaks);
+  // logout (inside main, re-bound on each render)
+  // const ot = main.querySelector('#open-tweaks');   // Tweaks retired 2026-09-29
+  // if (ot) ot.addEventListener('click', toggleTweaks);
   const tlb = main.querySelector('#topbar-logout-btn');
   if (tlb) tlb.addEventListener('click', signOut);
   const mt = main.querySelector('#music-toggle');
@@ -1111,14 +1296,17 @@ function bindSharedEvents() {
   if (mc) mc.addEventListener('click', (e) => {
     e.stopPropagation();
     const dd = main.querySelector('#music-dropdown');
-    const opening = dd && !dd.classList.contains('open');
     dd?.classList.toggle('open');
-    if (opening) tweaksEl.classList.remove('open');
   });
   main.querySelectorAll('#music-dropdown [data-station-idx]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     selectStation(Number(el.dataset.stationIdx));
   }));
+  main.querySelector('#music-dropdown [data-manage-stations]')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showStationsModal();
+  });
+  bindMusicVolume(main);
 
   // navigation pills
   main.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => setActiveTab(el.dataset.go)));
@@ -1175,8 +1363,14 @@ document.addEventListener('click', (e) => {
 });
 
 /* =========================================================
-   TWEAKS PANEL
+   TWEAKS PANEL: retired 2026-09-29, kept commented out for reference.
+   Its only live settings were density / Today layout / quick pills (in-memory,
+   reset on every refresh, so never real settings) plus custom YouTube stations.
+   Density is locked to compact via the window.__HQ_TWEAKS default in index.html
+   (applyTweaks() still applies it); stations moved to the "Manage stations"
+   modal below. The panel markup is commented out in index.html too.
 ========================================================= */
+/*
 const tweaksEl = document.getElementById('tweaks-panel');
 function toggleTweaks() {
   const opening = !tweaksEl.classList.contains('open');
@@ -1205,75 +1399,6 @@ function syncTweaksUI() {
   renderCustomStationsList(); // re-sync with window.__HQ_TWEAKS.customStations once loadFromSupabase() has populated it
 }
 
-/* ---- Custom YouTube stations: unbounded list, add/remove from the Tweaks panel ----
-   Persisted to their own Supabase table ('custom_stations', see schema_fix.sql
-   section 22) — unlike the rest of Tweaks (an in-memory-only reset on refresh,
-   see index.html's hardcoded window.__HQ_TWEAKS default), these need to survive
-   a reload AND follow the user across devices, so they're per-user via Supabase
-   rather than localStorage. loadFromSupabase() populates
-   window.__HQ_TWEAKS.customStations at login, same as it does profile.name.
-   #tw-custom-stations-list is rebuilt (renderCustomStationsList()) only when a row is
-   added/removed — never on every keystroke, via delegated input/click listeners below
-   — so typing in a row never fights a rebuild for focus. */
-function renderCustomStationsList() {
-  const el = document.getElementById('tw-custom-stations-list');
-  if (!el) return;
-  const stations = window.__HQ_TWEAKS.customStations || [];
-  el.innerHTML = stations.map((s, i) => `
-    <div class="row tw-custom-station">
-      <input type="text" class="tw-custom-name" data-i="${i}" placeholder="Name (e.g. Study Beats)" value="${escapeHtml(s.name || '')}">
-      <input type="text" class="tw-custom-url" data-i="${i}" placeholder="YouTube link" value="${escapeHtml(s.url || '')}">
-      <button class="tw-custom-del" data-i="${i}" title="Remove station" aria-label="Remove station">${ICON_TRASH}</button>
-    </div>`).join('') || `<div class="tw-hint" style="margin-bottom:8px">No custom stations yet — add one below.</div>`;
-}
-
-async function addCustomStation() {
-  if (!window.__HQ_TWEAKS.customStations) window.__HQ_TWEAKS.customStations = [];
-  if (!currentUser) return;
-  const { data } = await dbCall(() => sb.from('custom_stations').insert({ user_id: currentUser.id, name: '', url: '' }).select().single());
-  if (!data) return;
-  window.__HQ_TWEAKS.customStations.push({ id: data.id, name: '', url: '' });
-  renderCustomStationsList();
-  render();
-  const names = document.querySelectorAll('#tw-custom-stations-list .tw-custom-name');
-  names[names.length - 1]?.focus();
-}
-
-function removeCustomStation(i) {
-  const s = (window.__HQ_TWEAKS.customStations || [])[i];
-  if (!s) return;
-  window.__HQ_TWEAKS.customStations.splice(i, 1);
-  renderCustomStationsList();
-  render();
-  dbCall(() => sb.from('custom_stations').delete().eq('id', s.id));
-}
-
-// Debounced per-row so fast typing doesn't fire a write on every keystroke —
-// mirrors Notes' 1000ms autosave debounce in js/pages/notes.js.
-const customStationSaveTimers = {};
-function setCustomStationField(i, field, value) {
-  const s = (window.__HQ_TWEAKS.customStations || [])[i];
-  if (!s) return;
-  s[field] = value;
-  render(); // refreshes the topbar's music dropdown; #tweaks-panel itself is untouched by render(), so the input keeps focus
-  clearTimeout(customStationSaveTimers[s.id]);
-  customStationSaveTimers[s.id] = setTimeout(() => {
-    dbCall(() => sb.from('custom_stations').update({ [field]: value }).eq('id', s.id));
-  }, 1000);
-}
-
-renderCustomStationsList();
-document.getElementById('tw-custom-add-btn')?.addEventListener('click', addCustomStation);
-document.getElementById('tw-custom-stations-list')?.addEventListener('input', (e) => {
-  const t = e.target, i = Number(t.dataset.i);
-  if (t.classList.contains('tw-custom-name')) setCustomStationField(i, 'name', t.value);
-  else if (t.classList.contains('tw-custom-url')) setCustomStationField(i, 'url', t.value);
-});
-document.getElementById('tw-custom-stations-list')?.addEventListener('click', (e) => {
-  const delBtn = e.target.closest('.tw-custom-del');
-  if (delBtn) removeCustomStation(Number(delBtn.dataset.i));
-});
-
 document.getElementById('tw-currency').addEventListener('input', (e) => setTweak('currencyPrefix', e.target.value));
 document.querySelectorAll('#tw-swatches .sw').forEach(s => s.addEventListener('click', () => setTweak('accent', s.dataset.c)));
 document.querySelectorAll('#tw-density button').forEach(b => b.addEventListener('click', () => setTweak('density', b.dataset.v)));
@@ -1287,6 +1412,139 @@ window.addEventListener('message', (e) => {
   if (d.type === '__deactivate_edit_mode') tweaksEl.classList.remove('open');
 });
 window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+*/
+
+/* ---- Custom YouTube stations: "Manage stations" modal ----
+   Opened from the topbar music picker (and Focus mode's sound flyout). Persisted to
+   their own Supabase table ('custom_stations', see schema_fix.sql section 22), so
+   they survive a reload AND follow the user across devices. loadFromSupabase()
+   populates window.__HQ_TWEAKS.customStations at login.
+   The modal lives on <body>, outside #main, so the render() each keystroke triggers
+   (to refresh the picker) never touches it. #stations-list is rebuilt
+   (renderCustomStationsList()) only when a row is added/removed; typing only
+   patches that row's status line, so an input never loses focus. */
+function customStationStatus(s) {
+  const url = (s.url || '').trim();
+  if (!url) return { cls: 'idle', text: 'Paste a YouTube link' };
+  if (!extractYouTubeId(url)) return { cls: 'bad', text: "That link isn't a YouTube video" };
+  if (!(s.name || '').trim()) return { cls: 'idle', text: 'Give it a name to show it in the picker' };
+  return { cls: 'ok', text: 'In the picker' };
+}
+
+function renderCustomStationsList() {
+  const el = document.getElementById('stations-list');
+  if (!el) return;
+  const stations = window.__HQ_TWEAKS.customStations || [];
+  el.innerHTML = stations.map((s, i) => {
+    const st = customStationStatus(s);
+    return `
+    <li class="station-row">
+      <div class="station-fields">
+        <input type="text" class="station-name" data-i="${i}" placeholder="Name (e.g. Study Beats)" value="${escapeHtml(s.name || '')}" maxlength="40">
+        <input type="text" class="station-url" data-i="${i}" placeholder="YouTube link" value="${escapeHtml(s.url || '')}">
+        <div class="station-status ${st.cls}" data-station-status="${i}">${escapeHtml(st.text)}</div>
+      </div>
+      <button class="station-del" data-i="${i}" title="Remove station" aria-label="Remove station">${ICON_TRASH}</button>
+    </li>`;
+  }).join('') || `<li class="stations-empty">No stations yet. Add a YouTube link (a lofi stream, a long mix, rain sounds) and it plays in the background like the built-in radios.</li>`;
+}
+
+function refreshStationPickers() {
+  render(); // rebuilds the topbar music dropdown
+  if (document.getElementById('focus-overlay')?.classList.contains('open')) renderFocusOverlay();
+}
+
+async function addCustomStation() {
+  if (!window.__HQ_TWEAKS.customStations) window.__HQ_TWEAKS.customStations = [];
+  if (!currentUser) return;
+  const { data } = await dbCall(() => sb.from('custom_stations').insert({ user_id: currentUser.id, name: '', url: '' }).select().single());
+  if (!data) return;
+  window.__HQ_TWEAKS.customStations.push({ id: data.id, name: '', url: '' });
+  renderCustomStationsList();
+  refreshStationPickers();
+  const names = document.querySelectorAll('#stations-list .station-name');
+  names[names.length - 1]?.focus();
+}
+
+function removeCustomStation(i) {
+  const s = (window.__HQ_TWEAKS.customStations || [])[i];
+  if (!s) return;
+  window.__HQ_TWEAKS.customStations.splice(i, 1);
+  clearTimeout(customStationSaveTimers[s.id]);
+  renderCustomStationsList();
+  refreshStationPickers();
+  dbCall(() => sb.from('custom_stations').delete().eq('id', s.id));
+}
+
+// Debounced per-row so fast typing doesn't fire a write on every keystroke;
+// mirrors Notes' 1000ms autosave debounce in js/pages/notes.js.
+const customStationSaveTimers = {};
+function setCustomStationField(i, field, value) {
+  const s = (window.__HQ_TWEAKS.customStations || [])[i];
+  if (!s) return;
+  s[field] = value;
+  const statusEl = document.querySelector(`#stations-list [data-station-status="${i}"]`);
+  if (statusEl) {
+    const st = customStationStatus(s);
+    statusEl.className = `station-status ${st.cls}`;
+    statusEl.textContent = st.text;
+  }
+  refreshStationPickers();
+  clearTimeout(customStationSaveTimers[s.id]);
+  customStationSaveTimers[s.id] = setTimeout(() => {
+    dbCall(() => sb.from('custom_stations').update({ [field]: value }).eq('id', s.id));
+  }, 1000);
+}
+
+function showStationsModal() {
+  document.getElementById('music-dropdown')?.classList.remove('open');
+  let overlay = document.getElementById('stations-modal-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'stations-modal-overlay';
+    overlay.className = 'hq-modal-overlay stations-modal-overlay';
+    overlay.innerHTML = `
+      <div class="hq-modal-card stations-modal-card" role="dialog" aria-modal="true" aria-label="YouTube stations">
+        <div class="hq-modal-header">
+          <div>
+            <div class="hq-modal-title">YouTube stations</div>
+            <div class="stations-sub">Your own stations, listed next to the built-in radios in the music picker.</div>
+          </div>
+          <button class="hq-modal-close" data-stations-close aria-label="Close">&#x2715;</button>
+        </div>
+        <div class="hq-modal-body">
+          <ul class="stations-list" id="stations-list"></ul>
+        </div>
+        <div class="hq-modal-footer">
+          <button class="btn stations-add-btn" data-stations-add>+ Add station</button>
+          <button class="btn primary" data-stations-close>Done</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const list = overlay.querySelector('#stations-list');
+    list.addEventListener('input', (e) => {
+      const t = e.target, i = Number(t.dataset.i);
+      if (t.classList.contains('station-name')) setCustomStationField(i, 'name', t.value);
+      else if (t.classList.contains('station-url')) setCustomStationField(i, 'url', t.value);
+    });
+    list.addEventListener('click', (e) => {
+      const delBtn = e.target.closest('.station-del');
+      if (delBtn) removeCustomStation(Number(delBtn.dataset.i));
+    });
+    overlay.querySelector('[data-stations-add]').addEventListener('click', (e) => withBtnLoading(e.currentTarget, addCustomStation).catch(() => {}));
+    const close = () => {
+      overlay.classList.remove('open');
+      document.removeEventListener('keydown', overlay._escHandler);
+    };
+    overlay._escHandler = (e) => { if (e.key === 'Escape') close(); };
+    overlay.querySelectorAll('[data-stations-close]').forEach(b => b.addEventListener('click', close));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  }
+  renderCustomStationsList();
+  document.removeEventListener('keydown', overlay._escHandler);
+  document.addEventListener('keydown', overlay._escHandler);
+  requestAnimationFrame(() => overlay.classList.add('open'));
+}
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

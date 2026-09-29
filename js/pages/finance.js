@@ -592,15 +592,15 @@ function bindFinanceEvents() {
   main.querySelectorAll('[data-pay-debt]').forEach(el => el.addEventListener('click', async () => {
     const id = el.dataset.payDebt;
     const d = state.debts.find(x => x.id === id);
-    if (!d) return;
+    if (!d || el.classList.contains('is-loading')) return;
     try {
       if (d.paid) {
-        await dbCall(() => sb.from('debts').update({ paid: false }).eq('id', id));
+        await withBtnLoading(el, () => dbCall(() => sb.from('debts').update({ paid: false }).eq('id', id)));
         d.paid = false;
         render();
         showToast('Marked as unpaid');
       } else {
-        await dbCall(() => sb.from('debts').update({ paid: true }).eq('id', id));
+        await withBtnLoading(el, () => dbCall(() => sb.from('debts').update({ paid: true }).eq('id', id)));
         d.paid = true;
         render();
         showToast('Marked as paid');

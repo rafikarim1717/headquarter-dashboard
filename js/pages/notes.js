@@ -565,10 +565,11 @@ function bindNotesEvents() {
   // list view: new note
   const addNoteBtn = main.querySelector('#add-note-btn');
   if (addNoteBtn) addNoteBtn.addEventListener('click', async () => {
+    if (addNoteBtn.classList.contains('is-loading')) return;
     const now = new Date().toISOString();
-    const { data } = await dbCall(() =>
-      sb.from('notes').insert({ user_id: currentUser.id, title: '', content: '', updated_at: now }).select().single()
-    );
+    const { data } = await withBtnLoading(addNoteBtn, () =>
+      dbCall(() => sb.from('notes').insert({ user_id: currentUser.id, title: '', content: '', updated_at: now }).select().single())
+    ).catch(() => ({}));
     if (data) {
       state.notes.unshift({ id: data.id, title: '', content: '', created_at: data.created_at, updated_at: data.updated_at || now });
       state.activeNoteId = data.id;
@@ -667,13 +668,24 @@ function bindNotesEvents() {
       });
       n.content = contentClone.innerHTML;
       n.updated_at = new Date().toISOString();
-      if (noteSavedLbl) {
+      // "Saving…" (with spinner) while the write is in flight, "Saved" only once it landed.
+      const lbl = (text, loading) => {
+        if (!noteSavedLbl) return;
+        clearTimeout(noteSavedLbl._hideTimer);
+        noteSavedLbl.textContent = text;
+        noteSavedLbl.classList.toggle('is-loading', loading);
         noteSavedLbl.classList.add('show');
-        setTimeout(() => noteSavedLbl.classList.remove('show'), 2000);
+        if (!loading) noteSavedLbl._hideTimer = setTimeout(() => noteSavedLbl.classList.remove('show'), 2000);
+      };
+      lbl('Saving…', true);
+      try {
+        await dbCall(() => sb.from('notes').update({
+          title: n.title, content: n.content, updated_at: n.updated_at
+        }).eq('id', id));
+        lbl('Saved', false);
+      } catch (e) {
+        lbl('Not saved', false);
       }
-      await dbCall(() => sb.from('notes').update({
-        title: n.title, content: n.content, updated_at: n.updated_at
-      }).eq('id', id));
     }, 1000);
   };
   if (noteTitleEl)   noteTitleEl.addEventListener('input', triggerNoteSave);
