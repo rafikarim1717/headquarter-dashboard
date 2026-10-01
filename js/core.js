@@ -118,7 +118,16 @@ const AMBIENT_STREAMS = [
   { kind: 'audio', url: 'https://usa9.fastcast4u.com/proxy/jamz?mp=/1',  name: 'Jamz Radio'  },
   { kind: 'audio', url: 'https://lofi.stream.laut.fm/lofi',               name: 'Lo-Fi Radio' }
 ];
-const ambientPlayer = { kind: null, audio: null, stationIndex: null, isPlaying: false };
+// paused = the user paused a loaded station via the note icon (resumable) — the
+// button then shows frozen eq bars + the station name instead of the idle note.
+const ambientPlayer = { kind: null, audio: null, stationIndex: null, isPlaying: false, paused: false };
+
+// 'playing' | 'paused' | 'idle' — what the topbar button should look like.
+function musicUiState() {
+  if (ambientPlayer.isPlaying) return 'playing';
+  if (ambientPlayer.paused && ambientPlayer.stationIndex != null) return 'paused';
+  return 'idle';
+}
 
 let ytPlayer = null;
 let ytApiReady = false;
@@ -142,12 +151,13 @@ function createYtPlayer(videoId) {
     events: {
       onReady: (e) => { e.target.setVolume(effectiveMusicVolume()); e.target.playVideo(); },
       onStateChange: (e) => {
-        if (e.data === YT.PlayerState.PLAYING)  { ambientPlayer.isPlaying = true;  updateMusicBtn(true); }
+        if (e.data === YT.PlayerState.PLAYING)  { ambientPlayer.isPlaying = true; ambientPlayer.paused = false; updateMusicBtn(true); }
         if (e.data === YT.PlayerState.PAUSED)   { ambientPlayer.isPlaying = false; updateMusicBtn(false); }
       },
       onError: () => {
         showToast('That YouTube link can\'t be played (embedding may be disabled)', 'error');
         ambientPlayer.isPlaying = false;
+        ambientPlayer.paused = false;
         updateMusicBtn(false);
       }
     }
@@ -179,16 +189,26 @@ function updateMusicBtn(playing) {
   const noteIcon = document.getElementById('music-note-icon');
   const label    = document.getElementById('music-label');
   const station  = ambientPlayer.stationIndex != null ? getAllStations()[ambientPlayer.stationIndex] : null;
-  if (btn)    btn.classList.toggle('playing', playing);
+  const ui       = musicUiState();
+  const paused   = ui === 'paused';
+  const active   = ui !== 'idle';
+  if (btn) {
+    btn.classList.toggle('playing', playing);
+    btn.classList.toggle('paused', paused);
+    const t = paused && station ? `Resume ${station.name}` : playing ? 'Pause ambient music' : 'Play/pause ambient music';
+    btn.title = t;
+    btn.setAttribute('aria-label', t);
+  }
   if (caret)  caret.classList.toggle('playing', playing);
-  if (eq)     eq.style.display = playing ? 'inline-flex' : 'none';
-  if (noteIcon) noteIcon.style.display = playing ? 'none' : '';
+  if (eq)     eq.style.display = active ? 'inline-flex' : 'none';
+  if (noteIcon) noteIcon.style.display = active ? 'none' : '';
   if (label) {
-    label.textContent = playing && station ? station.name : '';
+    label.textContent = active && station ? station.name : '';
     label.classList.toggle('playing', playing);
+    label.classList.toggle('paused', paused);
   }
   document.querySelectorAll('#music-dropdown [data-station-idx]').forEach(el => {
-    el.classList.toggle('sel', playing && Number(el.dataset.stationIdx) === ambientPlayer.stationIndex);
+    el.classList.toggle('sel', active && Number(el.dataset.stationIdx) === ambientPlayer.stationIndex);
   });
 }
 
@@ -204,6 +224,7 @@ function pauseCurrentStation() {
 // Full teardown before switching to a different station — discards the
 // Audio object entirely (a new one gets created for the new pick).
 function stopCurrentStation() {
+  ambientPlayer.paused = false;
   pauseCurrentStation();
   if (ambientPlayer.audio) { ambientPlayer.audio = null; }
 }
@@ -219,10 +240,11 @@ function playAudioStation(idx, station) {
   const fail = () => {
     showToast(`${station.name} isn't reachable right now`, 'error');
     ambientPlayer.isPlaying = false;
+    ambientPlayer.paused = false;
     updateMusicBtn(false);
   };
   audio.addEventListener('error', fail, { once: true });
-  audio.play().then(() => { ambientPlayer.isPlaying = true; updateMusicBtn(true); }).catch(fail);
+  audio.play().then(() => { ambientPlayer.isPlaying = true; ambientPlayer.paused = false; updateMusicBtn(true); }).catch(fail);
 }
 
 function playYoutubeStation(idx, station) {
@@ -246,6 +268,9 @@ function selectStation(idx) {
   const station = getAllStations()[idx];
   if (!station) return;
   document.getElementById('music-dropdown')?.classList.remove('open');
+  // Picking the station that's currently paused resumes it from where it
+  // stopped instead of reloading it from the start.
+  if (idx === ambientPlayer.stationIndex && ambientPlayer.paused) { resumeCurrentStation(); return; }
   if (station.kind === 'youtube') playYoutubeStation(idx, station);
   else playAudioStation(idx, station);
 }
@@ -258,11 +283,26 @@ function toggleAmbientMusic() {
     return;
   }
   if (ambientPlayer.isPlaying) {
+    ambientPlayer.paused = true;
     pauseCurrentStation();
-  } else if (ambientPlayer.kind === 'youtube' && ytPlayer) {
+  } else {
+    resumeCurrentStation();
+  }
+}
+
+function resumeCurrentStation() {
+  if (ambientPlayer.kind === 'youtube' && ytPlayer) {
     ytPlayer.playVideo();
   } else if (ambientPlayer.kind === 'audio' && ambientPlayer.audio) {
-    ambientPlayer.audio.play().then(() => { ambientPlayer.isPlaying = true; updateMusicBtn(true); });
+    ambientPlayer.audio.play()
+      .then(() => { ambientPlayer.isPlaying = true; ambientPlayer.paused = false; updateMusicBtn(true); })
+      .catch(() => {
+        // Stream went stale while paused — drop the paused state so picking
+        // the station again reloads it fresh instead of retrying the resume.
+        ambientPlayer.paused = false;
+        updateMusicBtn(false);
+        showToast('Couldn\'t resume — pick the station again', 'error');
+      });
   }
 }
 
@@ -346,7 +386,7 @@ function bindMusicVolume(root) {
 function musicDropdownHtml() {
   const built = AMBIENT_STREAMS;
   const custom = getCustomStations();
-  const item = (s, i) => `<button data-station-idx="${i}" class="${ambientPlayer.isPlaying && ambientPlayer.stationIndex === i ? 'sel' : ''}"><span class="music-dd-dot"></span>${escapeHtml(s.name)}</button>`;
+  const item = (s, i) => `<button data-station-idx="${i}" class="${musicUiState() !== 'idle' && ambientPlayer.stationIndex === i ? 'sel' : ''}"><span class="music-dd-dot"></span>${escapeHtml(s.name)}</button>`;
   return `
     ${musicVolumeHtml()}
     <div class="music-dd-sep"></div>
@@ -660,9 +700,9 @@ function topbar() {
       </div>
       <div class="right">
         <button class="mobile-signout-btn" id="topbar-logout-btn" aria-label="Sign out">${signOutSvg}</button>
-        <span id="music-label" class="${ambientPlayer.isPlaying ? 'playing' : ''}">${ambientPlayer.isPlaying && ambientPlayer.stationIndex != null ? (getAllStations()[ambientPlayer.stationIndex]?.name || '') : ''}</span>
+        <span id="music-label" class="${musicUiState() === 'idle' ? '' : musicUiState()}">${musicUiState() !== 'idle' ? (getAllStations()[ambientPlayer.stationIndex]?.name || '') : ''}</span>
         <div class="music-wrap">
-          <button class="icon-btn music-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-toggle" title="Play/pause ambient music" aria-label="Play/pause ambient music"><span id="music-note-icon" style="${ambientPlayer.isPlaying ? 'display:none' : ''}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${ambientPlayer.isPlaying ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span></button>
+          <button class="icon-btn music-btn${musicUiState() === 'idle' ? '' : ' ' + musicUiState()}" id="music-toggle" title="Play/pause ambient music" aria-label="Play/pause ambient music"><span id="music-note-icon" style="${musicUiState() !== 'idle' ? 'display:none' : ''}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${musicUiState() !== 'idle' ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span></button>
           <button class="music-caret-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-caret-btn" title="Choose a station" aria-label="Choose a station">&#9662;</button>
           <div class="notes-dropdown music-dropdown" id="music-dropdown">${musicDropdownHtml()}</div>
         </div>
@@ -1153,7 +1193,7 @@ function focusStationListHtml() {
     return `<div class="focus-sound-empty">No YouTube stations yet.</div>${manage}`;
   }
   return entries.map(([s, idx]) => `
-    <button class="focus-sound-item${ambientPlayer.isPlaying && ambientPlayer.stationIndex === idx ? ' sel' : ''}" data-focus-station-idx="${idx}">
+    <button class="focus-sound-item${musicUiState() !== 'idle' && ambientPlayer.stationIndex === idx ? ' sel' : ''}" data-focus-station-idx="${idx}">
       <span class="focus-sound-dot"></span><span>${escapeHtml(s.name)}</span>
     </button>`).join('') + manage;
 }
@@ -1291,7 +1331,7 @@ function bindSharedEvents() {
   const tlb = main.querySelector('#topbar-logout-btn');
   if (tlb) tlb.addEventListener('click', signOut);
   const mt = main.querySelector('#music-toggle');
-  if (mt) mt.addEventListener('click', toggleAmbientMusic);
+  if (mt) { mt.addEventListener('click', toggleAmbientMusic); updateMusicBtn(ambientPlayer.isPlaying); }
   const mc = main.querySelector('#music-caret-btn');
   if (mc) mc.addEventListener('click', (e) => {
     e.stopPropagation();

@@ -2099,6 +2099,11 @@
     opacity: 0.6;
     pointer-events: auto;
   }
+  /* Paused: name stays so it reads "paused on X", not "off" — just fainter. */
+  #music-label.paused {
+    opacity: 0.35;
+    pointer-events: auto;
+  }
 
   .eq-bars {
     display: inline-flex;
@@ -2115,6 +2120,15 @@
   .eq-bar.b1 { animation: eq 0.4s ease-in-out 0s    infinite alternate; }
   .eq-bar.b2 { animation: eq 0.6s ease-in-out 0.15s infinite alternate; }
   .eq-bar.b3 { animation: eq 0.5s ease-in-out 0.08s infinite alternate; }
+  /* Paused: the bars hold still at uneven heights (like a stopped meter) and
+     dim, instead of swapping back to the idle note icon. Fixed heights rather
+     than animation-play-state so they look the same after a full render(). */
+  .music-btn.paused { color: var(--text-dim); }
+  .music-btn.paused .eq-bar { animation: none; opacity: 0.5; transition: height 200ms ease, opacity var(--t-fast) ease; }
+  .music-btn.paused .eq-bar.b1 { height: 8px; }
+  .music-btn.paused .eq-bar.b2 { height: 12px; }
+  .music-btn.paused .eq-bar.b3 { height: 6px; }
+  .music-btn.paused:hover .eq-bar { opacity: 0.8; }
   @keyframes eq {
     from { height: 4px; }
     to   { height: 14px; }
