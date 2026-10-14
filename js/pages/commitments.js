@@ -746,7 +746,7 @@ function renderCommitments() {
               font-size="21" fill="var(--accent)"
               class="compliance-pct-text">0</text>
             <text x="50" y="65" text-anchor="middle" dominant-baseline="middle"
-              font-size="9" fill="#6e675c">today</text>
+              font-size="9" fill="#6b6b6b">today</text>
           </svg>
           <div class="compliance-bars">
             <div class="compliance-label">TODAY'S COMPLIANCE</div>
@@ -770,14 +770,16 @@ function renderCommitments() {
       <button class="add-btn-inline" data-add-commit="">+ New category</button>
     </div>
     ${categories.map((cat, idx) => `<div style="margin-top:16px">${categoryCard(cat, idx)}</div>`).join('')}
-    <div class="commit-quest-label">History</div>
-    <div class="card" style="animation-delay:80ms">
-      <div class="commit-preview-tabs">
-        <button class="commit-tab-btn${tab === 'month' ? ' active' : ''}" data-commit-tab="month">Month</button>
-        <button class="commit-tab-btn${tab === 'year'  ? ' active' : ''}" data-commit-tab="year">Year</button>
+    <details class="commit-history" data-commit-history ${state.commitHistoryOpen === false ? '' : 'open'}>
+      <summary class="commit-quest-label commit-history-summary"><span>History</span><span class="chevron">&#8250;</span></summary>
+      <div class="card" style="animation-delay:80ms">
+        <div class="commit-preview-tabs">
+          <button class="commit-tab-btn${tab === 'month' ? ' active' : ''}" data-commit-tab="month">Month</button>
+          <button class="commit-tab-btn${tab === 'year'  ? ' active' : ''}" data-commit-tab="year">Year</button>
+        </div>
+        ${tabBodyHtml}
       </div>
-      ${tabBodyHtml}
-    </div>
+    </details>
   `;
 }
 
@@ -786,6 +788,8 @@ function renderCommitments() {
 
 function bindCommitmentsEvents() {
   // commitments preview tab switch
+  // History section collapse (2026-10-14) — remembered for the session so tab clicks / re-renders keep it
+  main.querySelector('[data-commit-history]')?.addEventListener('toggle', (e) => { state.commitHistoryOpen = e.currentTarget.open; });
   main.querySelectorAll('[data-commit-tab]').forEach(el => el.addEventListener('click', () => {
     state.commitPreviewTab = el.dataset.commitTab;
     render();

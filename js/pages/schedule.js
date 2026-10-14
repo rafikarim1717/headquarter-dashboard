@@ -72,7 +72,67 @@ function expandRecurrenceDates(startIso, repeat) {
   return dates;
 }
 
-/* ---- LIFE: SCHEDULE ---- */
+/* ---- LIFE: SCHEDULE ----
+   Google-Calendar-style page (2026-10-14): Day / Week (default) / Month views.
+   Day + Week are a 24h time grid where every event is a block sized from
+   `time` to `end_time` (NULL end = 1 hour). Month is a grid with event chips.
+   On mobile (<768px) the Week grid is swapped for an agenda list (CSS). */
+const SCHED_HOUR_PX = 48;           // height of one hour row in the time grid
+const SCHED_DEFAULT_MINUTES = 60;   // block length when end_time is NULL
+const SCHED_MONTH_CHIPS = 3;        // chips per Month cell before "+N more"
+
+function schedPad(n) { return String(n).padStart(2, '0'); }
+function timeToMin(t) { const [h, m] = String(t || '00:00').split(':').map(Number); return (h || 0) * 60 + (m || 0); }
+function minToTime(n) { n = Math.max(0, Math.min(1439, Math.round(n))); return schedPad(Math.floor(n / 60)) + ':' + schedPad(n % 60); }
+function schedEndMin(s) {
+  const st = timeToMin(s.time);
+  if (s.end_time) { const e = timeToMin(s.end_time); if (e > st) return e; }
+  return Math.min(st + SCHED_DEFAULT_MINUTES, 1440);
+}
+function addDaysIso(iso, n) { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return isoLocal(d); }
+function weekStartIso(iso) { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() - d.getDay()); return isoLocal(d); }
+function findSchedEvent(id) {
+  for (const day in state.schedule) {
+    const ev = (state.schedule[day] || []).find(s => s.id === id);
+    if (ev) return { ev, day };
+  }
+  return { ev: null, day: null };
+}
+// 'done' | 'missed' | '' — same rule as before: a block whose start time has
+// passed (or any block on a past day) without completed_at is Missed.
+function schedStatus(s, iso) {
+  if (s.completed_at) return 'done';
+  const todayIso = todayISO();
+  if (iso < todayIso) return 'missed';
+  if (iso === todayIso && s.time < fmtClock().slice(0, 5)) return 'missed';
+  return '';
+}
+function schedDayList(iso) { return (state.schedule[iso] || []).slice().sort((a, b) => a.time.localeCompare(b.time)); }
+
+// Side-by-side lanes for overlapping events inside one day column.
+function layoutDayEvents(list) {
+  const evs = list.map(s => ({ s, start: timeToMin(s.time), end: schedEndMin(s) }))
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+  const out = [];
+  let cluster = [], clusterEnd = -1;
+  const flush = () => {
+    const lanes = [];
+    cluster.forEach(e => {
+      let i = lanes.findIndex(end => end <= e.start);
+      if (i < 0) { i = lanes.length; lanes.push(0); }
+      lanes[i] = e.end; e.lane = i;
+    });
+    cluster.forEach(e => { e.lanes = lanes.length; });
+    out.push(...cluster); cluster = [];
+  };
+  evs.forEach(e => {
+    if (cluster.length && e.start >= clusterEnd) { flush(); clusterEnd = -1; }
+    cluster.push(e); clusterEnd = Math.max(clusterEnd, e.end);
+  });
+  if (cluster.length) flush();
+  return out;
+}
+
 function buildMonthGrid(viewYear, viewMonth) {
   const first = new Date(viewYear, viewMonth, 1);
   const startWeekday = first.getDay();
@@ -86,87 +146,135 @@ function buildMonthGrid(viewYear, viewMonth) {
   return cells;
 }
 
+function schedBlockHtml(e, iso) {
+  const s = e.s;
+  const st = schedStatus(s, iso);
+  const top = e.start / 60 * SCHED_HOUR_PX;
+  const h = Math.max((e.end - e.start) / 60 * SCHED_HOUR_PX, 20);
+  const left = `calc(${(e.lane / e.lanes) * 100}% + 2px)`;
+  const width = `calc(${100 / e.lanes}% - 4px)`;
+  const short = h < 38;
+  const range = `${s.time}–${minToTime(e.end)}`;
+  return `<button class="sched-block ${st}${short ? ' short' : ''}" data-sched-open="${s.id}" title="${escapeHtml(s.title)} · ${range}" style="top:${top}px;height:${h - 2}px;left:${left};width:${width}">
+    <span class="sb-title">${escapeHtml(s.title)}${short ? `<span class="sb-time-inline"> ${s.time}</span>` : ''}</span>
+    ${short ? '' : `<span class="sb-time">${range}${st === 'missed' ? ' · <span class="sb-missed">Missed</span>' : ''}${s.repeat && s.repeat !== 'none' ? ' · 🔁' : ''}</span>`}
+  </button>`;
+}
+
+function schedTimeGridHtml(days, todayIso) {
+  const cols = `52px repeat(${days.length}, minmax(0, 1fr))`;
+  const nowMin = timeToMin(fmtClock().slice(0, 5));
+  const head = `<div class="sg-head" style="grid-template-columns:${cols}"><div></div>${days.map(iso => {
+    const d = new Date(iso + 'T00:00:00');
+    return `<button class="sg-dayhead${iso === todayIso ? ' today' : ''}" data-sched-goto-day="${iso}" title="Open day">
+      <span class="sg-dow">${d.toLocaleDateString('en-US', { weekday: 'short' })}</span><span class="sg-dnum">${d.getDate()}</span></button>`;
+  }).join('')}</div>`;
+  const hours = Array.from({ length: 24 }, (_, h) => `<div class="sg-hour" style="top:${h * SCHED_HOUR_PX}px">${h ? schedPad(h) + ':00' : ''}</div>`).join('');
+  // initial scroll: a bit before the earliest event in view / now, never later than 07:00
+  let first = 7 * 60;
+  days.forEach(iso => (state.schedule[iso] || []).forEach(s => { first = Math.min(first, timeToMin(s.time)); }));
+  if (days.includes(todayIso)) first = Math.min(first, Math.max(nowMin - 120, 0));
+  const body = days.map(iso => {
+    const blocks = layoutDayEvents(state.schedule[iso] || []).map(e => schedBlockHtml(e, iso)).join('');
+    const nowLine = iso === todayIso ? `<div class="sg-now" data-sched-now style="top:${nowMin / 60 * SCHED_HOUR_PX}px"></div>` : '';
+    return `<div class="sg-col${iso === todayIso ? ' today' : ''}" data-sched-col="${iso}">${blocks}${nowLine}</div>`;
+  }).join('');
+  return `<div class="sg-wrap">${head}
+    <div class="sg-scroll" data-sched-scroll="${Math.max(first - 30, 0) / 60 * SCHED_HOUR_PX}">
+      <div class="sg-body" style="grid-template-columns:${cols};height:${24 * SCHED_HOUR_PX}px;--sg-px:${SCHED_HOUR_PX}px">
+        <div class="sg-hours">${hours}</div>${body}
+      </div>
+    </div></div>`;
+}
+
+function schedAgendaHtml(days, todayIso) {
+  return `<div class="sched-agenda">${days.map(iso => {
+    const d = new Date(iso + 'T00:00:00');
+    const list = schedDayList(iso);
+    return `<div class="sa-day${iso === todayIso ? ' today' : ''}">
+      <button class="sa-date" data-sched-goto-day="${iso}"><span class="sg-dow">${d.toLocaleDateString('en-US', { weekday: 'short' })}</span><span class="sg-dnum">${d.getDate()}</span></button>
+      <div class="sa-list">${list.map(s => {
+        const st = schedStatus(s, iso);
+        return `<div class="sa-item ${st}">
+          <span class="check ${s.completed_at ? 'checked' : ''}" data-toggle-sched-done="${s.id}" title="${s.completed_at ? 'Mark not done' : 'Mark done'}"></span>
+          <button class="sa-main" data-sched-open="${s.id}"><span class="sa-time">${s.time}–${minToTime(schedEndMin(s))}</span><span class="sa-title">${escapeHtml(s.title)}</span>${st === 'missed' ? '<span class="missed-tag">Missed</span>' : ''}</button>
+        </div>`;
+      }).join('') || `<div class="sa-empty" data-sched-slot-day="${iso}">No events</div>`}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function schedMonthHtml(anchorIso, todayIso) {
+  const [y, m] = anchorIso.split('-').map(Number);
+  let cells = buildMonthGrid(y, m - 1);
+  if (cells.slice(35).every(c => c.other)) cells = cells.slice(0, 35);
+  const dows = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return `<div class="sm-grid">
+    ${dows.map(d => `<div class="sm-dow">${d}</div>`).join('')}
+    ${cells.map(c => {
+      const iso = isoLocal(c.d);
+      const list = schedDayList(iso);
+      const chips = list.slice(0, SCHED_MONTH_CHIPS).map(s => {
+        const st = schedStatus(s, iso);
+        return `<button class="sm-chip ${st}" data-sched-open="${s.id}" title="${s.time} ${escapeHtml(s.title)}"><span class="sm-chip-time">${s.time}</span> ${escapeHtml(s.title)}</button>`;
+      }).join('');
+      const more = list.length - SCHED_MONTH_CHIPS;
+      return `<div class="sm-cell${c.other ? ' other' : ''}${iso === todayIso ? ' today' : ''}" data-sched-slot-day="${iso}">
+        <button class="sm-num" data-sched-goto-day="${iso}">${c.d.getDate()}</button>
+        ${chips}${more > 0 ? `<button class="sm-more" data-sched-goto-day="${iso}">+${more} more</button>` : ''}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function schedRangeLabel(view, sel) {
+  const d = new Date(sel + 'T00:00:00');
+  if (view === 'day') return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  if (view === 'month') return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const a = new Date(weekStartIso(sel) + 'T00:00:00');
+  const b = new Date(addDaysIso(weekStartIso(sel), 6) + 'T00:00:00');
+  const sameMonth = a.getMonth() === b.getMonth();
+  const aTxt = a.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const bTxt = sameMonth ? b.getDate() : b.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${aTxt} – ${bTxt}, ${b.getFullYear()}`;
+}
+
 function renderSchedule() {
   if (!state.selectedDay) state.selectedDay = todayISO();
+  if (!['day', 'week', 'month'].includes(state.scheduleView)) state.scheduleView = 'week';
   const sel = state.selectedDay;
-  const selDate = new Date(sel + 'T00:00:00');
-  if (!state.viewMonth) state.viewMonth = sel.slice(0, 7);
-  const [vy, vm] = state.viewMonth.split('-').map(Number);
-  const viewYear = vy, viewMonth = vm - 1;
-  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-  const cells = buildMonthGrid(viewYear, viewMonth);
+  const view = state.scheduleView;
   const todayIso = todayISO();
-  const eventCount = {};
-  Object.keys(state.schedule || {}).forEach(k => { eventCount[k] = (state.schedule[k] || []).length; });
-  const list = (state.schedule[sel] || []).slice().sort((a, b) => a.time.localeCompare(b.time));
-  const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const nowHHMM = fmtClock().slice(0, 5); // "HH:MM", same as event.time — used to flag missed blocks
-  const isPastDay = sel < todayIso;
-
+  let bodyHtml;
+  if (view === 'month') {
+    bodyHtml = schedMonthHtml(sel, todayIso);
+  } else if (view === 'day') {
+    bodyHtml = schedTimeGridHtml([sel], todayIso);
+  } else {
+    const ws = weekStartIso(sel);
+    const days = Array.from({ length: 7 }, (_, i) => addDaysIso(ws, i));
+    bodyHtml = schedTimeGridHtml(days, todayIso) + schedAgendaHtml(days, todayIso);
+  }
   return `
     ${topbar()}
     <div class="projects-header" style="margin-bottom:18px">
       <h1 class="page-title" style="margin:0">Schedule</h1>
       <button class="add-btn-inline" id="add-sched-btn">+ Add event</button>
     </div>
-    <details class="card cat-card" style="animation-delay:0ms" open>
-      <summary>
-        <div class="section-title" style="margin:0">${monthLabel}<span class="meta">${selDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} selected</span></div>
-        <span class="chevron">&#8250;</span>
-      </summary>
-      <div class="cat-body">
-        <div class="cal-head">
-          <div></div>
-          <div class="cal-nav">
-            <button data-cal-nav="-1" aria-label="Previous month">‹</button>
-            <button data-cal-today aria-label="Today" style="width:auto; padding:0 12px; font-size:11px; letter-spacing:0.1em; text-transform:uppercase;">Today</button>
-            <button data-cal-nav="1" aria-label="Next month">›</button>
-          </div>
+    <div class="card sched-card sched-view-${view}">
+      <div class="sched-toolbar">
+        <div class="sched-range">${schedRangeLabel(view, sel)}</div>
+        <div class="cal-nav">
+          <button data-sched-nav="-1" aria-label="Previous">‹</button>
+          <button data-sched-today class="sched-today-btn">Today</button>
+          <button data-sched-nav="1" aria-label="Next">›</button>
         </div>
-        <div class="cal-dow">${dows.map(d => `<div class="d">${d.charAt(0)}</div>`).join('')}</div>
-        <div class="cal-grid">
-          ${cells.map(c => {
-            const iso = isoLocal(c.d);
-            const has = (eventCount[iso] || 0) > 0;
-            const isToday = iso === todayIso;
-            const isSel = iso === sel;
-            return `<button class="cal-cell ${c.other?'other':''} ${isToday?'today':''} ${isSel?'selected':''}" data-pick-day="${iso}">
-              <span class="n">${c.d.getDate()}</span>
-              <span class="dot" style="${has?'':'visibility:hidden'}"></span>
-            </button>`;
-          }).join('')}
+        <div class="sched-views">
+          ${['day', 'week', 'month'].map(v => `<button class="sched-view-btn${v === view ? ' active' : ''}" data-sched-view="${v}">${v.charAt(0).toUpperCase() + v.slice(1)}</button>`).join('')}
         </div>
       </div>
-    </details>
-    <details class="card cat-card" style="animation-delay:100ms" open>
-      <summary>
-        <div class="section-title" style="margin:0">${selDate.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'})}<span class="meta">${list.length} ${list.length===1?'block':'blocks'}</span></div>
-        <span class="chevron">&#8250;</span>
-      </summary>
-      <div class="cat-body">
-        <ul class="list" id="sched-list">
-          ${list.map(s => {
-            const isDone = !!s.completed_at;
-            const isMissed = !isDone && (isPastDay || (sel === todayIso && s.time < nowHHMM));
-            return `
-            <li class="sched-item" data-id="${s.id}">
-              <div class="list-item row-wrap">
-                <span class="check ${isDone ? 'checked' : ''}" data-toggle-sched-done="${s.id}" title="${isDone ? 'Mark not done' : 'Mark done'}"></span>
-                <div class="time-col">${s.time}</div>
-                <div class="item-main">
-                  <div class="item-title${isDone ? ' done' : ''}">${escapeHtml(s.title)}${s.alarm_time ? `<span class="alarm-tag">⏰ ${s.alarm_time}</span>` : ''}${s.repeat && s.repeat !== 'none' ? `<span class="alarm-tag" title="${REPEAT_LABEL[s.repeat] || s.repeat}">🔁</span>` : ''}${isMissed ? `<span class="missed-tag">Missed</span>` : ''}</div>
-                  ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
-                </div>
-                <div class="sched-acts">
-                  <button class="fin-edit-btn" data-edit-sched="${s.id}" title="Edit">${ICON_PENCIL}</button>
-                  <button class="fin-del-btn" data-del-sched="${s.id}" title="Delete">${ICON_TRASH}</button>
-                </div>
-              </div>
-            </li>`;
-          }).join('') || `<li class="list-item"><div class="item-sub">No events. Tap "+ Add event" above.</div></li>`}
-        </ul>
-      </div>
-    </details>
+      ${bodyHtml}
+    </div>
   `;
 }
 
@@ -191,138 +299,243 @@ function toggleScheduleDone(id, el) {
 }
 
 
+/* ---- SCHEDULE: modals (detail / add / edit / delete) ---- */
+
+// Click on a block / chip → small detail card (Google Calendar style) with
+// Mark done · Edit · Delete. Own overlay, reuses the shared .hq-modal-* CSS.
+function showSchedEventModal(id) {
+  const { ev: s, day } = findSchedEvent(id);
+  if (!s) return;
+  let overlay = document.getElementById('sched-event-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'sched-event-overlay';
+    overlay.className = 'hq-modal-overlay';
+    document.body.appendChild(overlay);
+  }
+  const st = schedStatus(s, day);
+  const dateLabel = new Date(day + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  overlay.innerHTML = `
+    <div class="hq-modal-card sched-detail-card" role="dialog" aria-modal="true" aria-label="${escapeHtml(s.title)}">
+      <div class="hq-modal-header">
+        <div class="hq-modal-title${s.completed_at ? ' sched-detail-done' : ''}">${escapeHtml(s.title)}</div>
+        <button class="hq-modal-close" data-sd-close aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="hq-modal-body sched-detail-body">
+        <div>${dateLabel} · ${s.time}–${minToTime(schedEndMin(s))}${s.end_time ? '' : ' <span class="item-sub">(no end time — shown as 1h)</span>'}</div>
+        ${s.sub ? `<div class="item-sub">${escapeHtml(s.sub)}</div>` : ''}
+        <div class="sched-detail-tags">
+          ${s.alarm_time ? `<span class="alarm-tag">⏰ ${s.alarm_time}</span>` : ''}
+          ${s.repeat && s.repeat !== 'none' ? `<span class="alarm-tag">🔁 ${REPEAT_LABEL[s.repeat] || s.repeat}</span>` : ''}
+          ${st === 'missed' ? '<span class="missed-tag">Missed</span>' : ''}
+          ${st === 'done' ? '<span class="alarm-tag">✓ Done</span>' : ''}
+        </div>
+      </div>
+      <div class="hq-modal-footer">
+        <button class="btn" data-sd-delete style="margin-right:auto">Delete</button>
+        <button class="btn" data-sd-edit>Edit</button>
+        <button class="btn primary" data-sd-done>${s.completed_at ? 'Mark not done' : 'Mark done'}</button>
+      </div>
+    </div>`;
+  function close() { overlay.classList.remove('open'); document.removeEventListener('keydown', escHandler); }
+  function escHandler(e) { if (e.key === 'Escape') close(); }
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  overlay.querySelector('[data-sd-close]').onclick = close;
+  overlay.querySelector('[data-sd-done]').onclick = () => { close(); toggleScheduleDone(id); };
+  overlay.querySelector('[data-sd-edit]').onclick = () => { close(); openEditSchedModal(id); };
+  overlay.querySelector('[data-sd-delete]').onclick = () => { close(); deleteSchedEvent(id); };
+  document.addEventListener('keydown', escHandler);
+  requestAnimationFrame(() => overlay.classList.add('open'));
+}
+
+function deleteSchedEvent(id) {
+  const { ev, day } = findSchedEvent(id);
+  if (!ev) return;
+  showConfirmModal({
+    title: 'Delete Event?',
+    message: `Remove "${ev.title}" from your schedule?`,
+    onConfirm: () => {
+      state.schedule[day] = (state.schedule[day] || []).filter(s => s.id !== id);
+      render();
+      dbCall(() => sb.from('schedule_events').delete().eq('id', id));
+      // Recurring event: offer to also clear the rest of the series, as a
+      // separate opt-in step (keeps the default delete single-occurrence).
+      if (ev.series_id) {
+        setTimeout(() => {
+          showConfirmModal({
+            title: 'Delete the rest of this series?',
+            message: `"${ev.title}" repeats. Also remove every upcoming occurrence in this series?`,
+            confirmLabel: 'Delete series',
+            onConfirm: () => {
+              const today = todayISO();
+              Object.keys(state.schedule).forEach(d => {
+                state.schedule[d] = (state.schedule[d] || []).filter(s => !(s.series_id === ev.series_id && d >= today));
+              });
+              render();
+              dbCall(() => sb.from('schedule_events').delete().eq('series_id', ev.series_id).gte('date', today));
+            }
+          });
+        }, 250);
+      }
+    }
+  });
+}
+
+// end_time is only stored when it is after the start; otherwise NULL (= 1h block)
+function cleanEndTime(time, endTime) { return endTime && timeToMin(endTime) > timeToMin(time) ? endTime : null; }
+
+function openEditSchedModal(id) {
+  const { ev: s, day } = findSchedEvent(id);
+  if (!s) return;
+  showModal({
+    title: 'Edit Event',
+    fields: [
+      { id: 'date',       label: 'Date',       type: 'date',   value: day },
+      { id: 'time',       label: 'Start',      type: 'time',   value: s.time },
+      { id: 'end_time',   label: 'End',        type: 'time',   value: s.end_time || minToTime(schedEndMin(s)) },
+      { id: 'title',      label: 'Title',      type: 'text',   value: s.title },
+      { id: 'note',       label: 'Note',       type: 'text',   value: s.sub || '', placeholder: 'optional' },
+      { id: 'reminder',   label: 'Remind me',  type: 'select', value: reminderValueFromAlarm(s.time, s.alarm_time), options: REMINDER_OPTIONS, controls: 'alarm_time', controlsWhen: 'custom' },
+      { id: 'alarm_time', label: 'Custom alarm time', type: 'time', value: s.alarm_time || s.time }
+    ],
+    saveLabel: 'Save',
+    onSave: ({ date, time, end_time, title, note, reminder, alarm_time }) => {
+      if (!title.trim()) return;
+      const newDate = date || day;
+      const newAlarmTime = computeAlarmTime(reminder, time, alarm_time);
+      const endVal = cleanEndTime(time, end_time);
+      const updated = { ...s, time, end_time: endVal, title: title.trim(), sub: note.trim(), alarm_time: newAlarmTime };
+      state.schedule[day] = (state.schedule[day] || []).filter(ev => ev.id !== id);
+      if (!state.schedule[newDate]) state.schedule[newDate] = [];
+      state.schedule[newDate].push(updated);
+      state.schedule[newDate].sort((a, b) => a.time.localeCompare(b.time));
+      render();
+      dbCall(() => sb.from('schedule_events').update({ date: newDate, time, end_time: endVal, title: title.trim(), note: note.trim(), alarm_time: newAlarmTime }).eq('id', id));
+    }
+  });
+}
+
+function openAddSchedModal(day, startTime) {
+  const start = startTime || '09:00';
+  showModal({
+    title: 'Add Event',
+    fields: [
+      { id: 'date',       label: 'Date',       type: 'date',   value: day || state.selectedDay || todayISO() },
+      { id: 'time',       label: 'Start',      type: 'time',   value: start },
+      { id: 'end_time',   label: 'End',        type: 'time',   value: minToTime(Math.min(timeToMin(start) + SCHED_DEFAULT_MINUTES, 1439)) },
+      { id: 'title',      label: 'Title',      type: 'text',   value: '', placeholder: 'e.g. Deep work' },
+      { id: 'note',       label: 'Note',       type: 'text',   value: '', placeholder: 'optional' },
+      { id: 'reminder',   label: 'Remind me',  type: 'select', value: 'off', options: REMINDER_OPTIONS, controls: 'alarm_time', controlsWhen: 'custom' },
+      { id: 'alarm_time', label: 'Custom alarm time', type: 'time', value: start },
+      { id: 'repeat',     label: 'Repeat',     type: 'select', value: 'none', options: REPEAT_OPTIONS }
+    ],
+    saveLabel: 'Add',
+    onSave: async ({ date, time, end_time, title, note, reminder, alarm_time, repeat }) => {
+      if (!title.trim()) return;
+      const startDay = date || day || todayISO();
+      const alarmTimeVal = computeAlarmTime(reminder, time, alarm_time);
+      const endVal = cleanEndTime(time, end_time);
+      const dates = expandRecurrenceDates(startDay, repeat);
+      const seriesId = dates.length > 1 ? (crypto.randomUUID ? crypto.randomUUID() : uid()) : null;
+      const rows = dates.map(d => ({ user_id: currentUser.id, date: d, time, end_time: endVal, title: title.trim(), note: note.trim(), alarm_time: alarmTimeVal, repeat, series_id: seriesId }));
+      const { data } = await dbCall(() => sb.from('schedule_events').insert(rows).select());
+      if (data) {
+        data.forEach(row => {
+          if (!state.schedule[row.date]) state.schedule[row.date] = [];
+          state.schedule[row.date].push({ id: row.id, time: row.time, end_time: row.end_time || null, title: row.title, sub: row.note || '', alarm_time: row.alarm_time || null, completed_at: null, repeat: row.repeat || 'none', series_id: row.series_id || null });
+          state.schedule[row.date].sort((a, b) => a.time.localeCompare(b.time));
+        });
+        render();
+      }
+    }
+  });
+}
+
+
 /* ---- SCHEDULE: event binding ---- */
+let schedNowTimer = null;
 
 function bindScheduleEvents() {
-  // schedule day pick
-  main.querySelectorAll('[data-pick-day]').forEach(el => el.addEventListener('click', () => {
-    state.selectedDay = el.dataset.pickDay;
-    state.viewMonth = el.dataset.pickDay.slice(0,7);
-    saveUIPrefs(); render();
-  }));
-
-
-  // calendar month nav
-  main.querySelectorAll('[data-cal-nav]').forEach(el => el.addEventListener('click', () => {
-    const dir = Number(el.dataset.calNav);
-    const [y, m] = (state.viewMonth || todayISO().slice(0,7)).split('-').map(Number);
-    state.viewMonth = ymLocal(new Date(y, m - 1 + dir, 1));
-    saveUIPrefs(); render();
-  }));
-  const calToday = main.querySelector('[data-cal-today]');
-  if (calToday) calToday.addEventListener('click', () => {
-    const t = todayISO();
-    state.selectedDay = t;
-    state.viewMonth = t.slice(0,7);
-    saveUIPrefs(); render();
-  });
-
-
-  // ---- SCHEDULE ----
-  // "Done" checkbox — toggles schedule_events.completed_at. Bound once here
-  // but picks up the same checkboxes rendered by Home's Today's-schedule
-  // card too (bindMainEvents runs every page's bind*Events() on every
-  // render regardless of which route is active — see toggleScheduleDone()).
-  main.querySelectorAll('[data-toggle-sched-done]').forEach(el => el.addEventListener('click', () => {
+  // "Done" checkbox — toggles schedule_events.completed_at. Bound here regardless
+  // of route: Home's Today's-schedule card renders the same control.
+  main.querySelectorAll('[data-toggle-sched-done]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
     toggleScheduleDone(el.dataset.toggleSchedDone, el);
   }));
 
-  main.querySelectorAll('[data-del-sched]').forEach(el => el.addEventListener('click', () => {
-    const id = el.dataset.delSched;
-    const day = state.selectedDay;
-    const ev = (state.schedule[day] || []).find(s => s.id === id);
-    showConfirmModal({
-      title: 'Delete Event?',
-      message: `Remove "${ev?.title || 'this event'}" from your schedule?`,
-      onConfirm: () => {
-        state.schedule[day] = (state.schedule[day] || []).filter(s => s.id !== id);
-        render();
-        dbCall(() => sb.from('schedule_events').delete().eq('id', id));
-        // Recurring event: offer to also clear the rest of the series, as a
-        // separate opt-in step (keeps the default delete single-occurrence).
-        if (ev && ev.series_id) {
-          setTimeout(() => {
-            showConfirmModal({
-              title: 'Delete the rest of this series?',
-              message: `"${ev.title}" repeats. Also remove every upcoming occurrence in this series?`,
-              confirmLabel: 'Delete series',
-              onConfirm: () => {
-                const today = todayISO();
-                Object.keys(state.schedule).forEach(d => {
-                  state.schedule[d] = (state.schedule[d] || []).filter(s => !(s.series_id === ev.series_id && d >= today));
-                });
-                render();
-                dbCall(() => sb.from('schedule_events').delete().eq('series_id', ev.series_id).gte('date', today));
-              }
-            });
-          }, 250);
-        }
-      }
-    });
+  if (schedNowTimer) { clearInterval(schedNowTimer); schedNowTimer = null; }
+  const card = main.querySelector('.sched-card');
+  if (!card) return;
+
+  // view toggle / nav / today
+  card.querySelectorAll('[data-sched-view]').forEach(el => el.addEventListener('click', () => {
+    state.scheduleView = el.dataset.schedView;
+    saveUIPrefs(); render();
+  }));
+  card.querySelectorAll('[data-sched-nav]').forEach(el => el.addEventListener('click', () => {
+    const dir = Number(el.dataset.schedNav);
+    const view = state.scheduleView || 'week';
+    let next;
+    if (view === 'day') next = addDaysIso(state.selectedDay, dir);
+    else if (view === 'week') next = addDaysIso(state.selectedDay, dir * 7);
+    else {
+      const [y, m] = state.selectedDay.split('-').map(Number);
+      next = isoLocal(new Date(y, m - 1 + dir, 1));
+    }
+    state.selectedDay = next;
+    state.viewMonth = next.slice(0, 7);
+    saveUIPrefs(); render();
+  }));
+  const todayBtn = card.querySelector('[data-sched-today]');
+  if (todayBtn) todayBtn.addEventListener('click', () => {
+    state.selectedDay = todayISO();
+    state.viewMonth = state.selectedDay.slice(0, 7);
+    saveUIPrefs(); render();
+  });
+
+  // day header / month date number / "+N more" → Day view of that date
+  card.querySelectorAll('[data-sched-goto-day]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    state.selectedDay = el.dataset.schedGotoDay;
+    state.viewMonth = state.selectedDay.slice(0, 7);
+    state.scheduleView = 'day';
+    saveUIPrefs(); render();
   }));
 
-  main.querySelectorAll('[data-edit-sched]').forEach(el => el.addEventListener('click', (e) => {
+  // block / chip / agenda row → detail card
+  card.querySelectorAll('[data-sched-open]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
-    const id = el.dataset.editSched;
-    const day = state.selectedDay;
-    const s = (state.schedule[day] || []).find(ev => ev.id === id);
-    if (!s) return;
-    showModal({
-      title: 'Edit Event',
-      fields: [
-        { id: 'time',       label: 'Time',       type: 'time',   value: s.time },
-        { id: 'title',      label: 'Title',      type: 'text',   value: s.title },
-        { id: 'note',       label: 'Note',       type: 'text',   value: s.sub || '', placeholder: 'optional' },
-        { id: 'reminder',   label: 'Remind me',  type: 'select', value: reminderValueFromAlarm(s.time, s.alarm_time), options: REMINDER_OPTIONS, controls: 'alarm_time', controlsWhen: 'custom' },
-        { id: 'alarm_time', label: 'Custom alarm time', type: 'time', value: s.alarm_time || s.time }
-      ],
-      saveLabel: 'Save',
-      onSave: ({ time, title, note, reminder, alarm_time }) => {
-        if (!title.trim()) return;
-        const newAlarmTime = computeAlarmTime(reminder, time, alarm_time);
-        const arr = state.schedule[day] || [];
-        const idx = arr.findIndex(ev => ev.id === id);
-        if (idx !== -1) arr[idx] = { ...arr[idx], time, title: title.trim(), sub: note.trim(), alarm_time: newAlarmTime };
-        render();
-        dbCall(() => sb.from('schedule_events').update({ time, title: title.trim(), note: note.trim(), alarm_time: newAlarmTime }).eq('id', id));
-      }
-    });
+    showSchedEventModal(el.dataset.schedOpen);
   }));
+
+  // empty time-grid slot → Add at that time (rounded down to :00 / :30)
+  card.querySelectorAll('[data-sched-col]').forEach(col => col.addEventListener('click', (e) => {
+    if (e.target !== col) return;
+    const mins = Math.floor((e.offsetY / SCHED_HOUR_PX) * 60 / 30) * 30;
+    openAddSchedModal(col.dataset.schedCol, minToTime(Math.min(mins, 1410)));
+  }));
+  // empty Month cell / empty agenda day → Add on that day
+  card.querySelectorAll('[data-sched-slot-day]').forEach(cell => cell.addEventListener('click', (e) => {
+    if (e.target !== cell) return;
+    openAddSchedModal(cell.dataset.schedSlotDay);
+  }));
+
+  // initial scroll of the time grid + live "now" line
+  const scroller = card.querySelector('[data-sched-scroll]');
+  if (scroller) scroller.scrollTop = Number(scroller.dataset.schedScroll) || 0;
+  if (card.querySelector('[data-sched-now]')) {
+    schedNowTimer = setInterval(() => {
+      const line = document.querySelector('[data-sched-now]');
+      if (!line) { clearInterval(schedNowTimer); schedNowTimer = null; return; }
+      line.style.top = (timeToMin(fmtClock().slice(0, 5)) / 60 * SCHED_HOUR_PX) + 'px';
+    }, 60000);
+  }
 
   const addSched = main.querySelector('#add-sched-btn');
   if (addSched) addSched.addEventListener('click', (e) => {
     e.stopPropagation();
-    const day = state.selectedDay || todayISO();
-    showModal({
-      title: 'Add Event',
-      fields: [
-        { id: 'time',       label: 'Time',       type: 'time',   value: '09:00' },
-        { id: 'title',      label: 'Title',      type: 'text',   value: '', placeholder: 'e.g. Deep work' },
-        { id: 'note',       label: 'Note',       type: 'text',   value: '', placeholder: 'optional' },
-        { id: 'reminder',   label: 'Remind me',  type: 'select', value: 'off', options: REMINDER_OPTIONS, controls: 'alarm_time', controlsWhen: 'custom' },
-        { id: 'alarm_time', label: 'Custom alarm time', type: 'time', value: '09:00' },
-        { id: 'repeat',     label: 'Repeat',     type: 'select', value: 'none', options: REPEAT_OPTIONS }
-      ],
-      saveLabel: 'Add',
-      onSave: async ({ time, title, note, reminder, alarm_time, repeat }) => {
-        if (!title.trim()) return;
-        const alarmTimeVal = computeAlarmTime(reminder, time, alarm_time);
-        const dates = expandRecurrenceDates(day, repeat);
-        const seriesId = dates.length > 1 ? (crypto.randomUUID ? crypto.randomUUID() : uid()) : null;
-        const rows = dates.map(d => ({ user_id: currentUser.id, date: d, time, title: title.trim(), note: note.trim(), alarm_time: alarmTimeVal, repeat, series_id: seriesId }));
-        const { data } = await dbCall(() => sb.from('schedule_events').insert(rows).select());
-        if (data) {
-          data.forEach(row => {
-            if (!state.schedule[row.date]) state.schedule[row.date] = [];
-            state.schedule[row.date].push({ id: row.id, time: row.time, title: row.title, sub: row.note || '', alarm_time: row.alarm_time || null, completed_at: null, repeat: row.repeat || 'none', series_id: row.series_id || null });
-            state.schedule[row.date].sort((a, b) => a.time.localeCompare(b.time));
-          });
-          render();
-        }
-      }
-    });
+    openAddSchedModal(state.selectedDay || todayISO());
   });
-
 }
 
 

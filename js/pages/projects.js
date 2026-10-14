@@ -27,7 +27,7 @@ function renderProjectCard(p, i) {
   const statusBadge  = `<span class="proj-badge proj-badge-${p.status}">${statusLabels[p.status]}</span>`;
 
   return `
-    <details class="card cat-card proj-card" style="animation-delay:${i*60}ms" data-proj-id="${p.id}" open>
+    <details class="card cat-card proj-card" style="animation-delay:${i*60}ms" data-proj-id="${p.id}" ${(state.openProjectCards || []).includes(p.id) || isExpanded ? 'open' : ''}>
       <summary>
         <div class="proj-card-header" style="flex:1;min-width:0">
           <div class="proj-card-title-row">
@@ -101,7 +101,7 @@ function renderProjects() {
     </div>
     <div class="pills" style="margin: 14px 0 18px">
       ${['all','active','on_hold','done'].map(f =>
-        `<button class="pill${filter===f?' active':''}" data-proj-filter="${f}">${filterLabels[f]}</button>`
+        `<button class="pill${filter===f?' active':''}" data-proj-filter="${f}">${filterLabels[f]} <span class="pill-count">(${f === 'all' ? (state.projects || []).length : (state.projects || []).filter(p => p.status === f).length})</span></button>`
       ).join('')}
     </div>
     ${filtered.length === 0
@@ -127,6 +127,20 @@ function bindProjectsEvents() {
   // persistence (e.g. Home's "jump to project" deep-link opens it pre-expanded).
   // No render() call needed, unlike the old button+state+full-rerender version —
   // expanding one project's tasks no longer replays every other card's animations.
+  // Project cards start collapsed (2026-10-14); a card the user opened stays open
+  // across re-renders (task check, edit…) via state.openProjectCards. Home's
+  // deep-link still lands open because expandedProjectIds also opens the card.
+  main.querySelectorAll('.proj-card[data-proj-id]').forEach(el => el.addEventListener('toggle', () => {
+    const id = el.dataset.projId;
+    if (!state.openProjectCards) state.openProjectCards = [];
+    const idx = state.openProjectCards.indexOf(id);
+    if (el.open && idx === -1) state.openProjectCards.push(id);
+    else if (!el.open) {
+      if (idx !== -1) state.openProjectCards.splice(idx, 1);
+      const e = state.expandedProjectIds.indexOf(id);
+      if (e !== -1) state.expandedProjectIds.splice(e, 1);
+    }
+  }));
   main.querySelectorAll('[data-proj-tasks]').forEach(el => el.addEventListener('toggle', () => {
     const id = el.dataset.projTasks;
     const idx = state.expandedProjectIds.indexOf(id);

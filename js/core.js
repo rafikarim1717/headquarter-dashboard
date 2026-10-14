@@ -72,6 +72,7 @@ let state = {
   projects: [],       // [{id, name, status, deadline, tasks:[{id,text,description,checked,completed_at}]}]
   projectsFilter: 'all',
   expandedProjectIds: [],
+  openProjectCards: [],   // project cards the user opened (cards start collapsed)
   homeProjectIndex: 0,
   notes: [],      // [{id, title, content, created_at, updated_at}]
   todayFocus: [], // [{id, text, checked, created_at}]
@@ -81,6 +82,7 @@ let state = {
   selectedDay: todayISO(),
   activeTab: 'life:home',
   viewMonth: todayISO().slice(0, 7),
+  scheduleView: 'week',   // Schedule page view: 'day' | 'week' | 'month'
   activeNoteId: null,
   notesSort: 'newest',
   notesFilter: 'all',
@@ -207,9 +209,11 @@ function updateMusicBtn(playing) {
     label.classList.toggle('playing', playing);
     label.classList.toggle('paused', paused);
   }
-  document.querySelectorAll('#music-dropdown [data-station-idx]').forEach(el => {
-    el.classList.toggle('sel', active && Number(el.dataset.stationIdx) === ambientPlayer.stationIndex);
-  });
+  const pill = document.getElementById('music-pill');
+  if (pill) { pill.classList.toggle('active', active); pill.classList.toggle('paused', paused); pill.classList.toggle('playing', playing); }
+  const time = document.getElementById('music-time');
+  if (time) time.textContent = active ? musicTimeText() : '';
+  if (typeof refreshMusicPanel === 'function') refreshMusicPanel();
 }
 
 // Pauses in place — keeps the Audio object / yt video loaded so the icon can
@@ -267,7 +271,7 @@ function playYoutubeStation(idx, station) {
 function selectStation(idx) {
   const station = getAllStations()[idx];
   if (!station) return;
-  document.getElementById('music-dropdown')?.classList.remove('open');
+  // (panel stays open on pick since 2026-10-14 — it shows the new now-playing card)
   // Picking the station that's currently paused resumes it from where it
   // stopped instead of reloading it from the start.
   if (idx === ambientPlayer.stationIndex && ambientPlayer.paused) { resumeCurrentStation(); return; }
@@ -383,19 +387,161 @@ function bindMusicVolume(root) {
   });
 }
 
+/* ---- Spotify-style music panel (2026-10-14) ----
+   Topbar pill = play/pause button + station name + "m:ss / m:ss" (YouTube) or
+   LIVE (radio). Panel (#music-dropdown) = now-playing card with thumbnail,
+   seekable progress bar, ⏮ ❚❚ ⏭, volume, All / Radio / My stations tabs, and a
+   station list with cached durations. Progress is updated in place every 1s
+   by musicTick(); the panel itself is rebuilt by refreshMusicPanel() only on
+   station / play-state changes. ---- */
+const YT_DURATIONS_KEY = 'hq.ytDurations';
+let ytDurations = (() => { try { return JSON.parse(localStorage.getItem(YT_DURATIONS_KEY)) || {}; } catch (e) { return {}; } })();
+let musicPanelTab = 'all';   // 'all' | 'radio' | 'mine' — remembered for the session
+
+function fmtDur(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
+// { cur, dur } in seconds for the current YouTube station, or null (radio / nothing loaded)
+function musicProgress() {
+  if (ambientPlayer.kind !== 'youtube' || !ytPlayer || typeof ytPlayer.getDuration !== 'function') return null;
+  try {
+    const dur = ytPlayer.getDuration() || 0, cur = ytPlayer.getCurrentTime() || 0;
+    return dur > 0 ? { cur, dur } : null;
+  } catch (e) { return null; }
+}
+function musicTimeText() {
+  const st = ambientPlayer.stationIndex != null ? getAllStations()[ambientPlayer.stationIndex] : null;
+  if (!st) return '';
+  if (st.kind !== 'youtube') return 'LIVE';
+  const p = musicProgress();
+  return p ? `${fmtDur(p.cur)} / ${fmtDur(p.dur)}` : '…';
+}
+function stationThumbHtml(st, size) {
+  if (st && st.kind === 'youtube') return `<img class="mp-thumb" style="width:${size}px;height:${size}px" src="https://i.ytimg.com/vi/${st.videoId}/mqdefault.jpg" alt="" loading="lazy" onerror="this.removeAttribute('src')">`;
+  return `<span class="mp-thumb mp-thumb-radio" style="width:${size}px;height:${size}px"><svg width="${Math.round(size * 0.45)}" height="${Math.round(size * 0.45)}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/></svg></span>`;
+}
+
 function musicDropdownHtml() {
-  const built = AMBIENT_STREAMS;
-  const custom = getCustomStations();
-  const item = (s, i) => `<button data-station-idx="${i}" class="${musicUiState() !== 'idle' && ambientPlayer.stationIndex === i ? 'sel' : ''}"><span class="music-dd-dot"></span>${escapeHtml(s.name)}</button>`;
+  const all = getAllStations();
+  const builtN = AMBIENT_STREAMS.length;
+  const ui = musicUiState();
+  const curIdx = ambientPlayer.stationIndex;
+  const cur = curIdx != null ? all[curIdx] : null;
+  const p = musicProgress();
+  const pct = p ? (p.cur / p.dur) * 100 : 0;
+  const nowHtml = cur ? `
+    <div class="mp-now">
+      ${stationThumbHtml(cur, 64)}
+      <div class="mp-now-main">
+        <div class="mp-now-title" title="${escapeHtml(cur.name)}">${escapeHtml(cur.name)}</div>
+        <div class="mp-now-sub">${cur.kind === 'youtube' ? 'My stations · YouTube' : 'Radio'}${ui === 'paused' ? ' · Paused' : ''}</div>
+        ${cur.kind === 'youtube'
+          ? `<div class="mp-bar" data-mp-seek title="Seek"><i data-mp-fill style="width:${pct}%"></i></div>
+             <div class="mp-times"><span data-mp-cur>${p ? fmtDur(p.cur) : '0:00'}</span><span data-mp-dur>${p ? fmtDur(p.dur) : (ytDurations[cur.videoId] ? fmtDur(ytDurations[cur.videoId]) : '—')}</span></div>`
+          : `<div class="mp-live-row"><span class="mp-live">LIVE</span><span class="mp-now-sub">Streaming</span></div>`}
+      </div>
+    </div>`
+    : `<div class="mp-now mp-now-empty">Pick a station below.</div>`;
+  const playIcon = ui === 'playing'
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
+    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
+  const row = (s, i) => {
+    const isCur = ui !== 'idle' && i === curIdx;
+    const dur = s.kind === 'youtube' ? (ytDurations[s.videoId] ? fmtDur(ytDurations[s.videoId]) : '—') : '<span class="mp-live">LIVE</span>';
+    return `<button class="mp-row${isCur ? ' sel' : ''}" data-station-idx="${i}" data-kind="${s.kind === 'youtube' ? 'mine' : 'radio'}">
+      ${stationThumbHtml(s, 30)}
+      <span class="mp-row-name">${isCur && ui === 'playing' ? '<span class="eq-bars mp-row-eq"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span>' : ''}${escapeHtml(s.name)}</span>
+      <span class="mp-row-dur">${dur}</span>
+    </button>`;
+  };
   return `
+    ${nowHtml}
+    <div class="mp-ctl">
+      <button class="mp-ctl-btn" data-mp-step="-1" aria-label="Previous station" title="Previous station"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5.5v13L9.5 12z"/></svg></button>
+      <button class="mp-ctl-btn mp-play" data-mp-play aria-label="${ui === 'playing' ? 'Pause' : 'Play'}">${playIcon}</button>
+      <button class="mp-ctl-btn" data-mp-step="1" aria-label="Next station" title="Next station"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5.5v13L14.5 12z"/></svg></button>
+    </div>
     ${musicVolumeHtml()}
-    <div class="music-dd-sep"></div>
-    ${built.map((s, i) => item(s, i)).join('')}
-    <div class="music-dd-sep"></div>
-    ${custom.length ? `<div class="music-dd-label">My stations</div>${custom.map((s, i) => item(s, built.length + i)).join('')}` : ''}
-    <button class="music-dd-manage" data-manage-stations>${custom.length ? 'Manage stations' : '+ Add a YouTube station'}</button>
+    <div class="mp-tabs">
+      ${[['all', 'All'], ['radio', 'Radio'], ['mine', 'My stations']].map(([k, l]) => `<button class="mp-tab${musicPanelTab === k ? ' on' : ''}" data-mp-tab="${k}">${l}</button>`).join('')}
+    </div>
+    <div class="mp-list" data-tab="${musicPanelTab}">
+      ${all.map(row).join('')}
+      ${all.length === builtN && musicPanelTab === 'mine' ? '<div class="mp-empty">No YouTube stations yet.</div>' : ''}
+    </div>
+    <button class="mp-manage" data-manage-stations>${all.length > builtN ? 'Manage stations' : '+ Add a YouTube station'}</button>
   `;
 }
+
+// Binds one panel element. Safe to call again after refreshMusicPanel().
+function bindMusicPanel(dd) {
+  if (!dd) return;
+  if (!dd._mpRootBound) {
+    // keep clicks inside from reaching the document-level "close dropdowns" handler —
+    // the panel re-renders itself, so the click target may already be detached
+    dd.addEventListener('click', e => e.stopPropagation());
+    dd._mpRootBound = true;
+  }
+  dd.querySelectorAll('[data-station-idx]').forEach(el => el.addEventListener('click', () => selectStation(Number(el.dataset.stationIdx))));
+  dd.querySelector('[data-manage-stations]')?.addEventListener('click', () => showStationsModal());
+  dd.querySelector('[data-mp-play]')?.addEventListener('click', () => {
+    if (ambientPlayer.stationIndex == null) { selectStation(0); return; }
+    toggleAmbientMusic();
+  });
+  dd.querySelectorAll('[data-mp-step]').forEach(el => el.addEventListener('click', () => {
+    const n = getAllStations().length;
+    if (!n) return;
+    const base = ambientPlayer.stationIndex == null ? -1 : ambientPlayer.stationIndex;
+    selectStation((base + Number(el.dataset.mpStep) + n) % n);
+  }));
+  dd.querySelectorAll('[data-mp-tab]').forEach(el => el.addEventListener('click', () => {
+    musicPanelTab = el.dataset.mpTab;
+    dd.querySelectorAll('[data-mp-tab]').forEach(t => t.classList.toggle('on', t === el));
+    const list = dd.querySelector('.mp-list');
+    if (list) list.dataset.tab = musicPanelTab;
+  }));
+  dd.querySelector('[data-mp-seek]')?.addEventListener('click', (e) => {
+    const p = musicProgress();
+    if (!p) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const frac = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+    try { ytPlayer.seekTo(frac * p.dur, true); } catch (err) {}
+    musicTick();
+  });
+  bindMusicVolume(dd);
+}
+
+function refreshMusicPanel() {
+  const dd = document.getElementById('music-dropdown');
+  if (!dd) return;
+  dd.innerHTML = musicDropdownHtml();
+  bindMusicPanel(dd);
+}
+
+// 1s tick: pill time, panel progress, and caching YouTube durations.
+function musicTick() {
+  const p = musicProgress();
+  const st = ambientPlayer.stationIndex != null ? getAllStations()[ambientPlayer.stationIndex] : null;
+  if (p && st && st.videoId && Math.round(ytDurations[st.videoId] || 0) !== Math.round(p.dur)) {
+    ytDurations[st.videoId] = Math.round(p.dur);
+    try { localStorage.setItem(YT_DURATIONS_KEY, JSON.stringify(ytDurations)); } catch (e) {}
+    const durCell = document.querySelector(`#music-dropdown .mp-row[data-station-idx="${ambientPlayer.stationIndex}"] .mp-row-dur`);
+    if (durCell) durCell.textContent = fmtDur(p.dur);
+  }
+  const t = document.getElementById('music-time');
+  if (t) t.textContent = musicUiState() === 'idle' ? '' : musicTimeText();
+  if (p) {
+    const fill = document.querySelector('#music-dropdown [data-mp-fill]');
+    if (fill) fill.style.width = (p.cur / p.dur * 100) + '%';
+    const c = document.querySelector('#music-dropdown [data-mp-cur]');
+    if (c) c.textContent = fmtDur(p.cur);
+    const d = document.querySelector('#music-dropdown [data-mp-dur]');
+    if (d) d.textContent = fmtDur(p.dur);
+  }
+}
+setInterval(musicTick, 1000);
 
 /* =========================================================
    LOADING — anything that waits on the network shows it.
@@ -481,8 +627,8 @@ function showConfirmModal({ title, message, confirmLabel = 'Delete', onConfirm, 
   const cancelBtn = overlay.querySelector('.hq-confirm-cancel');
   btn.textContent = confirmLabel;
   btn.style.background = danger ? '#c0392b' : 'var(--accent)';
-  btn.style.color = danger ? '#ece6d9' : '#121110';
-  btn.style.setProperty('--spin-c', danger ? '#ece6d9' : '#121110');
+  btn.style.color = danger ? '#ededed' : '#0f0f0f';
+  btn.style.setProperty('--spin-c', danger ? '#ededed' : '#0f0f0f');
   setBtnLoading(btn, false);
 
   // A later showConfirmModal() (e.g. the recurring-series follow-up) reuses this
@@ -628,7 +774,8 @@ function saveUIPrefs() {
   localStorage.setItem(PREFS_KEY, JSON.stringify({
     activeTab: state.activeTab,
     selectedDay: state.selectedDay,
-    viewMonth: state.viewMonth
+    viewMonth: state.viewMonth,
+    scheduleView: state.scheduleView
   }));
 }
 function restoreUIPrefs() {
@@ -639,6 +786,7 @@ function restoreUIPrefs() {
     if (p.activeTab) state.activeTab = p.activeTab;
     if (p.selectedDay) state.selectedDay = p.selectedDay;
     if (p.viewMonth) state.viewMonth = p.viewMonth;
+    if (p.scheduleView) state.scheduleView = p.scheduleView;
   } catch (e) {}
 }
 
@@ -700,11 +848,23 @@ function topbar() {
       </div>
       <div class="right">
         <button class="mobile-signout-btn" id="topbar-logout-btn" aria-label="Sign out">${signOutSvg}</button>
-        <span id="music-label" class="${musicUiState() === 'idle' ? '' : musicUiState()}">${musicUiState() !== 'idle' ? (getAllStations()[ambientPlayer.stationIndex]?.name || '') : ''}</span>
         <div class="music-wrap">
-          <button class="icon-btn music-btn${musicUiState() === 'idle' ? '' : ' ' + musicUiState()}" id="music-toggle" title="Play/pause ambient music" aria-label="Play/pause ambient music"><span id="music-note-icon" style="${musicUiState() !== 'idle' ? 'display:none' : ''}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${musicUiState() !== 'idle' ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span></button>
-          <button class="music-caret-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-caret-btn" title="Choose a station" aria-label="Choose a station">&#9662;</button>
-          <div class="notes-dropdown music-dropdown" id="music-dropdown">${musicDropdownHtml()}</div>
+          <div class="music-pill${musicUiState() === 'idle' ? '' : ' active ' + musicUiState()}" id="music-pill">
+            <button class="icon-btn music-btn${musicUiState() === 'idle' ? '' : ' ' + musicUiState()}" id="music-toggle" title="Play/pause ambient music" aria-label="Play/pause ambient music"><span id="music-note-icon" style="${musicUiState() !== 'idle' ? 'display:none' : ''}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${musicUiState() !== 'idle' ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span></button>
+            <button class="music-pill-text" data-dd-toggle data-music-open title="Open player">
+              <span id="music-label">${musicUiState() !== 'idle' ? escapeHtml(getAllStations()[ambientPlayer.stationIndex]?.name || '') : ''}</span>
+              <span id="music-time" class="music-time">${musicUiState() !== 'idle' ? musicTimeText() : ''}</span>
+            </button>
+          </div>
+          <button class="music-caret-btn${ambientPlayer.isPlaying ? ' playing' : ''}" id="music-caret-btn" title="Open player" aria-label="Open player">&#9662;</button>
+          <div class="notes-dropdown music-panel" id="music-dropdown">${musicDropdownHtml()}</div>
+        </div>
+        <div class="apps-wrap">
+          <button class="icon-btn apps-btn" id="apps-btn" title="Quick actions" aria-label="Quick actions" aria-expanded="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg></button>
+          <div class="apps-dropdown" id="apps-dropdown">
+            <button class="apps-tile" data-app-action="focus"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg></span><span class="apps-label">Focus</span></button>
+            <button class="apps-tile" data-app-action="home"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/></svg></span><span class="apps-label">Headquarter</span></button>
+          </div>
         </div>
         <!-- Tweaks retired 2026-09-29, see index.html:
         <button class="icon-btn" id="open-tweaks" title="Tweaks" aria-label="Tweaks">&#x2699;&#xFE0E;</button>
@@ -1312,6 +1472,14 @@ function initQuickFab() {
     closeFocusOverlay();
     setActiveTab('life:notes');
   });
+  // close the topbar quick-actions dropdown on any outside click
+  document.addEventListener('click', e => {
+    const dd = document.getElementById('apps-dropdown');
+    if (dd && dd.classList.contains('open') && !e.target.closest('.apps-wrap')) {
+      dd.classList.remove('open');
+      document.getElementById('apps-btn')?.setAttribute('aria-expanded', 'false');
+    }
+  });
   document.addEventListener('click', e => {
     const fab = document.getElementById('quick-fab');
     if (fab && fab.classList.contains('open') && !fab.contains(e.target)) toggleQuickFab(false);
@@ -1330,6 +1498,22 @@ function bindSharedEvents() {
   // if (ot) ot.addEventListener('click', toggleTweaks);
   const tlb = main.querySelector('#topbar-logout-btn');
   if (tlb) tlb.addEventListener('click', signOut);
+  // Quick actions (9-dot) — replaced the bottom-right + FAB on 2026-10-14
+  const appsBtn = main.querySelector('#apps-btn');
+  if (appsBtn) appsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dd = main.querySelector('#apps-dropdown');
+    const open = !dd.classList.contains('open');
+    dd.classList.toggle('open', open);
+    appsBtn.setAttribute('aria-expanded', String(open));
+    if (open) document.getElementById('music-dropdown')?.classList.remove('open');
+  });
+  main.querySelectorAll('[data-app-action]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    main.querySelector('#apps-dropdown')?.classList.remove('open');
+    if (el.dataset.appAction === 'focus') openFocusOverlay();
+    else setActiveTab('life:home');
+  }));
   const mt = main.querySelector('#music-toggle');
   if (mt) { mt.addEventListener('click', toggleAmbientMusic); updateMusicBtn(ambientPlayer.isPlaying); }
   const mc = main.querySelector('#music-caret-btn');
@@ -1338,15 +1522,11 @@ function bindSharedEvents() {
     const dd = main.querySelector('#music-dropdown');
     dd?.classList.toggle('open');
   });
-  main.querySelectorAll('#music-dropdown [data-station-idx]').forEach(el => el.addEventListener('click', (e) => {
+  main.querySelector('[data-music-open]')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    selectStation(Number(el.dataset.stationIdx));
-  }));
-  main.querySelector('#music-dropdown [data-manage-stations]')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    showStationsModal();
+    main.querySelector('#music-dropdown')?.classList.toggle('open');
   });
-  bindMusicVolume(main);
+  bindMusicPanel(main.querySelector('#music-dropdown'));  // (the panel's volume row is bound inside bindMusicPanel)
 
   // navigation pills
   main.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => setActiveTab(el.dataset.go)));

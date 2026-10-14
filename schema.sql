@@ -33,6 +33,7 @@ create table if not exists schedule_events (
   title text not null,
   note text not null default '',
   alarm_time text,
+  end_time text,
   completed_at timestamptz,
   repeat text not null default 'none',
   series_id uuid,

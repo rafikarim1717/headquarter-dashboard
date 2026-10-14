@@ -781,3 +781,9 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 CREATE INDEX IF NOT EXISTS custom_stations_user_id ON custom_stations(user_id);
+
+-- ============================================================
+-- 23. schedule_events.end_time — optional "HH:MM" end, used by the
+--     Week/Day time grid to size each block (NULL = treated as 1 hour)
+-- ============================================================
+ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS end_time text;

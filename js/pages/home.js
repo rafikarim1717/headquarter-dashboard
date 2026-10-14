@@ -277,6 +277,26 @@ function renderLifeHome() {
   const today = todayISO();
   const nowHHMM = fmtClock().slice(0, 5); // "HH:MM" in the visitor's local time, same as event.time
   const schedToday = (state.schedule[today] || []).slice().sort((a, b) => a.time.localeCompare(b.time));
+  // Plan nudges (2026-10-14): a weekday with nothing scheduled gets a visible
+  // alert instead of "take it easy"; from 19:00, an empty next weekday gets a
+  // small "plan tomorrow" nudge. Weekends stay quiet.
+  const _isWeekday = (iso) => { const d = new Date(iso + 'T00:00:00').getDay(); return d !== 0 && d !== 6; };
+  const todayIsWeekday = _isWeekday(today);
+  const tomorrowIso = (() => { const d = new Date(today + 'T00:00:00'); d.setDate(d.getDate() + 1); return isoLocal(d); })();
+  const tomorrowLabel = new Date(tomorrowIso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+  const showTomorrowNudge = new Date().getHours() >= 19 && _isWeekday(tomorrowIso) && !(state.schedule[tomorrowIso] || []).length;
+  const schedEmptyHtml = todayIsWeekday
+    ? `<li class="sched-alert">
+        <div class="sched-alert-text">
+          <div class="sched-alert-title">No plan for today</div>
+          <div class="sched-alert-sub">It's a weekday and nothing is blocked yet. Put at least one thing on the schedule.</div>
+        </div>
+        <button class="sched-alert-btn" data-plan-day="${today}">+ Plan today</button>
+      </li>`
+    : `<li class="list-item"><div class="item-sub">Nothing scheduled. Take it easy.</div></li>`;
+  const tomorrowNudgeHtml = showTomorrowNudge
+    ? `<div class="sched-nudge"><span>${tomorrowLabel} is still empty.</span><button data-plan-day="${tomorrowIso}">Plan tomorrow →</button></div>`
+    : '';
   const upNextEvent = schedToday.find(s => s.time >= nowHHMM) || null;
   // Top 3 preview, windowed to keep "up next" (and what follows it) visible rather
   // than always showing the day's earliest 3 blocks — once those are in the past,
@@ -295,7 +315,7 @@ function renderLifeHome() {
   const scoreRingHtml = _totalGoalsHome === 0 ? '' : (() => {
     const r = 22, c = 2 * Math.PI * r;
     const offset = c - (score / 100) * c;
-    return `<svg width="52" height="52" viewBox="0 0 52 52" aria-hidden="true" style="flex-shrink:0">
+    return `<svg width="64" height="64" viewBox="0 0 52 52" aria-hidden="true" style="flex-shrink:0">
       <circle cx="26" cy="26" r="${r}" fill="none" stroke="var(--border-strong)" stroke-width="1.2" filter="url(#hq-brush-sm)"/>
       <circle cx="26" cy="26" r="${r}" fill="none" stroke="${scoreColor}" stroke-width="5.5" stroke-linecap="round"
         stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" filter="url(#hq-brush-sm)"
@@ -335,17 +355,61 @@ function renderLifeHome() {
   const totalGoals = allGoals.length;
   const checkedTodayCount = allGoals.filter(g => getTodayLog(g.id)?.checked).length;
   const homeCommitCats = getGoalCategories();
+  // one timed-commitment row (Yes/No checkbox, Count tap-to-log, Duration read-only)
+  const commitRowHtml = (g) => {
+            const target = g.target_count || 1;
+            const log = getTodayLog(g.id);
+            const count = log?.count || 0;
+            const isDone = log?.checked || false;
+            // Durations are timer-only (see js/pages/commitments.js), so Home shows them read-only.
+            const control = getGoalKind(g) === 'duration'
+              ? `<span class="check static ${isDone ? 'checked' : ''}" title="Start the timer on Commitments"></span>`
+              : target > 1
+              ? `<button type="button" data-goal-quickbump="${g.id}" title="Tap to log (${count}/${target}${g.unit ? ' ' + escapeHtml(g.unit) : ''})" style="all:unset;cursor:pointer;flex-shrink:0"><span class="check ${isDone ? 'checked' : ''}"></span></button>`
+              : `<span class="check ${isDone ? 'checked' : ''}" data-toggle-goal-home="${g.id}"></span>`;
+            return `
+            <li class="list-item">
+              ${control}
+              <div class="time-col">${g.reminder_time || ''}</div>
+              <div class="item-main" data-go="life:commitments" style="cursor:pointer">
+                <div class="item-title${isDone ? ' done' : ''}">${escapeHtml(g.text)}${target > 1 ? ` <span style="color:var(--text-faint);font-weight:400">(${count}/${target})</span>` : ''}</div>
+                ${g.category ? `<div class="item-sub">${escapeHtml(g.category)}</div>` : ''}
+              </div>
+            </li>`;
+  };
+  // "Up next" inside the Commitments card (2026-10-14, replaced the separate
+  // Today's commitments card): timed commitments not fully done yet, by time, max 3.
+  // A timed commitment whose time passed more than GOAL_REMINDER_GRACE_MINUTES (45)
+  // ago drops out of Up next into a one-line "Missed" list, so e.g. a missed 08:00
+  // wake-up doesn't sit at the top all day blocking what's still doable.
+  const _nowMin = (() => { const [h, m] = fmtClock().slice(0, 5).split(':').map(Number); return h * 60 + m; })();
+  const _isOverdue = (g) => { const [h, m] = g.reminder_time.split(':').map(Number); return h * 60 + m + GOAL_REMINDER_GRACE_MINUTES < _nowMin; };
+  const _openTimed = allGoals.filter(g => g.reminder_time && !getTodayLog(g.id)?.checked)
+    .sort((a, b) => a.reminder_time.localeCompare(b.reminder_time));
+  const upNextCommits = _openTimed.filter(g => !_isOverdue(g)).slice(0, 3);
+  const missedCommits = _openTimed.filter(_isOverdue);
+  const hasTimedCommits = allGoals.some(g => g.reminder_time);
   const commitmentsBlock = (delay) => `
     <details class="card cat-card" style="animation-delay:${delay}ms" open>
       <summary>
         <div class="section-title" style="margin:0;display:flex;align-items:center;gap:10px">
           ${scoreRingHtml}
-          <span style="flex:1">Commitments</span>
+          <span style="flex:1;display:flex;flex-direction:column;gap:2px">Commitments<span class="meta" style="margin:0">${checkedTodayCount} of ${totalGoals} done today</span></span>
           <span class="meta" data-go="life:commitments" style="cursor:pointer">View all →</span>
         </div>
         <span class="chevron">&#8250;</span>
       </summary>
       <div class="cat-body">
+        ${totalGoals === 0 ? '' : `
+          <div class="home-sub-label">Up next</div>
+          <ul class="list">
+            ${upNextCommits.map(commitRowHtml).join('') || `<li class="list-item"><div class="item-sub">${hasTimedCommits ? (missedCommits.length ? 'Nothing else timed for today.' : 'All timed commitments done for today ✓') : 'No commitments with a time yet. Add one from Commitments → Edit.'}</div></li>`}
+          </ul>
+          ${missedCommits.length ? `<details class="home-missed">
+            <summary><span class="home-missed-dot"></span>${missedCommits.length} missed earlier today</summary>
+            <div class="home-missed-list">${missedCommits.map(g => `<span class="home-missed-chip" data-go="life:commitments" title="Open Commitments to log it late">${g.reminder_time} ${escapeHtml(g.text)}</span>`).join('')}</div>
+          </details>` : ''}
+          <div class="home-sub-label">By category</div>`}
         ${totalGoals === 0
           ? `<div class="item-sub" style="margin-top:4px">No commitments yet.</div>`
           : `<div style="margin-top:4px">
@@ -362,7 +426,6 @@ function renderLifeHome() {
               }).join('')}
             </div>`
         }
-        <div style="font-size:12px;color:var(--text-faint);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">${checkedTodayCount} of ${totalGoals} done today</div>
       </div>
     </details>`;
 
@@ -443,7 +506,7 @@ function renderLifeHome() {
   const scheduleBlock = (delay) => `
     <details class="card cat-card" style="animation-delay:${delay}ms" open>
       <summary>
-        <div class="section-title" style="margin:0">Today's schedule <span class="meta">${schedToday.length} blocks</span></div>
+        <div class="section-title" style="margin:0">Today's schedule <span class="meta${!schedToday.length && todayIsWeekday ? ' sched-meta-alert' : ''}">${schedToday.length} blocks</span></div>
         <span class="chevron">&#8250;</span>
       </summary>
       <div class="cat-body">
@@ -462,8 +525,9 @@ function renderLifeHome() {
               </div>
               ${isUpNext ? `<div class="up-next-countdown" id="up-next-countdown" data-target-time="${s.time}">now</div>` : ''}
             </li>`;
-          }).join('') || `<li class="list-item"><div class="item-sub">Nothing scheduled. Take it easy.</div></li>`}
+          }).join('') || schedEmptyHtml}
         </ul>
+        ${tomorrowNudgeHtml}
       </div>
     </details>`;
 
@@ -492,8 +556,9 @@ function renderLifeHome() {
   // the purely retrospective Activity heatmap last. "Hero" layout keeps its
   // original purpose — Active project surfaced right after Schedule —
   // everything else follows the same order as "Stacked".
-  const stacked = scheduleBlock(0) + commitPreviewBlock(60) + focusBlock(120) + commitmentsBlock(180) + financeBlock(240) + projectsBlock(300) + heatmapBlock;
-  const hero    = scheduleBlock(0) + commitPreviewBlock(60) + projectsBlock(120) + focusBlock(180) + commitmentsBlock(240) + financeBlock(300) + heatmapBlock;
+  // Today's focus card hidden 2026-10-14 (user request) — re-add focusBlock(120) here / in `hero` to bring it back
+  const stacked = scheduleBlock(0) + /* commitPreviewBlock — merged into commitmentsBlock 2026-10-14 */ commitmentsBlock(60) + financeBlock(240) + projectsBlock(300) + heatmapBlock;
+  const hero    = scheduleBlock(0) + /* commitPreviewBlock(60) + */ commitmentsBlock(60) + projectsBlock(120) + /* focusBlock(180) + */ financeBlock(300) + heatmapBlock;
 
   return `
     ${topbar()}
@@ -506,6 +571,14 @@ function renderLifeHome() {
 /* ---- HOME: event binding ---- */
 
 function bindHomeEvents() {
+  // weekday "+ Plan today" / evening "Plan tomorrow" → Add Event modal (schedule.js)
+  main.querySelectorAll('[data-plan-day]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const iso = el.dataset.planDay;
+    let start = '09:00';
+    if (iso === todayISO()) { const n = new Date(); const m = Math.min(Math.ceil((n.getHours() * 60 + n.getMinutes() + 1) / 30) * 30, 1410); start = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+    openAddSchedModal(iso, start);
+  }));
   // live clock + "Up Next" countdown (same 1s tick, no full re-render)
   const clockEl = main.querySelector('#live-clock');
   const countdownEl = main.querySelector('#up-next-countdown');

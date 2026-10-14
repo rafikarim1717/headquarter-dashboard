@@ -4,10 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Headquarter</title>
-<link rel="icon" href="icon-192.png" sizes="192x192">
+<!-- tab favicon: transparent, upright, de-speckled 本部 seal (no black bg). icon-192/512 stay for PWA/apple-touch -->
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="favicon-64.png" sizes="64x64" type="image/png">
+<link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#121110">
+<meta name="theme-color" content="#0f0f0f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="HQ">
@@ -16,7 +19,7 @@
 <script>
   window.__HQ_TWEAKS = {
     "name": "Alex",
-    "accent": "#ece6d9",
+    "accent": "#ededed",
     "density": "compact",   // locked, since the Tweaks panel that switched it is retired
     "numberWeight": 700,
     "showQuickPills": true,
@@ -31,7 +34,12 @@
 <body>
 
 <!-- Login Screen -->
-<div id="login-screen" class="hidden seigaiha">
+<div id="login-screen" class="hidden">
+  <div class="loading-circles" aria-hidden="true">
+    <div class="lc-ring lc-ring-1"></div>
+    <div class="lc-ring lc-ring-2"></div>
+    <div class="lc-ring lc-ring-3"></div>
+  </div>
   <div class="ring">
     <div class="ring-login">
       <div class="hanko lg" aria-hidden="true">本部</div>
