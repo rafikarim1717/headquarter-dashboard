@@ -95,7 +95,7 @@ function activityLevelClass(count, maxCount) {
 
 const ACT_KIND_LABEL = { project: 'Project', do: 'Habit', schedule: 'Schedule' };
 
-const HOME_ACTIVITY_FEED_CAP = 10;
+const HOME_ACTIVITY_FEED_CAP = 5;   // was 10 (2026-10-14)
 
 function renderHomeActivityHeatmap(year, dayFilter, showAll) {
   const events = buildHomeActivityEvents();

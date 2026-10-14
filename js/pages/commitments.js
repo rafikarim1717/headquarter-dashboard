@@ -677,7 +677,7 @@ function renderCommitments() {
     const checkedInCat = itemsInCat.filter(g => getTodayLog(g.id)?.checked).length;
     const pctInCat = Math.round(avgProgressPct(itemsInCat));
     return `
-      <details class="card cat-card" style="animation-delay:${40 + idx * 20}ms" open>
+      <details class="card cat-card" style="animation-delay:${40 + idx * 20}ms" data-commit-card="cat:${escapeHtml(cat)}" ${(state.openCommitCards || []).includes('cat:' + cat) ? 'open' : ''}>
         <summary>
           <div class="section-title" style="margin:0">${escapeHtml(cat)} <span class="meta" data-goal-count-header="${escapeHtml(cat)}">${checkedInCat} / ${itemsInCat.length}</span></div>
           <div class="cat-head-right">
@@ -705,7 +705,7 @@ function renderCommitments() {
   return `
     ${topbar()}
     <h1 class="page-title">Commitments</h1>
-    <details class="card cat-card commit-compliance-card" id="commit-compliance-card" style="animation-delay:0ms" open>
+    <details class="card cat-card commit-compliance-card" id="commit-compliance-card" style="animation-delay:0ms" data-commit-card="compliance" data-commit-default="open" ${(state.closedCommitCards || []).includes('compliance') ? '' : 'open'}>
       <summary>
         <div class="section-title" style="margin:0">Today's Compliance <span class="meta" data-compliance-summary-pct>${overallPct}%</span></div>
         <span class="chevron">&#8250;</span>
@@ -788,6 +788,22 @@ function renderCommitments() {
 
 function bindCommitmentsEvents() {
   // commitments preview tab switch
+  // Commitments page sections start collapsed (2026-10-14); ones the user opens
+  // stay open across full re-renders for the session (state.openCommitCards).
+  main.querySelectorAll('[data-commit-card]').forEach(el => el.addEventListener('toggle', () => {
+    if (!state.openCommitCards) state.openCommitCards = [];
+    if (!state.closedCommitCards) state.closedCommitCards = [];
+    const k = el.dataset.commitCard;
+    if (el.dataset.commitDefault === 'open') {   // open-by-default cards remember being closed instead
+      const c = state.closedCommitCards.indexOf(k);
+      if (!el.open && c === -1) state.closedCommitCards.push(k);
+      else if (el.open && c !== -1) state.closedCommitCards.splice(c, 1);
+      return;
+    }
+    const i = state.openCommitCards.indexOf(k);
+    if (el.open && i === -1) state.openCommitCards.push(k);
+    else if (!el.open && i !== -1) state.openCommitCards.splice(i, 1);
+  }));
   // History section collapse (2026-10-14) — remembered for the session so tab clicks / re-renders keep it
   main.querySelector('[data-commit-history]')?.addEventListener('toggle', (e) => { state.commitHistoryOpen = e.currentTarget.open; });
   main.querySelectorAll('[data-commit-tab]').forEach(el => el.addEventListener('click', () => {

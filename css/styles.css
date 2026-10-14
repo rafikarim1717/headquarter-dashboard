@@ -2510,9 +2510,9 @@
   .music-time { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; line-height: 1.2; }
   @media (max-width: 560px) { .music-pill.active .music-pill-text { display: none; } .music-pill.active { padding: 3px; } }
 
-  .notes-dropdown.music-panel { width: 340px; max-width: calc(100vw - 24px); padding: 0; border-radius: 12px; overflow: hidden; }
-  .notes-dropdown.music-panel button { display: inline-flex; width: auto; padding: 0; text-align: left; font-size: inherit; color: inherit; background: transparent; }
-  .notes-dropdown.music-panel button:hover { background: transparent; }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) { width: 340px; max-width: calc(100vw - 24px); padding: 0; border-radius: 12px; overflow: hidden; }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button { display: inline-flex; width: auto; padding: 0; text-align: left; font-size: inherit; color: inherit; background: transparent; }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button:hover { background: transparent; }
   .mp-now { display: flex; gap: 12px; align-items: center; padding: 14px 14px 6px; }
   .mp-now-empty { color: var(--text-faint); font-size: 12px; padding: 16px 14px 6px; }
   .mp-thumb { border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #262626; }
@@ -2528,27 +2528,27 @@
   .mp-live-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
   .mp-live { font-size: 9.5px; letter-spacing: 0.08em; font-weight: 600; color: var(--shu); border: 1px solid rgba(217,71,43,0.5); border-radius: 3px; padding: 1px 4px; }
   .mp-ctl { display: flex; align-items: center; justify-content: center; gap: 22px; padding: 6px 0 4px; }
-  .notes-dropdown.music-panel button.mp-ctl-btn { width: 32px; height: 32px; border-radius: 50%; align-items: center; justify-content: center; color: var(--text-dim); }
-  .notes-dropdown.music-panel button.mp-ctl-btn:hover { color: var(--text); }
-  .notes-dropdown.music-panel button.mp-play { width: 36px; height: 36px; background: var(--accent); color: var(--bg); }
-  .notes-dropdown.music-panel button.mp-play:hover { color: var(--bg); background: #ffffff; }
-  .music-panel .music-vol { padding: 4px 14px 8px 10px; border-bottom: 1px solid var(--border); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-ctl-btn { width: 32px; height: 32px; border-radius: 50%; align-items: center; justify-content: center; color: var(--text-dim); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-ctl-btn:hover { color: var(--text); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-play { width: 36px; height: 36px; background: var(--accent); color: var(--bg); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-play:hover { color: var(--bg); background: #ffffff; }
+  :is(.music-panel, .focus-music-panel) .music-vol { padding: 4px 14px 8px 10px; border-bottom: 1px solid var(--border); }
   .mp-tabs { display: flex; gap: 6px; padding: 10px 14px 6px; }
-  .notes-dropdown.music-panel button.mp-tab { font-size: 11.5px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); }
-  .notes-dropdown.music-panel button.mp-tab:hover { color: var(--text); }
-  .notes-dropdown.music-panel button.mp-tab.on { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-tab { font-size: 11.5px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-tab:hover { color: var(--text); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-tab.on { background: var(--accent); border-color: var(--accent); color: var(--bg); }
   .mp-list { max-height: 280px; overflow-y: auto; padding: 2px 6px 4px; }
   .mp-list[data-tab="radio"] .mp-row[data-kind="mine"], .mp-list[data-tab="mine"] .mp-row[data-kind="radio"] { display: none !important; }
-  .notes-dropdown.music-panel button.mp-row { display: flex; width: 100%; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 6px; font-size: 12.5px; color: var(--text-dim); }
-  .notes-dropdown.music-panel button.mp-row:hover { background: rgba(255,255,255,0.05); color: var(--text); }
-  .notes-dropdown.music-panel button.mp-row.sel { background: rgba(255,255,255,0.07); color: var(--text); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-row { display: flex; width: 100%; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 6px; font-size: 12.5px; color: var(--text-dim); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-row:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-row.sel { background: rgba(255,255,255,0.07); color: var(--text); }
   .mp-row-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 7px; }
   .mp-row-eq { height: 10px; flex-shrink: 0; }
   .mp-row-eq .eq-bar { width: 2px; }
   .mp-row-dur { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
   .mp-empty { font-size: 12px; color: var(--text-faint); padding: 10px 8px; }
-  .notes-dropdown.music-panel button.mp-manage { display: block; width: 100%; padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--text-faint); }
-  .notes-dropdown.music-panel button.mp-manage:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-manage { display: block; width: 100%; padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--text-faint); }
+  :is(.notes-dropdown.music-panel, .focus-music-panel) button.mp-manage:hover { color: var(--text); background: rgba(255,255,255,0.03); }
 
   /* ============ SIDEBAR ↔ CONTENT ALIGNMENT (desktop, 2026-10-14) ============
      Two shared lines: (1) the 本部 hanko sits on the same 52px row as the topbar
@@ -2573,3 +2573,212 @@
   .commit-history > summary::-webkit-details-marker { display: none; }
   .commit-history > summary .chevron { transition: transform var(--t-fast) ease; display: inline-block; }
   .commit-history[open] > summary .chevron { transform: rotate(90deg); }
+
+  /* Commitments History — compact "mini calendar" month cells (2026-10-14, option 2):
+     44px tall instead of square; date small + dim top-left, % bigger bottom-right
+     so the progress reads first. */
+  .commit-hm-cell {
+    aspect-ratio: auto; height: 44px; border-radius: 5px;
+    align-items: stretch; justify-content: space-between; gap: 0; padding: 4px 6px;
+  }
+  .commit-hm-cell.clickable:hover { transform: scale(1.03); }
+  .commit-hm-daynum { font-size: 10px; color: #555555; line-height: 1; }
+  .commit-hm-pct { font-size: 14px; font-weight: 700; line-height: 1; text-align: right; }
+  .commit-hm-cell.today .commit-hm-daynum { color: var(--text); }
+  @media (max-width: 560px) {
+    .commit-hm-cell { height: 40px; padding: 3px 4px; }
+    .commit-hm-pct { font-size: 12px; }
+  }
+
+  /* History header readability (2026-10-14): month label + monthly average bigger and brighter */
+  .commit-history .commit-day-label { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--text); }
+  .commit-history .commit-month-stats { font-size: 13.5px; font-weight: 500; color: var(--text); margin-top: 14px; }
+
+  /* Notes list cards — option 1 (2026-10-14): title + time on one row, 2-line preview */
+  .note-card { min-height: 0; max-height: none; padding: 16px 18px; gap: 8px; border-radius: 8px; }
+  .note-card-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .note-card-title { flex: 1; min-width: 0; margin: 0; font-size: 17px; font-weight: 600; letter-spacing: 0.005em; }
+  .note-card-date { margin: 0; flex-shrink: 0; font-size: 11.5px; color: var(--text-faint); letter-spacing: 0.02em; }
+  .note-card-del { position: static; flex-shrink: 0; margin-right: -4px; }
+  .note-card-preview { font-size: 13px; color: var(--text-dim); line-height: 1.55; }
+
+  /* Notes editor (2026-10-14): ▾ carets vertically centred with their label */
+  .tb-style-btn, .tb-font-btn, .notes-ctrl-btn { display: inline-flex; align-items: center; gap: 6px; }
+  .tb-style-btn .caret, .tb-font-btn .caret, .notes-ctrl-btn .caret {
+    font-size: 0; width: 5px; height: 5px; flex-shrink: 0; opacity: 0.6;
+    border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+    transform: translateY(-2px) rotate(45deg);
+  }
+  /* insert-table size picker */
+  .tb-table-dd { left: auto; right: 0; padding: 10px; min-width: 0; }
+  .tb-table-grid { display: grid; grid-template-columns: repeat(8, 18px); gap: 3px; }
+  .tb-table-cell { width: 18px; height: 18px; border: 1px solid var(--border-strong); border-radius: 2px; cursor: pointer; }
+  .tb-table-cell.on { background: color-mix(in oklab, var(--accent) 25%, transparent); border-color: var(--accent); }
+  .tb-table-size { margin-top: 8px; font-size: 11.5px; color: var(--text-dim); text-align: center; }
+
+  /* Notes — images (2026-10-14) */
+  .note-content img { display: block; max-width: 100%; height: auto; border-radius: 6px; margin: 10px 0; border: 1px solid var(--border); }
+  .note-content img[data-uploading] { opacity: 0.45; filter: grayscale(0.4); }
+  /* Confirm dialog spacing (2026-10-14) */
+  .hq-confirm-card .hq-modal-header { padding: 24px 26px 0; }
+  .hq-confirm-card .hq-confirm-title { font-size: 18px; }
+  .hq-confirm-card .hq-confirm-msg { margin: 12px 26px 24px; font-size: 13.5px; line-height: 1.6; }
+  .hq-confirm-card .hq-modal-footer { padding: 16px 26px 22px; border-top: 1px solid var(--border); gap: 10px; }
+  /* topbar: music widget ↔ quick-actions spacing (2026-10-14) */
+  .topbar .right { gap: 6px; }
+  .apps-wrap { margin-left: 0; }
+  .music-caret-btn { width: 14px; }
+
+  /* music button states (2026-10-14): ▶ idle/paused · eq while playing · ❚❚ on hover while playing */
+  .music-btn { position: relative; }
+  .music-btn .eq-bars { gap: 2px; height: 14px; align-items: center; }
+  .music-btn .eq-bar.b4 { animation: eq 0.45s ease-in-out 0.22s infinite alternate; }
+  .music-pause-icon { display: none; }
+  .music-btn.playing:hover .eq-bars { display: none !important; }
+  .music-btn.playing:hover .music-pause-icon { display: inline-flex; }
+  #music-note-icon { transition: transform var(--t-fast) ease; }
+  .music-btn:hover #music-note-icon { transform: scale(1.15); }
+  /* ▾ caret removed 2026-10-14 — the panel opens from the ▶ button when nothing is loaded,
+     and from the pill's title/time text once a station is loaded */
+  .music-caret-btn { display: none !important; }
+
+  /* quick-actions tiles: grey ring by default, white for the app you're in (listed first) and on hover (2026-10-14) */
+  .apps-icon { border-color: var(--border-strong); color: var(--text-dim); transition: border-color var(--t-fast), color var(--t-fast); }
+  .apps-tile:hover .apps-icon, .apps-tile.is-active .apps-icon { border-color: #ededed; color: #ededed; }
+  .apps-tile.is-active .apps-label { color: var(--text); }
+  /* Focus mode: the + FAB is gone (2026-10-14), so the bottom-right buttons sit in the
+     corner, mirroring the bottom-left music button (20px from both edges) */
+  .focus-corner-right, .focus-corner-left { bottom: 20px !important; }
+  .focus-corner-right { right: 20px; }
+
+  /* Focus mode — optical centering + spacing rhythm (2026-10-14).
+     The stack sits ~5vh above the geometric centre (optical centre), and spacing
+     groups the parts: tag → [clock + adjusters] → start. */
+  .focus-content { padding-bottom: calc(32px + 10vh); }
+  .focus-top { gap: 0; }
+  .focus-tag-wrap { margin-bottom: 26px; }
+  .focus-time { font-size: 92px; letter-spacing: 0.01em; }
+  .focus-adjust { margin-top: 18px; }
+  .focus-controls { margin-top: 40px; }
+  @media (max-width: 560px) {
+    .focus-content { padding-bottom: calc(32px + 6vh); }
+    .focus-time { font-size: 72px; }
+    .focus-controls { margin-top: 32px; }
+  }
+
+  /* Focus mode dark theme = Killua wallpaper (2026-10-14), dimmed 10%.
+     Replaces the seigaiha field; the old ::after vignette is switched off. */
+  /* Killua is shifted to the right third (image 108% tall, centred at 50% + 30vw) so the
+     clock sits on the dark area; the image's left edge (at 80vw − 96vh) is faded into the
+     matching near-black so there's no seam. */
+  .focus-overlay.theme-dark .focus-bg {
+    background:
+      linear-gradient(90deg, #0c0619 calc(80vw - 96vh), rgba(12,6,25,0) calc(80vw - 96vh + 14vw)),
+      linear-gradient(rgba(0,0,0,0.10), rgba(0,0,0,0.10)),
+      url('../assets/focus-bg-killua.webp') calc(50% + 30vw) center / auto 108% no-repeat,
+      #0c0619;
+  }
+  @media (max-width: 768px) {   /* portrait phones: no room beside him — centre it and dim more behind the clock */
+    .focus-overlay.theme-dark .focus-bg {
+      background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0.55), rgba(0,0,0,0.15) 60%), url('../assets/focus-bg-killua.webp') 55% center / cover no-repeat, #0c0619;
+    }
+  }
+  .focus-overlay.theme-dark .focus-bg::after { display: none; }
+
+  /* ============ FOCUS MODE v2 — StudyFocus-style centre + scene picker (2026-10-14) ============ */
+  .focus-content { max-width: 720px; }
+  .focus-tag-wrap { margin-bottom: 40px; }
+  .focus-tag-btn {
+    gap: 10px; padding: 11px 20px; border-radius: 12px; font-size: 15px; font-weight: 500;
+    background: rgba(10,10,20,0.45); border: 1px solid rgba(255,255,255,0.08); color: #ededed;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  .focus-tag-btn:hover { background: rgba(10,10,20,0.6); }
+  .focus-tag-chev { opacity: 0.7; }
+  .focus-presets { display: flex; gap: 26px; margin-bottom: 22px; }
+  .focus-preset {
+    width: 26px; height: 26px; border-radius: 50%; border: none; padding: 0; cursor: pointer;
+    background: rgba(255,255,255,0.32); transition: background var(--t-fast), transform var(--t-fast);
+  }
+  .focus-preset:hover:not(:disabled) { transform: scale(1.12); background: rgba(255,255,255,0.55); }
+  .focus-preset.on { background: #ffffff; }
+  .focus-preset:disabled { cursor: default; }
+  .focus-preset:disabled:not(.on) { opacity: 0.5; }
+  .focus-time {
+    font-family: var(--font); font-weight: 700; font-size: clamp(88px, 11vw, 168px);
+    letter-spacing: -0.02em; line-height: 0.95; color: #ffffff;
+    text-shadow: 0 4px 30px rgba(0,0,0,0.25);
+  }
+  .focus-adjust { margin-top: 18px; gap: 10px; }
+  .focus-adjust-btn {
+    padding: 3px 10px; font-size: 13px; font-weight: 500; border: none;
+    background: rgba(255,255,255,0.14); color: rgba(255,255,255,0.85); border-radius: 8px;
+  }
+  .focus-controls { margin-top: 44px; }
+  .focus-start-btn {
+    min-width: 300px; padding: 20px 40px; font-size: 24px; font-weight: 600; letter-spacing: 0.01em;
+    background: #ffffff; border-color: #ffffff; color: #111; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  }
+  .focus-reset-btn { width: 56px; height: 56px; }
+  @media (max-width: 560px) {
+    .focus-tag-wrap { margin-bottom: 28px; }
+    .focus-start-btn { min-width: 220px; padding: 16px 32px; font-size: 20px; }
+    .focus-controls { margin-top: 32px; }
+  }
+
+  /* snow canvas (theme-dark / Killua) */
+  .focus-snow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+
+  /* bottom corners: left = white noise · music · background, right = fullscreen only */
+  .focus-corner-left .focus-corner-btn-row { gap: 10px; }
+  .focus-icon-btn { width: 44px; height: 44px; border-radius: 12px; background: rgba(10,10,20,0.45); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .focus-icon-btn:hover, .focus-icon-btn.sel { background: rgba(255,255,255,0.18); }
+  .focus-flyout { bottom: calc(100% + 10px); }
+  .focus-noise-flyout { padding: 14px 16px; min-width: 220px; }
+  .focus-noise-title { font-size: 13px; font-weight: 600; color: #ededed; }
+  .focus-noise-sub { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+
+  /* "Set your focus scene" modal */
+  .focus-scene-backdrop { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.55); }
+  .focus-scene-modal {
+    width: 100%; max-width: 760px; max-height: calc(100% - 40px); overflow-y: auto;
+    background: rgba(12,12,16,0.92); border: 1px solid rgba(255,255,255,0.08); border-radius: 22px;
+    padding: 28px 32px 32px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    animation: modal-in 180ms ease forwards;
+  }
+  .focus-scene-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+  .focus-scene-title { font-size: 24px; font-weight: 700; color: #fff; }
+  .focus-scene-close { width: 34px; height: 34px; border-radius: 50%; color: rgba(255,255,255,0.7); font-size: 16px; background: transparent; }
+  .focus-scene-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .focus-scene-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .focus-scene-item { position: relative; display: block; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 9; padding: 0; border: 2px solid transparent; background: #1a1a1a; cursor: pointer; transition: border-color var(--t-fast), transform var(--t-fast); }
+  .focus-scene-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .focus-scene-item span { position: absolute; left: 12px; bottom: 10px; font-size: 13px; font-weight: 600; color: #fff; text-shadow: 0 1px 8px rgba(0,0,0,0.6); }
+  .focus-scene-item:hover { transform: translateY(-2px); }
+  .focus-scene-item.sel { border-color: #ffffff; }
+  @media (max-width: 560px) { .focus-scene-grid { grid-template-columns: 1fr; } .focus-scene-modal { padding: 22px; } }
+  /* scene modal tabs + weather options (2026-10-14) */
+  .focus-scene-tabs { display: inline-flex; gap: 4px; padding: 4px; margin: 0 auto 22px; border-radius: 12px; background: rgba(255,255,255,0.06); position: relative; left: 50%; transform: translateX(-50%); }
+  .focus-scene-tab { display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 9px; font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.7); background: transparent; }
+  .focus-scene-tab:hover { color: #fff; }
+  .focus-scene-tab.on { background: #ffffff; color: #111; }
+  .focus-weather-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .focus-weather-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    padding: 22px 8px; border-radius: 14px; border: 2px solid transparent; background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.75); font-size: 13px; font-weight: 500; cursor: pointer; transition: background var(--t-fast), border-color var(--t-fast);
+  }
+  .focus-weather-item:hover { background: rgba(255,255,255,0.09); color: #fff; }
+  .focus-weather-item.sel { border-color: #ffffff; color: #fff; background: rgba(255,255,255,0.09); }
+  .focus-weather-ic { display: inline-flex; }
+  @media (max-width: 560px) { .focus-weather-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  /* Focus mode music flyout = the topbar player (2026-10-14) */
+  .focus-flyout.focus-music-panel { width: 340px; max-width: calc(100vw - 40px); padding: 0; border-radius: 16px; overflow: hidden; background: rgba(12,12,18,0.94); border: 1px solid rgba(255,255,255,0.08); color: #ededed; }
+  .focus-music-panel .mp-list { max-height: 240px; }
+  .focus-sound-flyout.focus-music-panel .music-vol { margin-top: 0; padding: 4px 14px 8px 10px; border-top: none; border-bottom: 1px solid rgba(255,255,255,0.08); }
+
+  /* video scene: Lofi room (2026-10-14) — poster shows until the video plays, 20% dim keeps the clock readable */
+  .focus-overlay.theme-lofi .focus-bg { background: #120d1c url('../assets/focus-bg-lofi-poster.webp') center / cover no-repeat; overflow: hidden; }
+  .focus-bg-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+  .focus-overlay.theme-lofi .focus-bg::after { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.2); display: block; }

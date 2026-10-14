@@ -787,3 +787,33 @@ CREATE INDEX IF NOT EXISTS custom_stations_user_id ON custom_stations(user_id);
 --     Week/Day time grid to size each block (NULL = treated as 1 hour)
 -- ============================================================
 ALTER TABLE schedule_events ADD COLUMN IF NOT EXISTS end_time text;
+
+-- ============================================================
+-- 24. Storage bucket for images inside Notes (2026-10-14)
+--     Public bucket (images load by URL without signing); each user can only
+--     upload / replace / delete files inside their own <user_id>/ folder.
+-- ============================================================
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('note-images', 'note-images', true, 10485760, ARRAY['image/png','image/jpeg','image/webp','image/gif'])
+ON CONFLICT (id) DO NOTHING;
+
+DO $$ BEGIN
+  CREATE POLICY "note_images_insert_own" ON storage.objects
+    FOR INSERT TO authenticated
+    WITH CHECK (bucket_id = 'note-images' AND (storage.foldername(name))[1] = auth.uid()::text);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "note_images_update_own" ON storage.objects
+    FOR UPDATE TO authenticated
+    USING (bucket_id = 'note-images' AND (storage.foldername(name))[1] = auth.uid()::text);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "note_images_delete_own" ON storage.objects
+    FOR DELETE TO authenticated
+    USING (bucket_id = 'note-images' AND (storage.foldername(name))[1] = auth.uid()::text);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

@@ -202,8 +202,8 @@ function updateMusicBtn(playing) {
     btn.setAttribute('aria-label', t);
   }
   if (caret)  caret.classList.toggle('playing', playing);
-  if (eq)     eq.style.display = active ? 'inline-flex' : 'none';
-  if (noteIcon) noteIcon.style.display = active ? 'none' : '';
+  if (eq)     eq.style.display = playing ? 'inline-flex' : 'none';
+  if (noteIcon) noteIcon.style.display = playing ? 'none' : 'inline-flex';
   if (label) {
     label.textContent = active && station ? station.name : '';
     label.classList.toggle('playing', playing);
@@ -419,7 +419,7 @@ function musicTimeText() {
   return p ? `${fmtDur(p.cur)} / ${fmtDur(p.dur)}` : '…';
 }
 function stationThumbHtml(st, size) {
-  if (st && st.kind === 'youtube') return `<img class="mp-thumb" style="width:${size}px;height:${size}px" src="https://i.ytimg.com/vi/${st.videoId}/mqdefault.jpg" alt="" loading="lazy" onerror="this.removeAttribute('src')">`;
+  if (st && st.kind === 'youtube') return `<img class="mp-thumb" style="width:${size}px;height:${size}px" src="https://i.ytimg.com/vi/${st.videoId}/mqdefault.jpg" alt="" loading="lazy" onerror="this.onerror=null;this.src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'">`;
   return `<span class="mp-thumb mp-thumb-radio" style="width:${size}px;height:${size}px"><svg width="${Math.round(size * 0.45)}" height="${Math.round(size * 0.45)}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/></svg></span>`;
 }
 
@@ -514,10 +514,12 @@ function bindMusicPanel(dd) {
 }
 
 function refreshMusicPanel() {
-  const dd = document.getElementById('music-dropdown');
-  if (!dd) return;
-  dd.innerHTML = musicDropdownHtml();
-  bindMusicPanel(dd);
+  ['music-dropdown', 'focus-music-panel'].forEach(id => {
+    const dd = document.getElementById(id);
+    if (!dd) return;
+    dd.innerHTML = musicDropdownHtml();
+    bindMusicPanel(dd);
+  });
 }
 
 // 1s tick: pill time, panel progress, and caching YouTube durations.
@@ -527,18 +529,14 @@ function musicTick() {
   if (p && st && st.videoId && Math.round(ytDurations[st.videoId] || 0) !== Math.round(p.dur)) {
     ytDurations[st.videoId] = Math.round(p.dur);
     try { localStorage.setItem(YT_DURATIONS_KEY, JSON.stringify(ytDurations)); } catch (e) {}
-    const durCell = document.querySelector(`#music-dropdown .mp-row[data-station-idx="${ambientPlayer.stationIndex}"] .mp-row-dur`);
-    if (durCell) durCell.textContent = fmtDur(p.dur);
+    document.querySelectorAll(`.mp-row[data-station-idx="${ambientPlayer.stationIndex}"] .mp-row-dur`).forEach(c => { c.textContent = fmtDur(p.dur); });
   }
   const t = document.getElementById('music-time');
   if (t) t.textContent = musicUiState() === 'idle' ? '' : musicTimeText();
   if (p) {
-    const fill = document.querySelector('#music-dropdown [data-mp-fill]');
-    if (fill) fill.style.width = (p.cur / p.dur * 100) + '%';
-    const c = document.querySelector('#music-dropdown [data-mp-cur]');
-    if (c) c.textContent = fmtDur(p.cur);
-    const d = document.querySelector('#music-dropdown [data-mp-dur]');
-    if (d) d.textContent = fmtDur(p.dur);
+    document.querySelectorAll('[data-mp-fill]').forEach(f => { f.style.width = (p.cur / p.dur * 100) + '%'; });
+    document.querySelectorAll('[data-mp-cur]').forEach(c => { c.textContent = fmtDur(p.cur); });
+    document.querySelectorAll('[data-mp-dur]').forEach(d => { d.textContent = fmtDur(p.dur); });
   }
 }
 setInterval(musicTick, 1000);
@@ -839,7 +837,10 @@ function topbar() {
     `<button class="mobile-pill${state.activeTab === p.tab ? ' active' : ''}" data-go="${p.tab}">${p.label}</button>`
   ).join('');
   const signOutSvg = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/></svg>`;
-  const musicNoteSvg = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9l10.5-3m0 6c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3zM9 15c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3z"/></svg>`;
+  // ▶ when idle/paused, live eq bars while playing, ❚❚ on hover while playing (2026-10-14)
+  // quick-actions: the app you're currently in is white and listed first (Headquarter, or Focus while its overlay is open)
+  const focusIsOpen = !!document.getElementById('focus-overlay')?.classList.contains('open');
+  const musicNoteSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-left:2px"><path d="M7 4.8v14.4c0 .8.9 1.3 1.6.9l11.3-7.2c.6-.4.6-1.4 0-1.8L8.6 3.9C7.9 3.5 7 4 7 4.8z"/></svg>`;
   return `
     <header class="topbar">
       <div class="greet">
@@ -850,7 +851,7 @@ function topbar() {
         <button class="mobile-signout-btn" id="topbar-logout-btn" aria-label="Sign out">${signOutSvg}</button>
         <div class="music-wrap">
           <div class="music-pill${musicUiState() === 'idle' ? '' : ' active ' + musicUiState()}" id="music-pill">
-            <button class="icon-btn music-btn${musicUiState() === 'idle' ? '' : ' ' + musicUiState()}" id="music-toggle" title="Play/pause ambient music" aria-label="Play/pause ambient music"><span id="music-note-icon" style="${musicUiState() !== 'idle' ? 'display:none' : ''}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${musicUiState() !== 'idle' ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span></span></button>
+            <button class="icon-btn music-btn${musicUiState() === 'idle' ? '' : ' ' + musicUiState()}" id="music-toggle" title="Play/pause ambient music" aria-label="Play/pause ambient music"><span id="music-note-icon" style="${musicUiState() === 'playing' ? 'display:none' : 'display:inline-flex'}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${musicUiState() === 'playing' ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span><span class="eq-bar b4"></span></span><span class="music-pause-icon" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1.2"/><rect x="14" y="4" width="5" height="16" rx="1.2"/></svg></span></button>
             <button class="music-pill-text" data-dd-toggle data-music-open title="Open player">
               <span id="music-label">${musicUiState() !== 'idle' ? escapeHtml(getAllStations()[ambientPlayer.stationIndex]?.name || '') : ''}</span>
               <span id="music-time" class="music-time">${musicUiState() !== 'idle' ? musicTimeText() : ''}</span>
@@ -862,8 +863,8 @@ function topbar() {
         <div class="apps-wrap">
           <button class="icon-btn apps-btn" id="apps-btn" title="Quick actions" aria-label="Quick actions" aria-expanded="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg></button>
           <div class="apps-dropdown" id="apps-dropdown">
-            <button class="apps-tile" data-app-action="focus"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg></span><span class="apps-label">Focus</span></button>
-            <button class="apps-tile" data-app-action="home"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/></svg></span><span class="apps-label">Headquarter</span></button>
+            ${focusIsOpen ? `            <button class="apps-tile${focusIsOpen ? ' is-active' : ''}" data-app-action="focus"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg></span><span class="apps-label">Focus</span></button>` : `            <button class="apps-tile${focusIsOpen ? '' : ' is-active'}" data-app-action="home"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/></svg></span><span class="apps-label">Headquarter</span></button>`}
+            ${focusIsOpen ? `            <button class="apps-tile${focusIsOpen ? '' : ' is-active'}" data-app-action="home"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/></svg></span><span class="apps-label">Headquarter</span></button>` : `            <button class="apps-tile${focusIsOpen ? ' is-active' : ''}" data-app-action="focus"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg></span><span class="apps-label">Focus</span></button>`}
           </div>
         </div>
         <!-- Tweaks retired 2026-09-29, see index.html:
@@ -888,6 +889,14 @@ const ICON_PLAY  = `<svg width="18" height="18" viewBox="0 0 24 24" fill="curren
 const ICON_PAUSE = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>`;
 const ICON_MUSIC_NOTE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
 const ICON_TAG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41L11 3.83A2 2 0 009.59 3.24L4 3a1 1 0 00-1 1l.24 5.59a2 2 0 00.59 1.41l9.58 9.58a2 2 0 002.83 0l4.35-4.35a2 2 0 000-2.82z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/></svg>`;
+const ICON_CLOUD_RAIN = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15a4.5 4.5 0 01-.5-8.97A6 6 0 0118 7.5a3.75 3.75 0 01-.5 7.5H7z"/><path d="M8 18.5l-1 2M12 18.5l-1 2M16 18.5l-1 2"/></svg>`;
+const ICON_IMAGE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></svg>`;
+const FOCUS_WEATHER_ICONS = {
+  none: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>`,
+  snow: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5L12 6l2.5-1.5M9.5 19.5L12 18l2.5 1.5"/></svg>`,
+  rain: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4.5 4.5 0 01-.5-8.97A6 6 0 0118 5.5a3.75 3.75 0 01-.5 7.5H7z"/><path d="M8 16l-1.5 3.5M12 16l-1.5 3.5M16 16l-1.5 3.5"/></svg>`,
+  both: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4.5 4.5 0 01-.5-8.97A6 6 0 0118 5.5a3.75 3.75 0 01-.5 7.5H7z"/><path d="M8 16l-1.5 3.5M15.5 16l-1.5 3.5"/><circle cx="11.5" cy="18" r="0.9" fill="currentColor"/><circle cx="18" cy="20" r="0.9" fill="currentColor"/></svg>`
+};
 const ICON_PALETTE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 110-18 7 7 0 017 7c0 1.5-1 2.5-2.5 2.5H15a1.5 1.5 0 00-1 2.6c.4.4.6.9.6 1.4 0 1.5-1.2 2.5-2.6 2.5z"/><circle cx="7.5" cy="10.5" r="1" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="7" r="1" fill="currentColor" stroke="none"/></svg>`;
 const ICON_FULLSCREEN_ENTER = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg>`;
 const ICON_FULLSCREEN_EXIT = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v3a2 2 0 01-2 2H4M15 3v3a2 2 0 002 2h3M9 21v-3a2 2 0 00-2-2H4M15 21v-3a2 2 0 012-2h3"/></svg>`;
@@ -1270,7 +1279,7 @@ function ensureFocusOverlay() {
   el.addEventListener('click', e => {
     if (e.target === el) { closeFocusOverlay(); return; }
     // clicking anywhere outside an open corner flyout (but still inside the overlay) closes it
-    if (focusOpenPanel && !e.target.closest('.focus-flyout') && !e.target.closest('.focus-corner-btn')) {
+    if (focusOpenPanel && !e.target.closest('.focus-flyout') && !e.target.closest('.focus-corner-btn') && !e.target.closest('.focus-scene-modal')) {
       focusOpenPanel = null;
       renderFocusOverlay();
     }
@@ -1295,6 +1304,131 @@ function updateFocusFullscreenBtn() {
   const btn = focusOverlayEl?.querySelector('#focus-fullscreen-btn');
   if (btn) btn.innerHTML = document.fullscreenElement ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN_ENTER;
 }
+const FOCUS_PRESETS = [25, 15, 10];   // the three dots above the clock (2026-10-14)
+// Backgrounds offered in "Set your focus scene" — only images that live in assets/.
+// Each maps to an existing focus theme class (theme-dark = Killua, theme-forest = torii).
+const FOCUS_SCENES = [
+  { theme: 'dark',   name: 'Killua', img: 'assets/focus-bg-killua.webp' },
+  { theme: 'forest', name: 'Torii',  img: 'assets/focus-bg.jpg' },
+  { theme: 'lofi',   name: 'Lofi room', img: 'assets/focus-bg-lofi-poster.webp', video: 'assets/focus-bg-lofi.mp4', webm: 'assets/focus-bg-lofi.webm' }
+];
+
+/* ---- video scenes (2026-10-14): one muted, looping <video> kept across
+   renderFocusOverlay() rebuilds (moved into the new .focus-bg each time and
+   resumed at the same spot); paused while the overlay is closed. ---- */
+let focusVideoEl = null;
+function attachFocusVideo(el) {
+  const scene = FOCUS_SCENES.find(sc => sc.theme === focusPrefs.theme);
+  const bg = el.querySelector('.focus-bg');
+  if (!scene || !scene.video || !bg) { if (focusVideoEl) { focusVideoEl.pause(); focusVideoEl.remove(); } return; }
+  if (!focusVideoEl || focusVideoEl.dataset.src !== scene.video) {
+    focusVideoEl?.remove();
+    focusVideoEl = document.createElement('video');
+    Object.assign(focusVideoEl, { muted: true, loop: true, playsInline: true, autoplay: true, preload: 'auto' });
+    focusVideoEl.setAttribute('muted', ''); focusVideoEl.setAttribute('playsinline', ''); focusVideoEl.setAttribute('aria-hidden', 'true');
+    focusVideoEl.className = 'focus-bg-video';
+    focusVideoEl.poster = scene.img;
+    // WebM (VP9) first, MP4 (H.264) as fallback — Chromium builds without H.264 still play it
+    focusVideoEl.innerHTML = (scene.webm ? `<source src="${scene.webm}" type="video/webm">` : '') + `<source src="${scene.video}" type="video/mp4">`;
+    focusVideoEl.dataset.src = scene.video;
+  }
+  bg.prepend(focusVideoEl);
+  if (el.classList.contains('open')) focusVideoEl.play().catch(() => {});
+  else focusVideoEl.pause();
+}
+function focusCurrentMinutes() {
+  return focusTimer ? Math.round(focusTimer.totalSeconds / 60) : focusStagedMinutes;
+}
+function setFocusPreset(mins) {
+  if (focusTimer) return;               // presets only set the length before a session starts
+  focusStagedMinutes = mins;
+  renderFocusOverlay();
+}
+
+/* ---- Weather layer: snow and/or rain over ANY scene (2026-10-14).
+   focusPrefs.weather = 'none' | 'snow' | 'rain' | 'both'. One canvas, re-attached
+   after every renderFocusOverlay() innerHTML rebuild so the animation never
+   restarts; paused while the overlay is closed. Under prefers-reduced-motion it
+   stays on (it's a scene the user picked) but calmer: half the particles, slower. ---- */
+const FOCUS_WEATHERS = [
+  { id: 'none', name: 'Clear' },
+  { id: 'snow', name: 'Snow' },
+  { id: 'rain', name: 'Rain' },
+  { id: 'both', name: 'Rain + snow' }
+];
+const focusSnow = { canvas: null, ctx: null, flakes: [], drops: [], raf: null, w: 0, h: 0 };
+function focusWeather() {
+  if (!focusPrefs.weather) focusPrefs.weather = focusPrefs.theme === 'dark' ? 'snow' : 'none';   // migrate: Killua used to always snow
+  return focusPrefs.weather;
+}
+function focusSnowCalm() { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+function focusSnowResize() {
+  const c = focusSnow.canvas; if (!c) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  focusSnow.w = window.innerWidth; focusSnow.h = window.innerHeight;
+  c.width = focusSnow.w * dpr; c.height = focusSnow.h * dpr;
+  focusSnow.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const area = focusSnow.w * focusSnow.h, k = focusSnowCalm() ? 0.5 : 1, wx = focusWeather();
+  const both = wx === 'both';
+  focusSnow.flakes = (wx === 'snow' || both) ? Array.from({ length: Math.round(Math.min(170, area / 11000) * k * (both ? 0.6 : 1)) }, () => newFlake(true)) : [];
+  focusSnow.drops  = (wx === 'rain' || both) ? Array.from({ length: Math.round(Math.min(220, area / 8000) * k) }, () => newDrop(true)) : [];
+}
+function newFlake(anywhere) {
+  const r = 0.6 + Math.random() * 1.9;
+  return { x: Math.random() * focusSnow.w, y: anywhere ? Math.random() * focusSnow.h : -6,
+           r, vy: (0.25 + r * 0.32 + Math.random() * 0.25) * (focusSnowCalm() ? 0.55 : 1),
+           phase: Math.random() * Math.PI * 2, sway: 0.2 + Math.random() * 0.5, a: 0.25 + Math.random() * 0.55 };
+}
+function newDrop(anywhere) {
+  const len = 10 + Math.random() * 16;
+  return { x: Math.random() * (focusSnow.w + 100) - 50, y: anywhere ? Math.random() * focusSnow.h : -len - Math.random() * 100,
+           len, vy: (9 + Math.random() * 7) * (focusSnowCalm() ? 0.5 : 1), a: 0.12 + Math.random() * 0.22 };
+}
+const RAIN_WIND = 0.18;   // horizontal drift per unit of fall (slight slant)
+function focusSnowFrame() {
+  const { ctx, w, h } = focusSnow;
+  ctx.clearRect(0, 0, w, h);
+  if (focusSnow.drops.length) {
+    ctx.strokeStyle = '#cfd8ff'; ctx.lineWidth = 1; ctx.lineCap = 'round';
+    for (const d of focusSnow.drops) {
+      d.y += d.vy; d.x += d.vy * RAIN_WIND;
+      if (d.y - d.len > h) Object.assign(d, newDrop(false));
+      ctx.globalAlpha = d.a;
+      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.len * RAIN_WIND, d.y - d.len); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = '#ffffff';
+  for (const f of focusSnow.flakes) {
+    f.phase += 0.012; f.y += f.vy; f.x += Math.sin(f.phase) * f.sway * 0.4;
+    if (f.y > h + 6) Object.assign(f, newFlake(false));
+    ctx.globalAlpha = f.a;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  if (focusOverlayEl?.classList.contains('open') && focusWeather() !== 'none') focusSnow.raf = requestAnimationFrame(focusSnowFrame);
+  else focusSnow.raf = null;
+}
+function attachFocusSnow(el) {
+  if (focusWeather() === 'none') { if (focusSnow.raf) cancelAnimationFrame(focusSnow.raf); focusSnow.raf = null; focusSnow.canvas?.remove(); return; }
+  if (!focusSnow.canvas) {
+    focusSnow.canvas = document.createElement('canvas');
+    focusSnow.canvas.className = 'focus-snow';
+    focusSnow.canvas.setAttribute('aria-hidden', 'true');
+    focusSnow.ctx = focusSnow.canvas.getContext('2d');
+    window.addEventListener('resize', focusSnowResize);
+  }
+  const bg = el.querySelector('.focus-bg');
+  if (bg) bg.after(focusSnow.canvas); else el.prepend(focusSnow.canvas);
+  if (focusSnow.kind !== focusWeather() || !focusSnow.w) { focusSnow.kind = focusWeather(); focusSnowResize(); }
+  if (!focusSnow.raf) requestAnimationFrame(() => { if (!focusSnow.raf) focusSnow.raf = requestAnimationFrame(focusSnowFrame); });
+}
+function setFocusWeather(id) {
+  focusPrefs.weather = id;
+  saveFocusPrefs();
+  renderFocusOverlay();
+}
+let focusSceneTab = 'background';   // 'background' | 'weather' — tab inside "Set your focus scene"
+
 function toggleFocusPanel(which) {
   focusOpenPanel = focusOpenPanel === which ? null : which;
   renderFocusOverlay();
@@ -1369,8 +1503,11 @@ function renderFocusOverlay() {
     <div class="focus-content">
       <div class="focus-top">
         <div class="focus-tag-wrap">
-          <button class="focus-tag-btn focus-tag-noclose" id="focus-tag-toggle">${ICON_TAG}<span>${escapeHtml(focusSelectedTag || 'Select a tag')}</span></button>
+          <button class="focus-tag-btn focus-tag-noclose" id="focus-tag-toggle"><span>${escapeHtml(focusSelectedTag || 'Select a tag')}</span><svg class="focus-tag-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
           <div class="focus-tag-dropdown${focusTagPanelOpen ? ' open' : ''}">${focusTagDropdownHtml()}</div>
+        </div>
+        <div class="focus-presets" role="group" aria-label="Session length">
+          ${FOCUS_PRESETS.map(m => `<button class="focus-preset${focusCurrentMinutes() === m ? ' on' : ''}" data-focus-preset="${m}" title="${m} min" aria-label="${m} minutes"${active ? ' disabled' : ''}></button>`).join('')}
         </div>
         <div class="focus-time" id="focus-time-display">${focusTimeLabel(remaining)}</div>
         <div class="focus-adjust">
@@ -1380,44 +1517,63 @@ function renderFocusOverlay() {
         </div>
         <div class="focus-controls">
           ${!active
-            ? `<button class="focus-start-btn" id="focus-start-btn">${ICON_PLAY} Start</button>`
+            ? `<button class="focus-start-btn" id="focus-start-btn">Start</button>`
             : running
-              ? `<button class="focus-start-btn" id="focus-pause-btn">${ICON_PAUSE} Pause</button>
+              ? `<button class="focus-start-btn" id="focus-pause-btn">Pause</button>
                  <button class="focus-reset-btn" id="focus-reset-btn" aria-label="Reset">${ICON_UNDO}</button>`
-              : `<button class="focus-start-btn" id="focus-resume-btn">${ICON_PLAY} Resume</button>
+              : `<button class="focus-start-btn" id="focus-resume-btn">Resume</button>
                  <button class="focus-reset-btn" id="focus-reset-btn" aria-label="Reset">${ICON_UNDO}</button>`
           }
         </div>
       </div>
     </div>
-    <div class="focus-corner focus-corner-left${focusOpenPanel === 'sound' ? ' open' : ''}">
-      <div class="focus-flyout focus-sound-flyout">
-        <div class="focus-tabs">
-          ${FOCUS_SOUND_TABS.map(t => `<button class="focus-tab${focusSoundTab === t.id ? ' sel' : ''}" data-focus-tab="${t.id}">${t.label}</button>`).join('')}
-        </div>
-        <div class="focus-sound-list">${focusStationListHtml()}</div>
-        ${musicVolumeHtml()}
-      </div>
-      <button class="focus-icon-btn focus-corner-btn" id="focus-sound-toggle" aria-label="Sounds">${ICON_MUSIC_NOTE}</button>
-    </div>
-    <div class="focus-corner focus-corner-right${focusOpenPanel === 'theme' ? ' open' : ''}">
-      <div class="focus-flyout focus-theme-flyout">
-        <div class="focus-theme-picker">
-          ${['light', 'dark', 'forest'].map(t => `<button class="focus-theme-btn${focusPrefs.theme === t ? ' sel' : ''}" data-focus-theme="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}
-        </div>
-      </div>
+    <div class="focus-corner focus-corner-left${focusOpenPanel === 'sound' || focusOpenPanel === 'noise' ? ' open' : ''}">
+      ${focusOpenPanel === 'sound' ? `<div class="focus-flyout focus-sound-flyout focus-music-panel" id="focus-music-panel">${musicDropdownHtml()}</div>` : ''}
+      ${focusOpenPanel === 'noise' ? `<div class="focus-flyout focus-noise-flyout">
+        <div class="focus-noise-title">White noise</div>
+        <div class="focus-noise-sub">Rain, café, fireplace… coming soon.</div>
+      </div>` : ''}
       <div class="focus-corner-btn-row">
-        <button class="focus-icon-btn focus-corner-btn" id="focus-fullscreen-btn" aria-label="Fullscreen">${document.fullscreenElement ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN_ENTER}</button>
-        <button class="focus-icon-btn focus-corner-btn" id="focus-theme-toggle" aria-label="Theme">${ICON_PALETTE}</button>
+        <button class="focus-icon-btn focus-corner-btn${focusOpenPanel === 'noise' ? ' sel' : ''}" id="focus-noise-toggle" aria-label="White noise" title="White noise">${ICON_CLOUD_RAIN}</button>
+        <button class="focus-icon-btn focus-corner-btn${focusOpenPanel === 'sound' ? ' sel' : ''}" id="focus-sound-toggle" aria-label="Music" title="Music">${ICON_MUSIC_NOTE}</button>
+        <button class="focus-icon-btn focus-corner-btn${focusOpenPanel === 'scene' ? ' sel' : ''}" id="focus-scene-toggle" aria-label="Background" title="Background">${ICON_IMAGE}</button>
       </div>
+    </div>
+    <div class="focus-corner focus-corner-right">
+      <button class="focus-icon-btn focus-corner-btn" id="focus-fullscreen-btn" aria-label="Fullscreen" title="Fullscreen">${document.fullscreenElement ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN_ENTER}</button>
+    </div>
+    ${focusOpenPanel === 'scene' ? `<div class="focus-scene-backdrop">
+      <div class="focus-scene-modal" role="dialog" aria-label="Set your focus scene">
+        <div class="focus-scene-head"><div class="focus-scene-title">Set your focus scene</div><button class="focus-scene-close" id="focus-scene-close" aria-label="Close">&#x2715;</button></div>
+        <div class="focus-scene-tabs">
+          <button class="focus-scene-tab${focusSceneTab === 'background' ? ' on' : ''}" data-focus-scene-tab="background">${ICON_IMAGE} Background</button>
+          <button class="focus-scene-tab${focusSceneTab === 'weather' ? ' on' : ''}" data-focus-scene-tab="weather">${ICON_CLOUD_RAIN} Weather</button>
+        </div>
+        ${focusSceneTab === 'background' ? `<div class="focus-scene-grid">
+          ${FOCUS_SCENES.map(sc => `<button class="focus-scene-item${focusPrefs.theme === sc.theme ? ' sel' : ''}" data-focus-theme="${sc.theme}">
+            <img src="${sc.img}" alt="" loading="lazy"><span>${sc.name}</span></button>`).join('')}
+        </div>` : `<div class="focus-weather-grid">
+          ${FOCUS_WEATHERS.map(wx => `<button class="focus-weather-item${focusWeather() === wx.id ? ' sel' : ''}" data-focus-weather="${wx.id}">
+            <span class="focus-weather-ic">${FOCUS_WEATHER_ICONS[wx.id]}</span><span>${wx.name}</span></button>`).join('')}
+        </div>`}
+      </div>
+    </div>` : ''}
     </div>`;
+  attachFocusVideo(el);
+  attachFocusSnow(el);
   el.querySelector('#focus-fullscreen-btn').addEventListener('click', toggleFocusFullscreen);
   el.querySelector('#focus-start-btn')?.addEventListener('click', () => startFocusTimer(focusStagedMinutes));
   el.querySelector('#focus-pause-btn')?.addEventListener('click', pauseFocusTimer);
   el.querySelector('#focus-resume-btn')?.addEventListener('click', resumeFocusTimer);
   el.querySelector('#focus-reset-btn')?.addEventListener('click', resetFocusTimer);
   el.querySelector('#focus-sound-toggle').addEventListener('click', () => toggleFocusPanel('sound'));
-  el.querySelector('#focus-theme-toggle').addEventListener('click', () => toggleFocusPanel('theme'));
+  bindMusicPanel(el.querySelector('#focus-music-panel'));   // same player as the topbar panel (2026-10-14)
+  el.querySelector('#focus-noise-toggle').addEventListener('click', () => toggleFocusPanel('noise'));
+  el.querySelector('#focus-scene-toggle').addEventListener('click', () => toggleFocusPanel('scene'));
+  el.querySelector('#focus-scene-close')?.addEventListener('click', () => toggleFocusPanel('scene'));
+  el.querySelectorAll('[data-focus-scene-tab]').forEach(btn => btn.addEventListener('click', () => { focusSceneTab = btn.dataset.focusSceneTab; renderFocusOverlay(); }));
+  el.querySelectorAll('[data-focus-weather]').forEach(btn => btn.addEventListener('click', () => setFocusWeather(btn.dataset.focusWeather)));
+  el.querySelectorAll('[data-focus-preset]').forEach(btn => btn.addEventListener('click', () => setFocusPreset(Number(btn.dataset.focusPreset))));
   el.querySelectorAll('[data-focus-tab]').forEach(btn => btn.addEventListener('click', () => setFocusSoundTab(btn.dataset.focusTab)));
   el.querySelectorAll('[data-focus-station-idx]').forEach(btn => btn.addEventListener('click', () => {
     selectStation(Number(btn.dataset.focusStationIdx)); // js/core.js — same picker the topbar music widget uses
@@ -1439,13 +1595,14 @@ function openFocusOverlay() {
   focusOpenPanel = null;
   focusTagPanelOpen = false;
   focusTagAdding = false;
-  renderFocusOverlay();
   ensureFocusOverlay().classList.add('open');
+  renderFocusOverlay();   // after .open so the snow loop (theme-dark) starts
   ensureFocusTicker();
   document.body.style.overflow = 'hidden'; // fullscreen overlay — don't let the page behind it scroll/bounce
 }
 function closeFocusOverlay() {
   focusOverlayEl?.classList.remove('open');
+  focusVideoEl?.pause();
   document.body.style.overflow = '';
 }
 

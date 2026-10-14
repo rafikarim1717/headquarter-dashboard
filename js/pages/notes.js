@@ -80,7 +80,8 @@ function getFilteredNotes() {
 
 function renderNotesList() {
   const notes  = getFilteredNotes();
-  const isGrid = state.notesDisplay === 'grid';
+  // grid/list toggle removed 2026-10-14 — Notes is always the list view now
+  const isGrid = false;
   const sortLabels   = { newest: 'Newest', oldest: 'Oldest', az: 'A–Z' };
   const filterLabels = { all: 'All', today: 'Today', week: 'This week' };
   return `
@@ -109,21 +110,23 @@ function renderNotesList() {
             <button data-filter="week"  class="${state.notesFilter==='week'  ?'sel':''}">This week</button>
           </div>
         </div>
-        <button class="notes-ctrl-btn ${isGrid?'active':''}" id="notes-view-btn" title="Toggle layout">
-          ${isGrid ? '▦' : '☰'}
-        </button>
+        <!-- layout toggle removed 2026-10-14 (always list):
+        <button class="notes-ctrl-btn" id="notes-view-btn" title="Toggle layout">☰</button> -->
       </div>
     </div>
     <div class="${isGrid ? 'notes-grid' : 'notes-list-view'}">
       ${notes.map(n => {
         const preview = stripHtml(n.content);
-        const previewText = preview.length > 100 ? preview.slice(0, 100) + '...' : preview;
+        const previewText = preview.length > 240 ? preview.slice(0, 240) + '…' : preview;
+        // card layout (2026-10-14): title + time on one row, 2-line preview under it
         return `
         <div class="note-card" data-open-note="${n.id}">
-          <button class="note-card-del" data-del-note-card="${n.id}" aria-label="Delete note" title="Delete">${ICON_TRASH}</button>
-          <div class="note-card-title ${n.title?'':'empty'}">${n.title ? escapeHtml(n.title) : 'Untitled'}</div>
-          <div class="note-card-preview">${escapeHtml(previewText)}</div>
-          <div class="note-card-date" data-note-ts="${n.id}">${relativeTime(n.updated_at || n.created_at)}</div>
+          <div class="note-card-head">
+            <div class="note-card-title ${n.title?'':'empty'}">${n.title ? escapeHtml(n.title) : 'Untitled'}</div>
+            <div class="note-card-date" data-note-ts="${n.id}">${relativeTime(n.updated_at || n.created_at)}</div>
+            <button class="note-card-del" data-del-note-card="${n.id}" aria-label="Delete note" title="Delete">${ICON_TRASH}</button>
+          </div>
+          ${previewText ? `<div class="note-card-preview">${escapeHtml(previewText)}</div>` : ''}
         </div>`;
       }).join('') || `<div style="color:var(--text-faint);font-size:13px;padding:20px 0">No notes yet.</div>`}
     </div>
@@ -219,7 +222,15 @@ function renderNoteEditor() {
         </div>
       </div>
       <div class="tb-sep"></div>
-      <button class="tb-btn" id="tb-table-btn" title="Insert table">⊞</button>
+      <button class="tb-btn tb-icon-btn" id="tb-img-btn" title="Insert image (or paste / drop one)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></svg></button>
+      <input type="file" id="tb-img-input" accept="image/*" multiple hidden>
+      <div class="notes-ctrl-wrap tb-table-wrap">
+        <button class="tb-btn" id="tb-table-btn" data-dd-toggle title="Insert table">⊞</button>
+        <div class="notes-dropdown tb-table-dd" id="tb-table-dd">
+          <div class="tb-table-grid">${Array.from({ length: 64 }, (_, i) => `<span class="tb-table-cell" data-tc="${i % 8 + 1}" data-tr="${Math.floor(i / 8) + 1}"></span>`).join('')}</div>
+          <div class="tb-table-size" id="tb-table-size">Insert table</div>
+        </div>
+      </div>
     </div>
     <div class="note-content" id="note-content" contenteditable="true"
       data-placeholder="Start writing...">${n.content || ''}</div>
@@ -658,6 +669,7 @@ function bindNotesEvents() {
       n.title = noteTitleEl.value;
       const contentClone = noteContentEl.cloneNode(true);
       contentClone.querySelectorAll('.hd-toggle').forEach(t => t.remove());
+      contentClone.querySelectorAll('img[data-uploading]').forEach(t => t.remove());   // still uploading → not saved yet
       contentClone.querySelectorAll('.note-table-add-row').forEach(t => t.remove());
       contentClone.querySelectorAll('.table-toolbar').forEach(t => t.remove());
       contentClone.querySelectorAll('.delete-row-btn').forEach(t => t.remove());
@@ -965,8 +977,32 @@ function bindNotesEvents() {
   // editor: table insert button
   const tbTableBtn = main.querySelector('#tb-table-btn');
   if (tbTableBtn && noteContentEl) {
+    // Word-style size picker (2026-10-14): ⊞ opens an 8×8 grid, hover picks
+    // columns × rows (first row = header), click inserts.
+    const tableDd = main.querySelector('#tb-table-dd');
+    const tableSize = main.querySelector('#tb-table-size');
     tbTableBtn.addEventListener('mousedown', (e) => {
-      e.preventDefault();
+      e.preventDefault();   // keep the caret where it is in the note
+      tableDd.classList.toggle('open');
+    });
+    tableDd.addEventListener('mousedown', (e) => e.preventDefault());
+    tableDd.querySelectorAll('.tb-table-cell').forEach(c => {
+      c.addEventListener('mouseenter', () => {
+        const tc = +c.dataset.tc, tr = +c.dataset.tr;
+        tableDd.querySelectorAll('.tb-table-cell').forEach(x => x.classList.toggle('on', +x.dataset.tc <= tc && +x.dataset.tr <= tr));
+        tableSize.textContent = `${tc} × ${tr} table`;
+      });
+      c.addEventListener('click', (e) => {
+        e.stopPropagation();
+        tableDd.classList.remove('open');
+        insertNoteTable(+c.dataset.tc, +c.dataset.tr);
+      });
+    });
+    tableDd.querySelector('.tb-table-grid').addEventListener('mouseleave', () => {
+      tableDd.querySelectorAll('.tb-table-cell.on').forEach(x => x.classList.remove('on'));
+      tableSize.textContent = 'Insert table';
+    });
+    function insertNoteTable(cols, rows) {
       noteContentEl.focus();
       // If cursor is inside a table cell, move it after the table wrapper first —
       // otherwise execCommand inserts the new table nested inside the cell, causing
@@ -989,13 +1025,13 @@ function bindNotesEvents() {
         }
       }
       const html = buildNoteTableHTML(
-        ['Header 1', 'Header 2', 'Header 3'],
-        [['Cell', 'Cell', 'Cell'], ['Cell', 'Cell', 'Cell']]
+        Array.from({ length: cols }, (_, i) => `Header ${i + 1}`),
+        Array.from({ length: Math.max(rows - 1, 1) }, () => Array(cols).fill(''))
       );
       document.execCommand('insertHTML', false, html);
       initTableInteractions(noteContentEl, triggerNoteSave);
       triggerNoteSave();
-    });
+    }
   }
 
   // editor: Tab key navigation inside table cells + cell deletion protection
@@ -1031,6 +1067,92 @@ function bindNotesEvents() {
         newRow.cells[0].focus();
         triggerNoteSave();
       }
+    });
+  }
+
+  // editor: images (2026-10-14) — paste (Ctrl+V), drag & drop, or the 🖼 toolbar
+  // button. Each image is downscaled (max 1600px, WebP) and uploaded to the
+  // Supabase Storage bucket `note-images` under <user_id>/<uuid>.webp; the note
+  // only stores the public URL. While uploading, a local preview is shown with
+  // data-uploading (stripped from saves, see triggerNoteSave).
+  const NOTE_IMG_BUCKET = 'note-images';
+  const NOTE_IMG_MAX = 1600;
+  const shrinkImage = (file) => new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, NOTE_IMG_MAX / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => resolve(b || file), 'image/webp', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+  const insertNoteImages = async (files) => {
+    const imgs = [...files].filter(f => f && f.type && f.type.startsWith('image/'));
+    if (!imgs.length || !noteContentEl) return false;
+    if (!currentUser) { showToast('Sign in to add images', 'error'); return true; }
+    noteContentEl.focus();
+    for (const file of imgs) {
+      const tmpId = 'up-' + Math.random().toString(36).slice(2);
+      const preview = URL.createObjectURL(file);
+      document.execCommand('insertHTML', false, `<img src="${preview}" class="note-img" data-uploading="${tmpId}" alt=""><br>`);
+      const el = noteContentEl.querySelector(`img[data-uploading="${tmpId}"]`);
+      try {
+        const blob = await shrinkImage(file);
+        const ext = blob.type === 'image/webp' ? 'webp' : (file.name.split('.').pop() || 'png');
+        const path = `${currentUser.id}/${crypto.randomUUID ? crypto.randomUUID() : uid()}.${ext}`;
+        const { error } = await sb.storage.from(NOTE_IMG_BUCKET).upload(path, blob, { contentType: blob.type || file.type, upsert: false });
+        if (error) throw error;
+        const { data } = sb.storage.from(NOTE_IMG_BUCKET).getPublicUrl(path);
+        if (el) { el.src = data.publicUrl; el.removeAttribute('data-uploading'); }
+        triggerNoteSave();
+      } catch (err) {
+        console.error(err);
+        el?.remove();
+        showToast('Image upload failed — is the note-images bucket set up?', 'error');
+      } finally {
+        URL.revokeObjectURL(preview);
+      }
+    }
+    return true;
+  };
+  if (noteContentEl) {
+    // registered before the table paste handler so an image paste stops there
+    noteContentEl.addEventListener('paste', (e) => {
+      const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+      if (!files.length) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      insertNoteImages(files);
+    });
+    noteContentEl.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.items || [])].some(i => i.type.startsWith('image/'))) e.preventDefault(); });
+    noteContentEl.addEventListener('drop', (e) => {
+      const files = [...(e.dataTransfer?.files || [])].filter(f => f.type.startsWith('image/'));
+      if (!files.length) return;
+      e.preventDefault();
+      const pos = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+      if (pos) { const sel = getSelection(); sel.removeAllRanges(); sel.addRange(pos); }
+      insertNoteImages(files);
+    });
+  }
+  const tbImgBtn = main.querySelector('#tb-img-btn');
+  const tbImgInput = main.querySelector('#tb-img-input');
+  if (tbImgBtn && tbImgInput) {
+    let savedRange = null;
+    tbImgBtn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const sel = getSelection();
+      savedRange = sel.rangeCount && noteContentEl.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
+      tbImgInput.click();
+    });
+    tbImgInput.addEventListener('change', () => {
+      noteContentEl.focus();
+      if (savedRange) { const sel = getSelection(); sel.removeAllRanges(); sel.addRange(savedRange); }
+      insertNoteImages(tbImgInput.files);
+      tbImgInput.value = '';
     });
   }
 
