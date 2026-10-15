@@ -2782,3 +2782,29 @@
   .focus-overlay.theme-lofi .focus-bg { background: #120d1c url('../assets/focus-bg-lofi-poster.webp') center / cover no-repeat; overflow: hidden; }
   .focus-bg-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
   .focus-overlay.theme-lofi .focus-bg::after { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.2); display: block; }
+
+  /* music pill v2 (2026-10-15): no border / no fill — the white circle anchors it; more air.
+     A faint background only on hover so it still reads as clickable. */
+  .music-pill.active { background: transparent; border-color: transparent; padding: 4px 14px 4px 4px; gap: 14px; transition: background var(--t-fast); }
+  .music-pill.active:hover { background: rgba(255,255,255,0.05); }
+  .music-pill.active .music-btn { width: 34px; height: 34px; }
+  .music-pill.active .music-pill-text { gap: 4px; }
+  .music-pill #music-label { font-size: 13px; max-width: 170px; }
+  .music-time { font-size: 11.5px; letter-spacing: 0.02em; }
+  .topbar .right { gap: 12px; }
+  /* topbar: music circle and 9-dot button share one size (2026-10-15) */
+  .music-pill.active .music-btn, .music-pill .music-btn, .apps-btn { width: 32px; height: 32px; }
+  .apps-btn { background: #262626; border: none; color: var(--text-dim); }
+  .apps-btn:hover, .apps-btn[aria-expanded="true"] { background: #303030; color: var(--text); }
+  .apps-btn svg { width: 15px; height: 15px; }
+  /* topbar row (2026-10-15, v2): player pill and 9-dot menu button are the same 40px tall,
+     both with the same subtle pill/circle surface, so the row reads as two equal controls */
+  .music-pill.active { height: 40px; box-sizing: border-box; padding: 4px 16px 4px 4px; background: #1c1c1c; border-radius: 999px; }
+  .music-pill.active:hover { background: #242424; }
+  .apps-btn { width: 40px !important; height: 40px !important; background: #1c1c1c; }
+  .apps-btn:hover, .apps-btn[aria-expanded="true"] { background: #242424; }
+  .apps-btn svg { width: 16px; height: 16px; }
+  .music-pill:not(.active) .music-btn { width: 40px; height: 40px; background: #1c1c1c; }
+  /* idle ▶ and 9-dot: one colour pair (2026-10-15) */
+  .music-pill:not(.active) .music-btn, .apps-btn { background: #1c1c1c !important; border: none !important; color: var(--text-dim) !important; }
+  .music-pill:not(.active) .music-btn:hover, .apps-btn:hover, .apps-btn[aria-expanded="true"] { background: #242424 !important; color: var(--text) !important; }
