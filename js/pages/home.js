@@ -6,15 +6,14 @@
 
 /* =========================================================
    HOME ACTIVITY HEATMAP (GitHub-style yearly contribution grid)
-   Work output only (2026-10-16): 1 completed project task = 1 activity,
-   whether it was checked on the Projects page, Home, or inside Focus mode.
-   Commitments and schedule blocks are no longer counted here — Commitments
-   has its own ring / compliance / history.
+   (2026-10-16): 1 completed project task (Projects page, Home, or Focus mode)
+   or 1 schedule block marked done = 1 activity. Commitments are not counted
+   here — they have their own ring / compliance / history.
 ========================================================= */
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-// One entry per completed project task + per "checked" goal_logs row +
-// per schedule block marked done (schedule_events.completed_at).
+// One entry per completed project task + per schedule block marked done
+// (schedule_events.completed_at).
 // ts is used only for the activity feed's ordering/relative-time display;
 // iso (calendar day) is what the heatmap buckets on.
 function buildHomeActivityEvents() {
@@ -26,9 +25,15 @@ function buildHomeActivityEvents() {
       events.push({ ts: d.getTime(), iso: isoLocal(d), title: t.text, sub: p.name, kind: 'project' });
     });
   });
-  // Commitments and schedule blocks were removed from Activity on 2026-10-16: Commitments
-  // has its own ring/compliance/history, so Activity = work output only (project tasks,
-  // including the ones checked off inside Focus mode).
+  Object.values(state.schedule || {}).forEach(list => {
+    (list || []).forEach(ev => {
+      if (!ev.completed_at) return;
+      const d = new Date(ev.completed_at);
+      events.push({ ts: d.getTime(), iso: isoLocal(d), title: ev.title, sub: 'Schedule', kind: 'schedule' });
+    });
+  });
+  // Commitments were removed from Activity on 2026-10-16: they have their own
+  // ring/compliance/history, so Activity = project tasks (incl. Focus mode) + done schedule blocks.
   return events;
 }
 
