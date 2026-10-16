@@ -6,14 +6,10 @@
 
 /* =========================================================
    HOME ACTIVITY HEATMAP (GitHub-style yearly contribution grid)
-   Combines project tasks completed + commitments checked + schedule
-   blocks checked done into a single per-day "activity" count, plus a
-   chronological feed of the underlying events. See
-   buildHomeActivityEvents() for the exact counting rule: 1 completed
-   project task = 1 activity, 1 commitment marked done that day (checkbox
-   or counter reaching its target) = 1 activity — regardless of
-   target_count, so a 3x/day counter still counts once — and 1 schedule
-   block checked done = 1 activity.
+   Work output only (2026-10-16): 1 completed project task = 1 activity,
+   whether it was checked on the Projects page, Home, or inside Focus mode.
+   Commitments and schedule blocks are no longer counted here — Commitments
+   has its own ring / compliance / history.
 ========================================================= */
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -30,21 +26,9 @@ function buildHomeActivityEvents() {
       events.push({ ts: d.getTime(), iso: isoLocal(d), title: t.text, sub: p.name, kind: 'project' });
     });
   });
-  Object.keys(state.schedule || {}).forEach(day => {
-    (state.schedule[day] || []).forEach(s => {
-      if (!s.completed_at) return;
-      const d = new Date(s.completed_at);
-      events.push({ ts: d.getTime(), iso: isoLocal(d), title: s.title, sub: 'Schedule', kind: 'schedule' });
-    });
-  });
-  (state.goals.items || []).forEach(g => {
-    state.goalLogs.filter(l => l.goal_id === g.id && l.checked).forEach(l => {
-      // Logs written before goal_logs.completed_at existed have no timestamp —
-      // fall back to midday on their date so they still show up in the feed.
-      const ts = l.completed_at ? new Date(l.completed_at).getTime() : new Date(l.date + 'T12:00:00').getTime();
-      events.push({ ts, iso: l.date, title: g.text, sub: g.category || 'General', kind: 'do' });
-    });
-  });
+  // Commitments and schedule blocks were removed from Activity on 2026-10-16: Commitments
+  // has its own ring/compliance/history, so Activity = work output only (project tasks,
+  // including the ones checked off inside Focus mode).
   return events;
 }
 

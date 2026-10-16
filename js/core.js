@@ -1156,7 +1156,10 @@ let focusPrefs = loadFocusPrefs();   // { theme: 'light'|'dark'|'forest' } — p
 let focusSoundTab = 'radio';         // not persisted — always reopens on Radio (guaranteed non-empty)
 let focusOpenPanel = null;           // null | 'sound' | 'theme' — which bottom-corner flyout is open
 let focusTags = loadFocusTags();     // string[] — persisted, grows as the user adds tags
-let focusSelectedTag = focusTimer?.tag || null; // what this session is for; restored from a running timer
+// What this session is for = a PROJECT id (2026-10-16 — the old free-text tags were replaced
+// by the user's projects so tasks finished in Focus are real project_tasks and count as Activity).
+let focusSelectedTag = focusTimer?.tag || (() => { try { return localStorage.getItem('hq.focusProject'); } catch (e) { return null; } })() || null;
+let focusTaskAdding = false;         // is the focus task panel showing its "new task" input
 let focusTagPanelOpen = false;       // is the "select a tag" dropdown open
 let focusTagAdding = false;          // is the dropdown showing its "new tag" text input
 let focusStagedMinutes = FOCUS_DEFAULT_MINUTES; // duration to start with, adjustable via +1/+5/+10 before Start
@@ -1447,30 +1450,69 @@ function toggleFocusTagPanel() {
   focusTagAdding = false;
   renderFocusOverlay();
 }
-function selectFocusTag(name) {
-  focusSelectedTag = name;
-  if (focusTimer) { focusTimer.tag = name; saveFocusTimer(); }
+function selectFocusTag(projectId) {
+  focusSelectedTag = projectId;
+  try { projectId ? localStorage.setItem('hq.focusProject', projectId) : localStorage.removeItem('hq.focusProject'); } catch (e) {}
+  if (focusTimer) { focusTimer.tag = projectId; saveFocusTimer(); }
   focusTagPanelOpen = false;
+  focusTaskAdding = false;
   renderFocusOverlay();
 }
-function startFocusTagAdd() {
-  focusTagAdding = true;
-  renderFocusOverlay();
-  setTimeout(() => focusOverlayEl?.querySelector('#focus-tag-input')?.focus(), 30);
+function focusProject() {
+  return (state.projects || []).find(p => p.id === focusSelectedTag) || null;
 }
-function submitFocusTagAdd(raw) {
-  const name = (raw || '').trim().slice(0, 30);
-  focusTagAdding = false;
-  if (!name) { renderFocusOverlay(); return; }
-  if (!focusTags.includes(name)) { focusTags.push(name); saveFocusTags(); }
-  selectFocusTag(name);
+function focusPickableProjects() {
+  return (state.projects || []).filter(p => p.status !== 'done' || p.id === focusSelectedTag);
+}
+// Same write as the Projects page toggle (js/pages/projects.js) — a task checked here
+// is an ordinary project task, so it lands in Home's Activity + the project's progress.
+function toggleFocusTask(taskId) {
+  const proj = focusProject();
+  const task = proj?.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  task.checked = !task.checked;
+  task.completed_at = task.checked ? new Date().toISOString() : null;
+  renderFocusOverlay();
+  render();
+  dbCall(() => sb.from('project_tasks').update({ checked: task.checked, completed_at: task.completed_at }).eq('id', taskId));
+}
+async function addFocusTask(raw) {
+  const text = (raw || '').trim();
+  const proj = focusProject();
+  if (!text || !proj) return;
+  const { data } = await dbCall(() => sb.from('project_tasks').insert({ user_id: currentUser.id, project_id: proj.id, text, description: null, checked: false }).select().single());
+  if (data) {
+    proj.tasks.push({ id: data.id, text, description: '', checked: false, completed_at: null });
+    focusTaskAdding = true;   // stay in add mode so several tasks can be typed in a row
+    renderFocusOverlay();
+    render();
+    setTimeout(() => focusOverlayEl?.querySelector('#focus-task-input')?.focus(), 30);
+  }
+}
+// open tasks + the ones finished today (so a checked task doesn't vanish mid-session)
+function focusTaskListHtml() {
+  const proj = focusProject();
+  if (!proj) return '';
+  const today = isoLocal(new Date());
+  const tasks = proj.tasks.filter(t => !t.checked || (t.completed_at && isoLocal(new Date(t.completed_at)) === today));
+  const rows = tasks.map(t => `
+    <button class="focus-task${t.checked ? ' done' : ''}" data-focus-task="${t.id}">
+      <span class="focus-task-box">${t.checked ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>' : ''}</span>
+      <span class="focus-task-text">${escapeHtml(t.text)}</span>
+    </button>`).join('');
+  const add = focusTaskAdding
+    ? `<input type="text" id="focus-task-input" class="focus-task-input" placeholder="New task, Enter to add" maxlength="200">`
+    : `<button class="focus-task-add" id="focus-task-add-btn">+ Add task</button>`;
+  return `<div class="focus-tasks">
+    ${rows ? `<div class="focus-task-list">${rows}</div>` : `<div class="focus-task-empty">No open tasks in ${escapeHtml(proj.name)}.</div>`}
+    ${add}
+  </div>`;
 }
 function focusTagDropdownHtml() {
-  const opts = focusTags.map(t => `<button class="focus-tag-opt${focusSelectedTag === t ? ' sel' : ''}" data-focus-tag-select="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('');
-  const addRow = focusTagAdding
-    ? `<input type="text" id="focus-tag-input" class="focus-tag-input" placeholder="Tag name" maxlength="30">`
-    : `<button class="focus-tag-add focus-tag-noclose" id="focus-tag-add-btn">+ Add tag</button>`;
-  return opts + addRow;
+  const projs = focusPickableProjects();
+  const opts = projs.map(p => `<button class="focus-tag-opt${focusSelectedTag === p.id ? ' sel' : ''}" data-focus-tag-select="${p.id}">${escapeHtml(p.name)}</button>`).join('');
+  const none = focusSelectedTag ? `<button class="focus-tag-opt focus-tag-clear" data-focus-tag-select="">No project</button>` : '';
+  return (opts || `<div class="focus-tag-empty">No active projects yet.</div>`) + none;
 }
 // idx is always an index into getAllStations() (built-ins first, then custom),
 // the same indexing selectStation()/ambientPlayer.stationIndex already use —
@@ -1503,7 +1545,7 @@ function renderFocusOverlay() {
     <div class="focus-content">
       <div class="focus-top">
         <div class="focus-tag-wrap">
-          <button class="focus-tag-btn focus-tag-noclose" id="focus-tag-toggle"><span>${escapeHtml(focusSelectedTag || 'Select a tag')}</span><svg class="focus-tag-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+          <button class="focus-tag-btn focus-tag-noclose" id="focus-tag-toggle"><span>${escapeHtml(focusProject()?.name || 'Select a project')}</span><svg class="focus-tag-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
           <div class="focus-tag-dropdown${focusTagPanelOpen ? ' open' : ''}">${focusTagDropdownHtml()}</div>
         </div>
         <div class="focus-presets" role="group" aria-label="Session length">
@@ -1525,6 +1567,7 @@ function renderFocusOverlay() {
                  <button class="focus-reset-btn" id="focus-reset-btn" aria-label="Reset">${ICON_UNDO}</button>`
           }
         </div>
+        ${focusTaskListHtml()}
       </div>
     </div>
     <div class="focus-corner focus-corner-left${focusOpenPanel === 'sound' || focusOpenPanel === 'noise' ? ' open' : ''}">
@@ -1584,17 +1627,23 @@ function renderFocusOverlay() {
   el.querySelectorAll('[data-focus-theme]').forEach(btn => btn.addEventListener('click', () => setFocusTheme(btn.dataset.focusTheme)));
   el.querySelectorAll('[data-focus-add-min]').forEach(btn => btn.addEventListener('click', () => addFocusMinutes(Number(btn.dataset.focusAddMin))));
   el.querySelector('#focus-tag-toggle').addEventListener('click', toggleFocusTagPanel);
-  el.querySelectorAll('[data-focus-tag-select]').forEach(btn => btn.addEventListener('click', () => selectFocusTag(btn.dataset.focusTagSelect)));
-  el.querySelector('#focus-tag-add-btn')?.addEventListener('click', startFocusTagAdd);
-  el.querySelector('#focus-tag-input')?.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') submitFocusTagAdd(this.value);
-    else if (e.key === 'Escape') { focusTagAdding = false; renderFocusOverlay(); }
+  el.querySelectorAll('[data-focus-tag-select]').forEach(btn => btn.addEventListener('click', () => selectFocusTag(btn.dataset.focusTagSelect || null)));
+  el.querySelectorAll('[data-focus-task]').forEach(btn => btn.addEventListener('click', () => toggleFocusTask(btn.dataset.focusTask)));
+  el.querySelector('#focus-task-add-btn')?.addEventListener('click', () => {
+    focusTaskAdding = true;
+    renderFocusOverlay();
+    setTimeout(() => focusOverlayEl?.querySelector('#focus-task-input')?.focus(), 30);
+  });
+  el.querySelector('#focus-task-input')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addFocusTask(this.value);
+    else if (e.key === 'Escape') { focusTaskAdding = false; renderFocusOverlay(); }
   });
 }
 function openFocusOverlay() {
   focusOpenPanel = null;
   focusTagPanelOpen = false;
   focusTagAdding = false;
+  focusTaskAdding = false;
   ensureFocusOverlay().classList.add('open');
   renderFocusOverlay();   // after .open so the snow loop (theme-dark) starts
   ensureFocusTicker();

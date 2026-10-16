@@ -2808,3 +2808,44 @@
   /* idle ▶ and 9-dot: one colour pair (2026-10-15) */
   .music-pill:not(.active) .music-btn, .apps-btn { background: #1c1c1c !important; border: none !important; color: var(--text-dim) !important; }
   .music-pill:not(.active) .music-btn:hover, .apps-btn:hover, .apps-btn[aria-expanded="true"] { background: #242424 !important; color: var(--text) !important; }
+
+  /* ============ FOCUS MODE — project picker + task list (2026-10-16) ============
+     The tag pill now picks a project; its open tasks sit under the Start button.
+     Checking one here is a normal project_tasks write → counts in Home's Activity. */
+  .focus-tag-empty { padding: 8px 12px; font-size: 13px; color: rgba(255,255,255,0.55); }
+  .focus-tag-clear { color: rgba(255,255,255,0.55) !important; border-top: 1px solid rgba(255,255,255,0.08); border-radius: 0 0 8px 8px; margin-top: 2px; }
+  .focus-tasks {
+    width: min(380px, 100%); margin-top: 28px; padding: 8px;
+    background: rgba(10,10,20,0.45); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); text-align: left;
+  }
+  .focus-task-list { max-height: 188px; overflow-y: auto; scrollbar-width: none; }
+  .focus-task-list::-webkit-scrollbar { display: none; }
+  .focus-task {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
+    background: none; border: none; border-radius: 8px; cursor: pointer;
+    color: #ededed; font: inherit; font-size: 14px; text-align: left;
+  }
+  .focus-task:hover { background: rgba(255,255,255,0.08); }
+  .focus-task-box {
+    flex: none; width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid rgba(255,255,255,0.5);
+    display: inline-flex; align-items: center; justify-content: center; color: #111;
+  }
+  .focus-task.done .focus-task-box { background: #ffffff; border-color: #ffffff; }
+  .focus-task.done .focus-task-text { color: rgba(255,255,255,0.45); text-decoration: line-through; }
+  .focus-task-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .focus-task-empty { padding: 8px 10px; font-size: 13px; color: rgba(255,255,255,0.55); }
+  .focus-task-add {
+    display: block; width: 100%; padding: 8px 10px; background: none; border: none; border-radius: 8px;
+    color: rgba(255,255,255,0.7); font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
+  }
+  .focus-task-add:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .focus-task-input {
+    width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; font: inherit; font-size: 14px;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); color: #fff; outline: none;
+  }
+  .focus-task-input::placeholder { color: rgba(255,255,255,0.4); }
+  .focus-overlay.theme-light .focus-tasks { background: rgba(255,255,255,0.85); border-color: rgba(42,37,32,0.12); }
+  .focus-overlay.theme-light .focus-task, .focus-overlay.theme-light .focus-task-input { color: #2a2520; }
+  .focus-overlay.theme-light .focus-task-box { border-color: rgba(42,37,32,0.45); }
+  @media (max-width: 560px) { .focus-tasks { margin-top: 22px; } }
