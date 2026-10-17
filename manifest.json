@@ -16,5 +16,19 @@
       "sizes": "512x512",
       "type": "image/png"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Identify song",
+      "short_name": "Identify",
+      "description": "Listen and find out what song is playing",
+      "url": "/?listen=1",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

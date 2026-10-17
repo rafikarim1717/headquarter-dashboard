@@ -817,3 +817,43 @@ DO $$ BEGIN
     USING (bucket_id = 'note-images' AND (storage.foldername(name))[1] = auth.uid()::text);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+-- ============================================================
+-- 25. custom_stations.categories — playlist categories (2026-10-17)
+--     A YouTube station can be in several categories (e.g. Chill + Sleep);
+--     each category becomes a tab/queue in the music panel.
+-- ============================================================
+ALTER TABLE custom_stations ADD COLUMN IF NOT EXISTS categories text[] NOT NULL DEFAULT '{}';
+
+-- ============================================================
+-- 26. discovered_songs — "Identify song" captures (2026-10-17)
+--     Every song HQ recognises (AudD via the identify-song Edge Function)
+--     lands here first; "Add to stations" later links it to a custom_station.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS discovered_songs (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title       text NOT NULL DEFAULT '',
+  artist      text NOT NULL DEFAULT '',
+  album       text,
+  cover_url   text,
+  song_link   text,
+  spotify_url text,
+  apple_url   text,
+  station_id  uuid REFERENCES custom_stations(id) ON DELETE SET NULL,
+  found_at    timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE discovered_songs ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "discovered_songs_select" ON discovered_songs FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "discovered_songs_insert" ON discovered_songs FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "discovered_songs_update" ON discovered_songs FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "discovered_songs_delete" ON discovered_songs FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE INDEX IF NOT EXISTS discovered_songs_user_id ON discovered_songs(user_id, found_at DESC);

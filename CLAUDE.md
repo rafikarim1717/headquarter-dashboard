@@ -2,6 +2,11 @@
 
 > Last audited against the code on 2026-09-25. Companion docs: `ERD.md` (tables/columns/relations), `IA.md` (pages, navigation, components), `README.md` (setup/deploy).
 
+## Working rules for Claude (set by Rafi, 2026-10-17)
+- **Ask before you code or execute.** Discussing, proposing and showing mockups is fine; before editing files, running commands that change things, committing, or touching data/DB, describe what you're about to do and wait for an explicit go.
+
+---
+
 ## Project Overview
 
 **Headquarter (HQ Dashboard)** is a personal life + finance management Progressive Web App (PWA). It gives a single user a unified dashboard to manage their daily schedule, **commitments** (daily habits — yes/no, counted, or timed — with streaks and a compliance history), **projects** (objective → small tasks), a Today's-focus list, freeform rich-text notes, income, spending, and debts — plus a fullscreen Pomodoro-style **Focus mode** opened from a floating quick-action button. The app is dark-mode, mobile-first, and fully backed by Supabase with Google OAuth and email/password authentication.
@@ -390,6 +395,18 @@ Two playback engines behind one station picker, always visible in the topbar (ri
 **Volume** (2026-09-27, `musicVolumeHtml()`/`setMusicVolume()`/`toggleMusicMute()`/`syncMusicVolumeUI()`/`bindMusicVolume()`): a speaker (mute) button + slider (0–100) + value, at the top of `#music-dropdown` and at the bottom of Focus mode's sound flyout. One level drives both engines (`<audio>.volume = v/100`, `ytPlayer.setVolume(v)`) and is applied to the playing station live and to every new one. Persisted per device in `localStorage['hq.musicVolume']` as `{ level, muted }` (default 40, the old hardcoded level). Unmuting when the slider is at 0 restores 40. Every rendered slider is updated in place, no `render()`.
 
 ---
+
+- **End of a YouTube video (2026-10-17):** `onStateChange` handles `YT.PlayerState.ENDED` → `playNextYoutubeStation()` plays the next YouTube station below it in the current queue (wraps to the first; built-in radios are skipped since they're endless streams). With a single YouTube station it loops (`seekTo(0)`). Previously ENDED was unhandled, so the eq bars kept animating and the time froze 1s before the end.
+- **Categories / playlists (2026-10-17):** `custom_stations.categories text[]` (schema_fix.sql section 25 — **run it on the live DB**). Each category is a tab after All / Radio / My stations (`musicCategories()`, `stationInTab()`); tab switch re-renders the panel (`refreshMusicPanel()`). The tab a station is picked from becomes `musicQueue`; prev/next (`stepStation()`) and end-of-video auto-advance (`playNextYoutubeStation()`) stay inside it. Manage stations modal rows are **collapsed by default** (thumb · name · category pills · chevron; `stationsExpanded` Set, new stations open expanded) — click a row to edit it. Categories are edited there as toggle chips per station + a `+ New category` input + an **Add** button (committed on Add, Enter, **and on blur/Done** — `commitCatInput()`; a success toast "Saved — X added to Y" fires only after the DB write resolves, the new chip flashes, and a failed write rolls back with an error toast; matches existing names case-insensitively); saved immediately (`setCustomStationCategories()`; a missing column shows a "run schema_fix.sql section 25" toast).
+- **Categories section (top of Manage stations, 2026-10-17):** manages only the category LIST — create (`createStationCategory()`), rename (`renameStationCategory()`; renaming onto an existing name merges) and delete (`rewriteStationCategory(old, null)`; inline confirm, songs stay). Rename/delete rewrite `categories` on every affected station row and roll back on failure. A new category with no songs yet is kept in `localStorage['hq.pendingStationCats']` until a song uses it (`allStationCategories()` = DB categories + pending). Putting songs in/out of a category still happens on each station's chips.
+
+
+## Identify song (`js/identify.js`, added 2026-10-17)
+Shazam-style capture. Entry points: topbar 🎤 (`#identify-btn`), the **Identify** tile in the 9-dot menu, and the PWA app shortcut in `manifest.json` (`/?listen=1` → `maybeAutoIdentify()` after login, Android only — iOS PWAs don't support shortcuts).
+- **Listening:** `startIdentify()` records with `MediaRecorder` (1s timeslices) and sends the cumulative clip at 5s / 10s / 14s (`IDENTIFY_CHECKPOINTS`) to the **`identify-song`** Edge Function, stopping at the first match. Mic needs HTTPS (deployed site) or localhost.
+- **Match:** auto-saved to **`discovered_songs`** (schema_fix.sql section 26 — run it), deduped by title+artist (a repeat just bumps `found_at`). Result card: cover, title, artist, "Add to stations", Spotify link.
+- **Discovered tab** in the music panel lists them; `+ Add` opens the YouTube picker (`openYoutubePicker()`), which calls the **`youtube-search`** Edge Function, lets you pick 1 of 5 videos + categories, inserts a `custom_stations` row and links it via `discovered_songs.station_id`.
+- **Edge Functions** live in `supabase/functions/` (Deno). Secrets: `AUDD_TOKEN` (audd.io) and `YOUTUBE_KEY` (Google Cloud project `headquarter-dashboard`, key restricted to YouTube Data API v3, application restriction None — it's called server-side). Never put either key in client JS. The real values are kept locally in **`supabase/.env`** (gitignored — not in the repo). Deploy: `npx supabase secrets set --env-file supabase/.env --project-ref ffleqouktwanayuidyaf` then `supabase functions deploy identify-song --project-ref ffleqouktwanayuidyaf` and the same for `youtube-search`.
 
 ## Focus mode & quick-action FAB (`js/core.js`, added 2026-09-24)
 

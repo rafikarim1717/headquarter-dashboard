@@ -130,7 +130,7 @@ async function loadFromSupabase(userId) {
 
   // Ambient music widget's custom YouTube stations — per-user via Supabase now,
   // rather than the old localStorage('hq.customStations') (device-only).
-  window.__HQ_TWEAKS.customStations = (customStationsRes.data || []).map(s => ({ id: s.id, name: s.name || '', url: s.url || '' }));
+  window.__HQ_TWEAKS.customStations = (customStationsRes.data || []).map(s => ({ id: s.id, name: s.name || '', url: s.url || '', categories: Array.isArray(s.categories) ? s.categories : [] }));
 }
 
 function compute7DayLog(logs) {
@@ -274,6 +274,8 @@ async function handleSession(session) {
   // syncTweaksUI();   // Tweaks panel retired 2026-09-29 (see js/core.js)
   render();
   initGlobalBindings();
+  loadDiscoveredSongs();   // js/identify.js — Discovered tab in the music panel
+  maybeAutoIdentify();     // /?listen=1 (PWA shortcut "Identify song")
 
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();

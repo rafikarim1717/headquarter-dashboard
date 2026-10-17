@@ -155,6 +155,7 @@ function createYtPlayer(videoId) {
       onStateChange: (e) => {
         if (e.data === YT.PlayerState.PLAYING)  { ambientPlayer.isPlaying = true; ambientPlayer.paused = false; updateMusicBtn(true); }
         if (e.data === YT.PlayerState.PAUSED)   { ambientPlayer.isPlaying = false; updateMusicBtn(false); }
+        if (e.data === YT.PlayerState.ENDED)    playNextYoutubeStation();
       },
       onError: () => {
         showToast('That YouTube link can\'t be played (embedding may be disabled)', 'error');
@@ -164,6 +165,22 @@ function createYtPlayer(videoId) {
       }
     }
   });
+}
+
+// A YouTube video finished (2026-10-17): auto-advance to the next YouTube station
+// below it in the current queue (the tab it was picked from; wraps to the first). With only one YouTube station it
+// just loops. Built-in radios are endless streams, so they're skipped. Before this,
+// ENDED wasn't handled — the eq bars kept animating and the time froze at 0:01 left.
+function playNextYoutubeStation() {
+  const all = getAllStations();
+  let q = queueIndices(musicQueue).filter(i => all[i].kind === 'youtube');
+  if (!q.length) q = queueIndices('mine');
+  if (!q.length) return;
+  const pos = q.indexOf(ambientPlayer.stationIndex);
+  const nextIdx = q[(pos + 1) % q.length];
+  if (nextIdx === ambientPlayer.stationIndex) { ytPlayer.seekTo(0, true); ytPlayer.playVideo(); return; }
+  ambientPlayer.paused = false;
+  selectStation(nextIdx);
 }
 
 // Extracts the 11-char video id from watch/live/embed/shorts/youtu.be links.
@@ -176,12 +193,46 @@ function extractYouTubeId(url) {
 function getCustomStations() {
   return (window.__HQ_TWEAKS.customStations || [])
     .filter(s => s && s.name && s.name.trim() && s.url && s.url.trim())
-    .map(s => ({ kind: 'youtube', name: s.name.trim(), videoId: extractYouTubeId(s.url.trim()) }))
+    .map(s => ({ kind: 'youtube', name: s.name.trim(), videoId: extractYouTubeId(s.url.trim()), categories: s.categories || [] }))
     .filter(s => s.videoId);
 }
 
 function getAllStations() {
   return [...AMBIENT_STREAMS, ...getCustomStations()];
+}
+
+/* ---- Station categories = playlists (2026-10-17) ----
+   A YouTube station can sit in any number of categories (custom_stations.categories
+   text[], schema_fix.sql section 25), e.g. Chill + Sleep. Each category gets its own
+   tab in the music panel next to All / Radio / My stations. Whichever tab a station
+   was picked from becomes the QUEUE: prev/next and auto-advance at the end of a
+   video stay inside it. */
+let musicQueue = 'all';     // tab key the current station was started from
+function musicCategories() {
+  const set = new Set();
+  (window.__HQ_TWEAKS.customStations || []).forEach(s => (s.categories || []).forEach(c => set.add(c)));
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+function stationInTab(st, tab) {
+  if (tab === 'all') return true;
+  if (tab === 'radio') return st.kind !== 'youtube';
+  if (tab === 'mine') return st.kind === 'youtube';
+  if (tab.startsWith('cat:')) return (st.categories || []).includes(tab.slice(4));
+  if (tab === 'discovered') return st.kind === 'youtube';   // queue fallback when playing from Discovered
+  return true;
+}
+function queueIndices(tab) {
+  return getAllStations().map((st, i) => [st, i]).filter(([st]) => stationInTab(st, tab)).map(([, i]) => i);
+}
+// step = +1 / -1 inside the current queue (falls back to All if the queue is empty)
+function stepStation(step) {
+  let q = queueIndices(musicQueue);
+  if (!q.length) { musicQueue = 'all'; q = queueIndices('all'); }
+  if (!q.length) return;
+  const pos = q.indexOf(ambientPlayer.stationIndex);
+  const next = pos === -1 ? q[step > 0 ? 0 : q.length - 1] : q[(pos + step + q.length) % q.length];
+  ambientPlayer.paused = false;
+  selectStation(next);
 }
 
 function updateMusicBtn(playing) {
@@ -396,7 +447,7 @@ function bindMusicVolume(root) {
    station / play-state changes. ---- */
 const YT_DURATIONS_KEY = 'hq.ytDurations';
 let ytDurations = (() => { try { return JSON.parse(localStorage.getItem(YT_DURATIONS_KEY)) || {}; } catch (e) { return {}; } })();
-let musicPanelTab = 'all';   // 'all' | 'radio' | 'mine' — remembered for the session
+let musicPanelTab = 'all';   // 'all' | 'radio' | 'mine' | 'cat:<name>' — remembered for the session
 
 function fmtDur(sec) {
   sec = Math.max(0, Math.floor(sec || 0));
@@ -436,7 +487,7 @@ function musicDropdownHtml() {
       ${stationThumbHtml(cur, 64)}
       <div class="mp-now-main">
         <div class="mp-now-title" title="${escapeHtml(cur.name)}">${escapeHtml(cur.name)}</div>
-        <div class="mp-now-sub">${cur.kind === 'youtube' ? 'My stations · YouTube' : 'Radio'}${ui === 'paused' ? ' · Paused' : ''}</div>
+        <div class="mp-now-sub">${musicQueue.startsWith('cat:') ? escapeHtml(musicQueue.slice(4)) : cur.kind === 'youtube' ? 'My stations' : 'Radio'}${cur.kind === 'youtube' ? ' · YouTube' : ''}${ui === 'paused' ? ' · Paused' : ''}</div>
         ${cur.kind === 'youtube'
           ? `<div class="mp-bar" data-mp-seek title="Seek"><i data-mp-fill style="width:${pct}%"></i></div>
              <div class="mp-times"><span data-mp-cur>${p ? fmtDur(p.cur) : '0:00'}</span><span data-mp-dur>${p ? fmtDur(p.dur) : (ytDurations[cur.videoId] ? fmtDur(ytDurations[cur.videoId]) : '—')}</span></div>`
@@ -465,11 +516,11 @@ function musicDropdownHtml() {
     </div>
     ${musicVolumeHtml()}
     <div class="mp-tabs">
-      ${[['all', 'All'], ['radio', 'Radio'], ['mine', 'My stations']].map(([k, l]) => `<button class="mp-tab${musicPanelTab === k ? ' on' : ''}" data-mp-tab="${k}">${l}</button>`).join('')}
+      ${[['all', 'All'], ['radio', 'Radio'], ['mine', 'My stations'], ['discovered', 'Discovered'], ...musicCategories().map(c => ['cat:' + c, c])].map(([k, l]) => `<button class="mp-tab${musicPanelTab === k ? ' on' : ''}" data-mp-tab="${escapeHtml(k)}">${escapeHtml(l)}</button>`).join('')}
     </div>
-    <div class="mp-list" data-tab="${musicPanelTab}">
-      ${all.map(row).join('')}
-      ${all.length === builtN && musicPanelTab === 'mine' ? '<div class="mp-empty">No YouTube stations yet.</div>' : ''}
+    <div class="mp-list">
+      ${musicPanelTab === 'discovered' && typeof discoveredListHtml === 'function' ? discoveredListHtml() : all.map((s, i) => stationInTab(s, musicPanelTab) ? row(s, i) : '').join('')}
+      ${musicPanelTab !== 'discovered' && !all.some(s => stationInTab(s, musicPanelTab)) ? `<div class="mp-empty">${musicPanelTab.startsWith('cat:') ? 'Nothing in this category yet.' : 'No YouTube stations yet.'}</div>` : ''}
     </div>
     <button class="mp-manage" data-manage-stations>${all.length > builtN ? 'Manage stations' : '+ Add a YouTube station'}</button>
   `;
@@ -484,23 +535,18 @@ function bindMusicPanel(dd) {
     dd.addEventListener('click', e => e.stopPropagation());
     dd._mpRootBound = true;
   }
-  dd.querySelectorAll('[data-station-idx]').forEach(el => el.addEventListener('click', () => selectStation(Number(el.dataset.stationIdx))));
+  dd.querySelectorAll('[data-station-idx]').forEach(el => el.addEventListener('click', () => { musicQueue = musicPanelTab; selectStation(Number(el.dataset.stationIdx)); }));
   dd.querySelector('[data-manage-stations]')?.addEventListener('click', () => showStationsModal());
   dd.querySelector('[data-mp-play]')?.addEventListener('click', () => {
-    if (ambientPlayer.stationIndex == null) { selectStation(0); return; }
+    if (ambientPlayer.stationIndex == null) { musicQueue = musicPanelTab; const q = queueIndices(musicPanelTab); selectStation(q.length ? q[0] : 0); return; }
     toggleAmbientMusic();
   });
-  dd.querySelectorAll('[data-mp-step]').forEach(el => el.addEventListener('click', () => {
-    const n = getAllStations().length;
-    if (!n) return;
-    const base = ambientPlayer.stationIndex == null ? -1 : ambientPlayer.stationIndex;
-    selectStation((base + Number(el.dataset.mpStep) + n) % n);
-  }));
+  dd.querySelectorAll('[data-mp-step]').forEach(el => el.addEventListener('click', () => stepStation(Number(el.dataset.mpStep))));
   dd.querySelectorAll('[data-mp-tab]').forEach(el => el.addEventListener('click', () => {
     musicPanelTab = el.dataset.mpTab;
-    dd.querySelectorAll('[data-mp-tab]').forEach(t => t.classList.toggle('on', t === el));
-    const list = dd.querySelector('.mp-list');
-    if (list) list.dataset.tab = musicPanelTab;
+    const sl = dd.querySelector('.mp-tabs')?.scrollLeft || 0;
+    refreshMusicPanel();
+    document.querySelectorAll('.mp-tabs').forEach(t => { t.scrollLeft = sl; });
   }));
   dd.querySelector('[data-mp-seek]')?.addEventListener('click', (e) => {
     const p = musicProgress();
@@ -511,6 +557,7 @@ function bindMusicPanel(dd) {
     musicTick();
   });
   bindMusicVolume(dd);
+  if (typeof bindDiscovered === 'function') bindDiscovered(dd);
 }
 
 function refreshMusicPanel() {
@@ -849,6 +896,7 @@ function topbar() {
       </div>
       <div class="right">
         <button class="mobile-signout-btn" id="topbar-logout-btn" aria-label="Sign out">${signOutSvg}</button>
+        <button class="icon-btn identify-btn-top" id="identify-btn" title="Identify song" aria-label="Identify song"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
         <div class="music-wrap">
           <div class="music-pill${musicUiState() === 'idle' ? '' : ' active ' + musicUiState()}" id="music-pill">
             <button class="icon-btn music-btn${musicUiState() === 'idle' ? '' : ' ' + musicUiState()}" id="music-toggle" title="Play/pause ambient music" aria-label="Play/pause ambient music"><span id="music-note-icon" style="${musicUiState() === 'playing' ? 'display:none' : 'display:inline-flex'}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${musicUiState() === 'playing' ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span><span class="eq-bar b4"></span></span><span class="music-pause-icon" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1.2"/><rect x="14" y="4" width="5" height="16" rx="1.2"/></svg></span></button>
@@ -865,6 +913,7 @@ function topbar() {
           <div class="apps-dropdown" id="apps-dropdown">
             ${focusIsOpen ? `            <button class="apps-tile${focusIsOpen ? ' is-active' : ''}" data-app-action="focus"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg></span><span class="apps-label">Focus</span></button>` : `            <button class="apps-tile${focusIsOpen ? '' : ' is-active'}" data-app-action="home"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/></svg></span><span class="apps-label">Headquarter</span></button>`}
             ${focusIsOpen ? `            <button class="apps-tile${focusIsOpen ? '' : ' is-active'}" data-app-action="home"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/></svg></span><span class="apps-label">Headquarter</span></button>` : `            <button class="apps-tile${focusIsOpen ? ' is-active' : ''}" data-app-action="focus"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg></span><span class="apps-label">Focus</span></button>`}
+            <button class="apps-tile" data-app-action="identify"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></span><span class="apps-label">Identify</span></button>
           </div>
         </div>
         <!-- Tweaks retired 2026-09-29, see index.html:
@@ -1718,8 +1767,10 @@ function bindSharedEvents() {
     e.stopPropagation();
     main.querySelector('#apps-dropdown')?.classList.remove('open');
     if (el.dataset.appAction === 'focus') openFocusOverlay();
+    else if (el.dataset.appAction === 'identify') startIdentify();
     else setActiveTab('life:home');
   }));
+  main.querySelector('#identify-btn')?.addEventListener('click', (e) => { e.stopPropagation(); startIdentify(); });
   const mt = main.querySelector('#music-toggle');
   if (mt) { mt.addEventListener('click', toggleAmbientMusic); updateMusicBtn(ambientPlayer.isPlaying); }
   const mc = main.querySelector('#music-caret-btn');
@@ -1857,20 +1908,146 @@ function customStationStatus(s) {
   return { cls: 'ok', text: 'In the picker' };
 }
 
+// Collapsed by default (2026-10-17): each station is one compact row (thumb · name ·
+// its categories · chevron). Clicking the row opens its editor (name, link, category
+// chips, delete). A newly added station opens straight away.
+const stationsExpanded = new Set();
+let stationCatFlash = null;   // { id, cat } — chip just added, highlighted for a moment
+/* ---- Categories section at the top of Manage stations (2026-10-17) ----
+   Only manages the category LIST: create / rename / delete. Putting songs in or
+   out of a category stays on each station's own chips below.
+   Categories live on the stations (custom_stations.categories), so a brand-new one
+   with no songs yet is kept as "pending" in localStorage until a song uses it. */
+let pendingStationCats = (() => { try { return JSON.parse(localStorage.getItem('hq.pendingStationCats') || '[]'); } catch (e) { return []; } })();
+let stationCatEditing = null;    // category name being renamed
+let stationCatDeleting = null;   // category name awaiting delete confirm
+function savePendingStationCats() {
+  const used = new Set(musicCategories());
+  pendingStationCats = pendingStationCats.filter(c => !used.has(c));
+  try { localStorage.setItem('hq.pendingStationCats', JSON.stringify(pendingStationCats)); } catch (e) {}
+}
+function allStationCategories() {
+  savePendingStationCats();
+  return [...musicCategories(), ...pendingStationCats].sort((a, b) => a.localeCompare(b));
+}
+function renderStationCatsSection() {
+  const el = document.getElementById('stations-cats');
+  if (!el) return;
+  const stations = window.__HQ_TWEAKS.customStations || [];
+  const cats = allStationCategories();
+  const count = c => stations.filter(s => (s.categories || []).includes(c)).length;
+  el.innerHTML = `
+    <div class="stations-section-label">Categories</div>
+    <div class="scat-list">
+      ${cats.map(c => {
+        const n = count(c);
+        if (stationCatEditing === c) return `<div class="scat-row editing">
+          <input type="text" class="scat-rename" data-scat-rename="${escapeHtml(c)}" value="${escapeHtml(c)}" maxlength="24">
+          <button class="btn primary scat-btn" data-scat-rename-save="${escapeHtml(c)}">Save</button>
+          <button class="btn scat-btn" data-scat-cancel>Cancel</button>
+        </div>`;
+        if (stationCatDeleting === c) return `<div class="scat-row deleting">
+          <span class="scat-q">Delete <b>${escapeHtml(c)}</b>?${n ? ` Removed from ${n} song${n > 1 ? 's' : ''}; the songs stay.` : ''}</span>
+          <button class="btn scat-btn scat-danger" data-scat-delete-yes="${escapeHtml(c)}">Delete</button>
+          <button class="btn scat-btn" data-scat-cancel>Cancel</button>
+        </div>`;
+        return `<div class="scat-row">
+          <span class="station-cat on">${escapeHtml(c)}</span>
+          <span class="scat-count">${n ? `${n} song${n > 1 ? 's' : ''}` : 'empty — add songs below'}</span>
+          <span class="scat-sp"></span>
+          <button class="scat-icon" data-scat-edit="${escapeHtml(c)}" title="Rename" aria-label="Rename ${escapeHtml(c)}">${ICON_PENCIL}</button>
+          <button class="scat-icon scat-icon-del" data-scat-del="${escapeHtml(c)}" title="Delete" aria-label="Delete ${escapeHtml(c)}">${ICON_TRASH}</button>
+        </div>`;
+      }).join('') || `<div class="scat-empty">No categories yet. Create one, then tick it on the songs below.</div>`}
+    </div>
+    <div class="station-cat-new">
+      <input type="text" class="station-cat-input" id="scat-new-input" placeholder="New category, e.g. Sleep" maxlength="24">
+      <button class="btn station-cat-addbtn" id="scat-new-btn">Add</button>
+    </div>`;
+}
+function normCatName(raw) { return (raw || '').trim().replace(/\s+/g, ' ').slice(0, 24); }
+function createStationCategory(raw) {
+  const name = normCatName(raw);
+  if (!name) return;
+  const existing = allStationCategories().find(c => c.toLowerCase() === name.toLowerCase());
+  if (existing) { showToast(`${existing} already exists`, 'success'); return; }
+  pendingStationCats.push(name);
+  try { localStorage.setItem('hq.pendingStationCats', JSON.stringify(pendingStationCats)); } catch (e) {}
+  renderCustomStationsList();
+  showToast(`Category ${name} created — tick it on the songs below`, 'success');
+}
+// Rewrites the category on every station that has it (rename = map, delete = drop),
+// one update per affected row; rolls everything back if any write fails.
+async function rewriteStationCategory(oldName, newName) {
+  const stations = window.__HQ_TWEAKS.customStations || [];
+  const hit = stations.filter(s => (s.categories || []).includes(oldName));
+  const before = hit.map(s => [s, s.categories]);
+  hit.forEach(s => {
+    const next = s.categories.map(c => c === oldName ? newName : c).filter(Boolean);
+    s.categories = [...new Set(next)];
+  });
+  pendingStationCats = pendingStationCats.filter(c => c !== oldName);
+  if (newName && !hit.length && !pendingStationCats.includes(newName)) pendingStationCats.push(newName);
+  try { localStorage.setItem('hq.pendingStationCats', JSON.stringify(pendingStationCats)); } catch (e) {}
+  if (musicPanelTab === 'cat:' + oldName) musicPanelTab = newName ? 'cat:' + newName : 'all';
+  if (musicQueue === 'cat:' + oldName) musicQueue = newName ? 'cat:' + newName : 'all';
+  stationCatEditing = stationCatDeleting = null;
+  renderCustomStationsList(); refreshStationPickers();
+  try {
+    await Promise.all(hit.map(s => dbCall(() => sb.from('custom_stations').update({ categories: s.categories }).eq('id', s.id))));
+    const n = hit.length, songs = n ? ` (${n} song${n > 1 ? 's' : ''})` : '';
+    showToast(newName ? `Renamed ${oldName} to ${newName}${songs}` : `Deleted ${oldName}${songs}`, 'success');
+  } catch (err) {
+    console.error('[stations] category rewrite failed', err);
+    before.forEach(([st, cats]) => { st.categories = cats; });
+    renderCustomStationsList(); refreshStationPickers();
+    showToast('Couldn\'t save the change — try again', 'error');
+  }
+}
+function renameStationCategory(oldName, raw) {
+  const name = normCatName(raw);
+  if (!name || name === oldName) { stationCatEditing = null; renderCustomStationsList(); return; }
+  rewriteStationCategory(oldName, name);   // an existing name = merge the two
+}
+
 function renderCustomStationsList() {
+  renderStationCatsSection();
   const el = document.getElementById('stations-list');
   if (!el) return;
   const stations = window.__HQ_TWEAKS.customStations || [];
+  const cats = allStationCategories();
   el.innerHTML = stations.map((s, i) => {
     const st = customStationStatus(s);
+    const open = stationsExpanded.has(s.id);
+    const vid = extractYouTubeId((s.url || '').trim());
+    const thumb = vid ? stationThumbHtml({ kind: 'youtube', videoId: vid }, 34) : `<span class="mp-thumb station-thumb-empty" style="width:34px;height:34px"></span>`;
+    const myCats = s.categories || [];
     return `
-    <li class="station-row">
-      <div class="station-fields">
-        <input type="text" class="station-name" data-i="${i}" placeholder="Name (e.g. Study Beats)" value="${escapeHtml(s.name || '')}" maxlength="40">
-        <input type="text" class="station-url" data-i="${i}" placeholder="YouTube link" value="${escapeHtml(s.url || '')}">
-        <div class="station-status ${st.cls}" data-station-status="${i}">${escapeHtml(st.text)}</div>
-      </div>
-      <button class="station-del" data-i="${i}" title="Remove station" aria-label="Remove station">${ICON_TRASH}</button>
+    <li class="station-row${open ? ' open' : ''}">
+      <button class="station-head" data-station-toggle="${i}" aria-expanded="${open}">
+        ${thumb}
+        <span class="station-head-main">
+          <span class="station-head-name" data-station-title="${i}">${escapeHtml((s.name || '').trim() || 'Untitled station')}</span>
+          <span class="station-head-cats">${myCats.length ? myCats.map(c => `<span class="station-head-cat">${escapeHtml(c)}</span>`).join('') : `<span class="station-head-none">${st.cls === 'ok' ? 'No category' : escapeHtml(st.text)}</span>`}</span>
+        </span>
+        <svg class="station-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      ${open ? `<div class="station-body">
+        <div class="station-fields">
+          <input type="text" class="station-name" data-i="${i}" placeholder="Name (e.g. Study Beats)" value="${escapeHtml(s.name || '')}" maxlength="40">
+          <input type="text" class="station-url" data-i="${i}" placeholder="YouTube link" value="${escapeHtml(s.url || '')}">
+          <div class="station-status ${st.cls}" data-station-status="${i}">${escapeHtml(st.text)}</div>
+          <div class="station-cats-label">Categories</div>
+          <div class="station-cats">
+            ${cats.map(c => `<button class="station-cat${myCats.includes(c) ? ' on' : ''}${stationCatFlash && stationCatFlash.id === s.id && stationCatFlash.cat === c ? ' just-added' : ''}" data-cat-toggle="${i}" data-cat="${escapeHtml(c)}">${myCats.includes(c) ? '&#x2713; ' : ''}${escapeHtml(c)}</button>`).join('')}
+          </div>
+          <div class="station-cat-new">
+            <input type="text" class="station-cat-input" data-cat-add="${i}" placeholder="New category, e.g. Sleep" maxlength="24">
+            <button class="btn station-cat-addbtn" data-cat-addbtn="${i}">Add</button>
+          </div>
+        </div>
+        <button class="station-del" data-i="${i}" title="Remove station" aria-label="Remove station">${ICON_TRASH}</button>
+      </div>` : ''}
     </li>`;
   }).join('') || `<li class="stations-empty">No stations yet. Add a YouTube link (a lofi stream, a long mix, rain sounds) and it plays in the background like the built-in radios.</li>`;
 }
@@ -1885,7 +2062,8 @@ async function addCustomStation() {
   if (!currentUser) return;
   const { data } = await dbCall(() => sb.from('custom_stations').insert({ user_id: currentUser.id, name: '', url: '' }).select().single());
   if (!data) return;
-  window.__HQ_TWEAKS.customStations.push({ id: data.id, name: '', url: '' });
+  window.__HQ_TWEAKS.customStations.push({ id: data.id, name: '', url: '', categories: [] });
+  stationsExpanded.add(data.id);
   renderCustomStationsList();
   refreshStationPickers();
   const names = document.querySelectorAll('#stations-list .station-name');
@@ -1909,6 +2087,10 @@ function setCustomStationField(i, field, value) {
   const s = (window.__HQ_TWEAKS.customStations || [])[i];
   if (!s) return;
   s[field] = value;
+  if (field === 'name') {
+    const t = document.querySelector(`#stations-list [data-station-title="${i}"]`);
+    if (t) t.textContent = value.trim() || 'Untitled station';
+  }
   const statusEl = document.querySelector(`#stations-list [data-station-status="${i}"]`);
   if (statusEl) {
     const st = customStationStatus(s);
@@ -1920,6 +2102,39 @@ function setCustomStationField(i, field, value) {
   customStationSaveTimers[s.id] = setTimeout(() => {
     dbCall(() => sb.from('custom_stations').update({ [field]: value }).eq('id', s.id));
   }, 1000);
+}
+
+// Categories save immediately (a click, not typing) — no debounce needed.
+function setCustomStationCategories(i, categories, okMsg, flashCat) {
+  const s = (window.__HQ_TWEAKS.customStations || [])[i];
+  if (!s) return;
+  const prev = s.categories || [];
+  s.categories = categories;
+  stationCatFlash = flashCat ? { id: s.id, cat: flashCat } : null;
+  renderCustomStationsList();
+  refreshStationPickers();
+  // Confirm only once the DB actually has it, so a toast means "saved", not "clicked".
+  // If the column is missing (schema_fix.sql section 25 not run / schema cache stale)
+  // PostgREST answers PGRST204 — say so instead of a generic "Sync failed".
+  dbCall(() => sb.from('custom_stations').update({ categories }).eq('id', s.id)).then(() => {
+    if (okMsg) showToast(okMsg, 'success');
+    if (flashCat) setTimeout(() => { if (stationCatFlash && stationCatFlash.cat === flashCat) { stationCatFlash = null; renderCustomStationsList(); } }, 1600);
+  }).catch(err => {
+    console.error('[stations] category save failed', err);
+    s.categories = prev; stationCatFlash = null;
+    renderCustomStationsList(); refreshStationPickers();
+    showToast(String(err?.code) === 'PGRST204' || /categories/.test(err?.message || '')
+      ? 'Categories column missing — run schema_fix.sql section 25 in Supabase'
+      : 'Couldn\'t save the category — try again', 'error');
+  });
+}
+function toggleCustomStationCategory(i, cat) {
+  const s = (window.__HQ_TWEAKS.customStations || [])[i];
+  if (!s) return;
+  const cur = s.categories || [];
+  const name = (s.name || '').trim() || 'this station';
+  if (cur.includes(cat)) setCustomStationCategories(i, cur.filter(c => c !== cat), `Removed ${name} from ${cat}`);
+  else setCustomStationCategories(i, [...cur, cat], `Saved — ${name} added to ${cat}`, cat);
 }
 
 function showStationsModal() {
@@ -1934,11 +2149,13 @@ function showStationsModal() {
         <div class="hq-modal-header">
           <div>
             <div class="hq-modal-title">YouTube stations</div>
-            <div class="stations-sub">Your own stations, listed next to the built-in radios in the music picker.</div>
+            <div class="stations-sub">Create categories at the top, then open a song to tick which categories it's in. Each category becomes a playlist tab.</div>
           </div>
           <button class="hq-modal-close" data-stations-close aria-label="Close">&#x2715;</button>
         </div>
         <div class="hq-modal-body">
+          <div class="stations-cats-section" id="stations-cats"></div>
+          <div class="stations-section-label">Stations</div>
           <ul class="stations-list" id="stations-list"></ul>
         </div>
         <div class="hq-modal-footer">
@@ -1947,6 +2164,24 @@ function showStationsModal() {
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    const catsEl = overlay.querySelector('#stations-cats');
+    catsEl.addEventListener('click', (e) => {
+      const t = e.target.closest('button');
+      if (!t) return;
+      if (t.id === 'scat-new-btn') { const inp = catsEl.querySelector('#scat-new-input'); createStationCategory(inp.value); setTimeout(() => catsEl.querySelector('#scat-new-input')?.focus(), 0); return; }
+      if (t.dataset.scatEdit) { stationCatEditing = t.dataset.scatEdit; stationCatDeleting = null; renderCustomStationsList(); const r = catsEl.querySelector('[data-scat-rename]'); r?.focus(); r?.select(); return; }
+      if (t.dataset.scatDel) { stationCatDeleting = t.dataset.scatDel; stationCatEditing = null; renderCustomStationsList(); return; }
+      if (t.dataset.scatRenameSave) { renameStationCategory(t.dataset.scatRenameSave, catsEl.querySelector('[data-scat-rename]')?.value); return; }
+      if (t.dataset.scatDeleteYes) { rewriteStationCategory(t.dataset.scatDeleteYes, null); return; }
+      if ('scatCancel' in t.dataset) { stationCatEditing = stationCatDeleting = null; renderCustomStationsList(); }
+    });
+    catsEl.addEventListener('keydown', (e) => {
+      if (e.target.id === 'scat-new-input' && e.key === 'Enter') { e.preventDefault(); createStationCategory(e.target.value); setTimeout(() => catsEl.querySelector('#scat-new-input')?.focus(), 0); }
+      if (e.target.dataset.scatRename != null) {
+        if (e.key === 'Enter') { e.preventDefault(); renameStationCategory(e.target.dataset.scatRename, e.target.value); }
+        if (e.key === 'Escape') { e.stopPropagation(); stationCatEditing = null; renderCustomStationsList(); }
+      }
+    });
     const list = overlay.querySelector('#stations-list');
     list.addEventListener('input', (e) => {
       const t = e.target, i = Number(t.dataset.i);
@@ -1956,6 +2191,45 @@ function showStationsModal() {
     list.addEventListener('click', (e) => {
       const delBtn = e.target.closest('.station-del');
       if (delBtn) removeCustomStation(Number(delBtn.dataset.i));
+      const head = e.target.closest('[data-station-toggle]');
+      if (head) {
+        const st = (window.__HQ_TWEAKS.customStations || [])[Number(head.dataset.stationToggle)];
+        if (st) { stationsExpanded.has(st.id) ? stationsExpanded.delete(st.id) : stationsExpanded.add(st.id); renderCustomStationsList(); }
+        return;
+      }
+      const addBtn = e.target.closest('[data-cat-addbtn]');
+      if (addBtn) {
+        const inp = document.querySelector(`#stations-list [data-cat-add="${addBtn.dataset.catAddbtn}"]`);
+        if (inp && inp.value.trim()) commitCatInput(inp, true);
+        else inp?.focus();
+        return;
+      }
+      const catBtn = e.target.closest('[data-cat-toggle]');
+      if (catBtn) toggleCustomStationCategory(Number(catBtn.dataset.catToggle), catBtn.dataset.cat);
+    });
+    // A typed category is committed on Enter AND on leaving the field (blur / clicking
+    // Done) — typing "Chill" then hitting Done used to silently drop it (2026-10-17).
+    const commitCatInput = (inp, refocus) => {
+      const name = inp.value.trim().replace(/\s+/g, ' ');
+      const i = Number(inp.dataset.catAdd);
+      const s = (window.__HQ_TWEAKS.customStations || [])[i];
+      inp.value = '';
+      if (!name || !s) return;
+      const existing = musicCategories().find(c => c.toLowerCase() === name.toLowerCase()) || name;
+      if (!(s.categories || []).includes(existing)) setCustomStationCategories(i, [...(s.categories || []), existing], `Saved — ${(s.name || '').trim() || 'this station'} added to ${existing}`, existing);
+      else showToast(`Already in ${existing}`, 'success');
+      if (refocus) document.querySelector(`#stations-list [data-cat-add="${i}"]`)?.focus();
+    };
+    list.addEventListener('keydown', (e) => {
+      const inp = e.target.closest('[data-cat-add]');
+      if (!inp || e.key !== 'Enter') return;
+      e.preventDefault();
+      commitCatInput(inp, true);
+    });
+    list.addEventListener('focusout', (e) => {
+      const inp = e.target.closest('[data-cat-add]');
+      if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('[data-cat-addbtn]')) return;
+      if (inp && inp.isConnected && inp.value.trim()) commitCatInput(inp, false);
     });
     overlay.querySelector('[data-stations-add]').addEventListener('click', (e) => withBtnLoading(e.currentTarget, addCustomStation).catch(() => {}));
     const close = () => {
@@ -1966,6 +2240,7 @@ function showStationsModal() {
     overlay.querySelectorAll('[data-stations-close]').forEach(b => b.addEventListener('click', close));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   }
+  stationCatEditing = stationCatDeleting = null;
   renderCustomStationsList();
   document.removeEventListener('keydown', overlay._escHandler);
   document.addEventListener('keydown', overlay._escHandler);
