@@ -2912,7 +2912,6 @@
   .scat-empty { font-size: 12px; color: var(--text-faint); padding: 4px 0 6px; }
 
   /* ============ Identify song (2026-10-17) ============ */
-  .apps-dropdown { grid-template-columns: repeat(3, 96px); }
   .identify-btn-top { width: 40px !important; height: 40px !important; border-radius: 50%; background: #1c1c1c !important; border: none !important; color: var(--text-dim) !important; display: inline-flex; align-items: center; justify-content: center; }
   .identify-btn-top:hover { background: #242424 !important; color: var(--text) !important; }
   .identify-overlay {

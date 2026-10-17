@@ -402,7 +402,7 @@ Two playback engines behind one station picker, always visible in the topbar (ri
 
 
 ## Identify song (`js/identify.js`, added 2026-10-17)
-Shazam-style capture. Entry points: topbar 🎤 (`#identify-btn`), the **Identify** tile in the 9-dot menu, and the PWA app shortcut in `manifest.json` (`/?listen=1` → `maybeAutoIdentify()` after login, Android only — iOS PWAs don't support shortcuts).
+Shazam-style capture. Entry points: topbar 🎤 (`#identify-btn`, next to the music pill — deliberately NOT in the 9-dot menu, which is for switching modes/apps) and the PWA app shortcut in `manifest.json` (`/?listen=1` → `maybeAutoIdentify()` after login, Android only — iOS PWAs don't support shortcuts).
 - **Listening:** `startIdentify()` records with `MediaRecorder` (1s timeslices) and sends the cumulative clip at 5s / 10s / 14s (`IDENTIFY_CHECKPOINTS`) to the **`identify-song`** Edge Function, stopping at the first match. Mic needs HTTPS (deployed site) or localhost.
 - **Match:** auto-saved to **`discovered_songs`** (schema_fix.sql section 26 — run it), deduped by title+artist (a repeat just bumps `found_at`). Result card: cover, title, artist, "Add to stations", Spotify link.
 - **Discovered tab** in the music panel lists them; `+ Add` opens the YouTube picker (`openYoutubePicker()`), which calls the **`youtube-search`** Edge Function, lets you pick 1 of 5 videos + categories, inserts a `custom_stations` row and links it via `discovered_songs.station_id`.

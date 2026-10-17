@@ -913,7 +913,6 @@ function topbar() {
           <div class="apps-dropdown" id="apps-dropdown">
             ${focusIsOpen ? `            <button class="apps-tile${focusIsOpen ? ' is-active' : ''}" data-app-action="focus"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg></span><span class="apps-label">Focus</span></button>` : `            <button class="apps-tile${focusIsOpen ? '' : ' is-active'}" data-app-action="home"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/></svg></span><span class="apps-label">Headquarter</span></button>`}
             ${focusIsOpen ? `            <button class="apps-tile${focusIsOpen ? '' : ' is-active'}" data-app-action="home"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/></svg></span><span class="apps-label">Headquarter</span></button>` : `            <button class="apps-tile${focusIsOpen ? ' is-active' : ''}" data-app-action="focus"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg></span><span class="apps-label">Focus</span></button>`}
-            <button class="apps-tile" data-app-action="identify"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></span><span class="apps-label">Identify</span></button>
           </div>
         </div>
         <!-- Tweaks retired 2026-09-29, see index.html:
@@ -1767,7 +1766,6 @@ function bindSharedEvents() {
     e.stopPropagation();
     main.querySelector('#apps-dropdown')?.classList.remove('open');
     if (el.dataset.appAction === 'focus') openFocusOverlay();
-    else if (el.dataset.appAction === 'identify') startIdentify();
     else setActiveTab('life:home');
   }));
   main.querySelector('#identify-btn')?.addEventListener('click', (e) => { e.stopPropagation(); startIdentify(); });
