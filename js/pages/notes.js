@@ -225,7 +225,7 @@ function renderNoteEditor() {
       <button class="tb-btn tb-icon-btn" id="tb-img-btn" title="Insert image (or paste / drop one)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></svg></button>
       <input type="file" id="tb-img-input" accept="image/*" multiple hidden>
       <div class="notes-ctrl-wrap tb-table-wrap">
-        <button class="tb-btn" id="tb-table-btn" data-dd-toggle title="Insert table">⊞</button>
+        <button class="tb-btn tb-icon-btn tb-table-btn" id="tb-table-btn" data-dd-toggle title="Insert table" aria-label="Insert table"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9.5h18M3 15h18M9.5 9.5V20M15 9.5V20"/></svg><svg class="tb-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
         <div class="notes-dropdown tb-table-dd" id="tb-table-dd">
           <div class="tb-table-grid">${Array.from({ length: 64 }, (_, i) => `<span class="tb-table-cell" data-tc="${i % 8 + 1}" data-tr="${Math.floor(i / 8) + 1}"></span>`).join('')}</div>
           <div class="tb-table-size" id="tb-table-size">Insert table</div>
@@ -363,6 +363,120 @@ function addDeleteRowBtn(tr, saveCallback) {
  *   ~line 1238 — forEach existing tbody rows inside initTableInteractions
  *   ~line 2620 — Tab keydown handler (new row on Tab from last cell)
  */
+/* ---- Docs-style table editing (2026-10-17) ---- */
+function noteTableOf(cell) { return cell.closest('table'); }
+function noteTableWrapperOf(table) { return table.closest('.table-wrapper') || table.closest('.note-table-wrapper') || table; }
+function newNoteCell(tag) { const c = document.createElement(tag); c.contentEditable = 'true'; return c; }
+function noteTableInsertRow(cell, below) {
+  const table = noteTableOf(cell), tr = cell.closest('tr');
+  const cols = table.rows[0]?.cells.length || 1;
+  const row = document.createElement('tr');
+  for (let i = 0; i < cols; i++) row.appendChild(newNoteCell('td'));
+  const tbody = table.querySelector('tbody') || table.appendChild(document.createElement('tbody'));
+  if (tr.parentElement.tagName === 'THEAD') tbody.insertBefore(row, tbody.firstChild);   // header stays the header
+  else tr.parentElement.insertBefore(row, below ? tr.nextSibling : tr);
+  row.cells[0].focus();
+}
+function noteTableInsertCol(cell, right) {
+  const table = noteTableOf(cell), idx = cell.cellIndex + (right ? 1 : 0);
+  Array.from(table.rows).forEach(tr => {
+    const c = newNoteCell(tr.parentElement.tagName === 'THEAD' ? 'th' : 'td');
+    tr.insertBefore(c, tr.cells[idx] || null);
+  });
+}
+function noteTableDeleteRow(cell) {
+  const tr = cell.closest('tr');
+  if (tr.parentElement.tagName === 'THEAD') return;
+  const table = noteTableOf(cell);
+  if (table.querySelectorAll('tbody tr').length <= 1) { noteTableDelete(table); return; }
+  tr.remove();
+}
+function noteTableDeleteCol(cell) {
+  const table = noteTableOf(cell), idx = cell.cellIndex;
+  if ((table.rows[0]?.cells.length || 0) <= 1) { noteTableDelete(table); return; }
+  Array.from(table.rows).forEach(tr => tr.cells[idx]?.remove());
+}
+function noteTableDelete(table) {
+  const w = noteTableWrapperOf(table);
+  const next = w.nextSibling;
+  w.remove();
+  // leave the caret where the table was
+  try {
+    const sel = window.getSelection(), r = document.createRange();
+    if (next) { r.setStartBefore(next); r.collapse(true); sel.removeAllRanges(); sel.addRange(r); }
+  } catch (e) {}
+}
+// Backspace/Delete with a selection: remove every table the selection fully covers
+// (dragged from text above to text below, Ctrl+A, or from a table's first cell to its last).
+function deleteSelectedTables(editorEl) {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+  const range = sel.getRangeAt(0);
+  const startCell = range.startContainer.nodeType === 1 ? range.startContainer.closest?.('td, th') : range.startContainer.parentElement?.closest('td, th');
+  const endCell = range.endContainer.nodeType === 1 ? range.endContainer.closest?.('td, th') : range.endContainer.parentElement?.closest('td, th');
+  if (startCell && endCell && noteTableOf(startCell) === noteTableOf(endCell)) {
+    const cells = Array.from(noteTableOf(startCell).querySelectorAll('th, td'));
+    if (cells.length > 1 && startCell === cells[0] && endCell === cells[cells.length - 1]) { noteTableDelete(noteTableOf(startCell)); return true; }
+    return false;
+  }
+  const covered = Array.from(editorEl.querySelectorAll('.table-wrapper, .note-table-wrapper'))
+    .filter(w => !w.parentElement.closest('.table-wrapper, .note-table-wrapper'))
+    .filter(w => range.intersectsNode(w) && !w.contains(range.startContainer) && !w.contains(range.endContainer));
+  if (!covered.length) return false;
+  range.deleteContents();
+  sel.collapseToStart();
+  return true;
+}
+let noteTableMenuEl = null;
+function closeNoteTableMenu() { noteTableMenuEl?.remove(); noteTableMenuEl = null; }
+function showNoteTableMenu(cell, x, y, save) {
+  closeNoteTableMenu();
+  const inHead = cell.closest('tr').parentElement.tagName === 'THEAD';
+  const items = [
+    ['row-above', 'Insert row above', inHead],
+    ['row-below', 'Insert row below', false],
+    ['col-left', 'Insert column left', false],
+    ['col-right', 'Insert column right', false],
+    null,
+    ['del-row', 'Delete row', inHead],
+    ['del-col', 'Delete column', false],
+    ['del-table', 'Delete table', false, true],
+  ];
+  const m = document.createElement('div');
+  m.className = 'note-table-menu';
+  m.setAttribute('role', 'menu');
+  m.innerHTML = items.map(it => it === null ? '<div class="ntm-sep"></div>'
+    : `<button class="ntm-item${it[3] ? ' danger' : ''}" data-ntm="${it[0]}" role="menuitem"${it[2] ? ' disabled' : ''}>${it[1]}</button>`).join('');
+  document.body.appendChild(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + 'px';
+  m.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
+  noteTableMenuEl = m;
+  m.addEventListener('mousedown', ev => ev.preventDefault());   // keep the cell's caret
+  m.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-ntm]');
+    if (!b || b.disabled) return;
+    const a = b.dataset.ntm;
+    if (a === 'row-above') noteTableInsertRow(cell, false);
+    else if (a === 'row-below') noteTableInsertRow(cell, true);
+    else if (a === 'col-left') noteTableInsertCol(cell, false);
+    else if (a === 'col-right') noteTableInsertCol(cell, true);
+    else if (a === 'del-row') noteTableDeleteRow(cell);
+    else if (a === 'del-col') noteTableDeleteCol(cell);
+    else if (a === 'del-table') noteTableDelete(noteTableOf(cell));
+    closeNoteTableMenu();
+    if (save) save();
+  });
+  setTimeout(() => {
+    const off = (ev) => { if (!noteTableMenuEl || noteTableMenuEl.contains(ev.target)) return; closeNoteTableMenu(); cleanup(); };
+    const esc = (ev) => { if (ev.key === 'Escape') { closeNoteTableMenu(); cleanup(); } };
+    const cleanup = () => { document.removeEventListener('mousedown', off, true); document.removeEventListener('keydown', esc, true); window.removeEventListener('scroll', closeNoteTableMenu, true); };
+    document.addEventListener('mousedown', off, true);
+    document.addEventListener('keydown', esc, true);
+    window.addEventListener('scroll', closeNoteTableMenu, true);
+  }, 0);
+}
+
 function initTableInteractions(editorEl, saveCallback) {
   editorEl.querySelectorAll('.note-table-wrapper').forEach(wrapper => {
     // Wrap in .table-wrapper if not already done
@@ -378,94 +492,10 @@ function initTableInteractions(editorEl, saveCallback) {
     // the note HTML is re-parsed via innerHTML, leaving cells non-focusable.
     wrapper.querySelectorAll('th, td').forEach(cell => { cell.contentEditable = 'true'; });
 
-    // Guard: bail if toolbar already exists in DOM — survives node replacement unlike dataset
-    if (tableWrapper.querySelector('.table-toolbar')) return;
-
-    // Add delete-table-btn
-    if (!tableWrapper.querySelector('.delete-table-btn')) {
-      const delTableBtn = document.createElement('button');
-      delTableBtn.className = 'delete-table-btn';
-      delTableBtn.contentEditable = 'false';
-      delTableBtn.textContent = '🗑 Delete table';
-      delTableBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        showConfirmModal({
-          title: 'Delete Table?',
-          message: 'This will permanently remove the entire table from your note.',
-          confirmLabel: 'Delete',
-          danger: true,
-          onConfirm: () => { tableWrapper.remove(); if (saveCallback) saveCallback(); }
-        });
-      });
-      tableWrapper.appendChild(delTableBtn);
-    }
-
-    // Add table toolbar (add-row + add-col)
-    if (!tableWrapper.querySelector('.table-toolbar')) {
-      const toolbar = document.createElement('div');
-      toolbar.className = 'table-toolbar';
-      toolbar.contentEditable = 'false';
-
-      const addRowBtn = document.createElement('button');
-      addRowBtn.className = 'tbl-btn';
-      addRowBtn.contentEditable = 'false';
-      addRowBtn.textContent = '+ Add row';
-      addRowBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        const table = wrapper.querySelector('table');
-        if (!table) return;
-        const tbody = table.querySelector('tbody');
-        const colCount = table.rows[0]?.cells.length || 3;
-        const newRow = document.createElement('tr');
-        for (let i = 0; i < colCount; i++) {
-          const td = document.createElement('td');
-          td.contentEditable = 'true';
-          newRow.appendChild(td);
-        }
-        tbody.appendChild(newRow);
-        addDeleteRowBtn(newRow, saveCallback);
-        newRow.cells[0].focus();
-        if (saveCallback) saveCallback();
-      });
-
-      const addColBtn = document.createElement('button');
-      addColBtn.className = 'tbl-btn';
-      addColBtn.contentEditable = 'false';
-      addColBtn.textContent = '+ Add col';
-      addColBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        const table = wrapper.querySelector('table');
-        if (!table) return;
-        const thead = table.querySelector('thead');
-        if (thead) {
-          thead.querySelectorAll('tr').forEach(tr => {
-            const th = document.createElement('th');
-            th.contentEditable = 'true';
-            tr.appendChild(th);
-          });
-        }
-        const tbody = table.querySelector('tbody');
-        if (tbody) {
-          tbody.querySelectorAll('tr').forEach(tr => {
-            const existingBtn = tr.querySelector('.delete-row-btn');
-            if (existingBtn) existingBtn.remove();
-            const td = document.createElement('td');
-            td.contentEditable = 'true';
-            tr.appendChild(td);
-            addDeleteRowBtn(tr, saveCallback);
-          });
-        }
-        if (saveCallback) saveCallback();
-      });
-
-      toolbar.appendChild(addRowBtn);
-      toolbar.appendChild(addColBtn);
-      tableWrapper.appendChild(toolbar);
-    }
-
-    // Add delete-row-btn to existing tbody rows
-    const tbody = wrapper.querySelector('tbody');
-    if (tbody) tbody.querySelectorAll('tr').forEach(tr => addDeleteRowBtn(tr, saveCallback));
+    // Docs-style tables (2026-10-17): no inline Delete table / Add row / Add col / row-trash
+    // buttons anymore — tables are edited from the right-click (long-press) menu and deleted by
+    // selecting them and pressing Delete. Strip any of the old buttons still in the DOM.
+    tableWrapper.querySelectorAll('.delete-table-btn, .table-toolbar, .delete-row-btn').forEach(b => b.remove());
   });
 }
 
@@ -1038,9 +1068,12 @@ function bindNotesEvents() {
   if (noteContentEl) {
     noteContentEl.addEventListener('keydown', (e) => {
       if (e.key === 'Backspace' || e.key === 'Delete') {
+        // Word/Docs-style: a selection that covers a whole table deletes the table.
+        if (deleteSelectedTables(noteContentEl)) { e.preventDefault(); triggerNoteSave(); return; }
+        const sel = window.getSelection();
         const cell = e.target.closest ? e.target.closest('td, th') : null;
-        if (cell && cell.innerText.trim() === '') {
-          e.preventDefault();
+        if (sel && sel.isCollapsed && cell && cell.innerText.trim() === '') {
+          e.preventDefault();   // don't let Backspace in an empty cell eat the cell itself
         }
         return;
       }
@@ -1063,10 +1096,19 @@ function bindNotesEvents() {
           newRow.appendChild(td);
         }
         tbody.appendChild(newRow);
-        addDeleteRowBtn(newRow, triggerNoteSave);
         newRow.cells[0].focus();
         triggerNoteSave();
       }
+    });
+  }
+
+  // editor: right-click / long-press on a table cell → table menu (2026-10-17)
+  if (noteContentEl) {
+    noteContentEl.addEventListener('contextmenu', (e) => {
+      const cell = e.target.closest && e.target.closest('td, th');
+      if (!cell || !noteContentEl.contains(cell)) return;
+      e.preventDefault();
+      showNoteTableMenu(cell, e.clientX, e.clientY, triggerNoteSave);
     });
   }
 

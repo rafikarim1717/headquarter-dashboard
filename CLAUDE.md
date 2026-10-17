@@ -402,7 +402,7 @@ Two playback engines behind one station picker, always visible in the topbar (ri
 
 
 ## Identify song (`js/identify.js`, added 2026-10-17)
-Shazam-style capture. Entry points: topbar 🎤 (`#identify-btn`, next to the music pill — deliberately NOT in the 9-dot menu, which is for switching modes/apps) and the PWA app shortcut in `manifest.json` (`/?listen=1` → `maybeAutoIdentify()` after login, Android only — iOS PWAs don't support shortcuts).
+Shazam-style capture. Entry points: the **Identify** pill in the music panel's header row (`.mp-head`, `[data-identify]` — inside the player because it's a music action; not in the topbar, to keep mobile to 2 buttons, and not in the 9-dot menu, which is for switching modes) and the PWA app shortcut in `manifest.json` (`/?listen=1` → `maybeAutoIdentify()` after login, Android only — iOS PWAs don't support shortcuts).
 - **Listening:** `startIdentify()` records with `MediaRecorder` (1s timeslices) and sends the cumulative clip at 5s / 10s / 14s (`IDENTIFY_CHECKPOINTS`) to the **`identify-song`** Edge Function, stopping at the first match. Mic needs HTTPS (deployed site) or localhost.
 - **Match:** auto-saved to **`discovered_songs`** (schema_fix.sql section 26 — run it), deduped by title+artist (a repeat just bumps `found_at`). Result card: cover, title, artist, "Add to stations", Spotify link.
 - **Discovered tab** in the music panel lists them; `+ Add` opens the YouTube picker (`openYoutubePicker()`), which calls the **`youtube-search`** Edge Function, lets you pick 1 of 5 videos + categories, inserts a `custom_stations` row and links it via `discovered_songs.station_id`.
@@ -431,6 +431,8 @@ Shazam-style capture. Entry points: topbar 🎤 (`#identify-btn`, next to the mu
 - Clicking the overlay backdrop closes it (`closeFocusOverlay()`); the timer keeps running in the background. Clicks elsewhere inside the overlay close any open flyout / tag dropdown.
 
 ---
+
+- **Way back + smooth scene (2026-10-17):** bottom-right corner = 9-dot "switch mode" button (`#focus-apps-toggle`, `focusOpenPanel === 'apps'`) next to fullscreen; its flyout mirrors the dashboard menu (Focus active first, Headquarter → `closeFocusOverlay()` + `render()`). Opening Focus adds `.bg-pending` to the overlay until the scene image is decoded, so the background fades in instead of popping; `preloadFocusScenes()` (called after login) warms the cache.
 
 ## Pages & Features
 
@@ -551,6 +553,9 @@ Shazam-style capture. Entry points: topbar 🎤 (`#identify-btn`, next to the mu
 | `finance:debts` | Debts | Open total + open/paid counts. All debts sorted by paid status then due date, **7 per page**. Paid / Due today / Due in Nd / Overdue labels, "soon" (≤7 days) styling. A paid ↔ unpaid toggle button (✓ / ↩; awaits the DB write, then toasts "Marked as paid/unpaid"), edit, delete (confirmed). `+ Add debt` in the page header. |
 
 ---
+
+
+**Notes — Docs-style tables (2026-10-17):** toolbar table button is an SVG icon + ▾ caret (opens the size picker). No inline table buttons anymore (Delete table / + Add row / + Add col / per-row trash were removed; `initTableInteractions()` strips any left in old notes). Editing is via right-click (long-press on mobile) on a cell → `showNoteTableMenu()`: insert row above/below, column left/right, delete row/column/table. Deleting: select across a whole table (or from its first to last cell) and press Delete/Backspace → `deleteSelectedTables()`. Tab in the last cell still adds a row.
 
 ## Known Patterns
 

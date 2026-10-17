@@ -494,7 +494,12 @@ function musicDropdownHtml() {
           : `<div class="mp-live-row"><span class="mp-live">LIVE</span><span class="mp-now-sub">Streaming</span></div>`}
       </div>
     </div>`
-    : `<div class="mp-now mp-now-empty">Pick a station below.</div>`;
+    : '';
+  // Identify song lives here (2026-10-17): it's a music action, so it sits in the player's header row.
+  const headHtml = `<div class="mp-head">
+      <span class="mp-head-label">${cur ? 'Now playing' : 'Pick a station below.'}</span>
+      <button class="mp-identify" data-identify title="Identify a song playing around you"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg><span>Identify</span></button>
+    </div>`;
   const playIcon = ui === 'playing'
     ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
     : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
@@ -508,6 +513,7 @@ function musicDropdownHtml() {
     </button>`;
   };
   return `
+    ${headHtml}
     ${nowHtml}
     <div class="mp-ctl">
       <button class="mp-ctl-btn" data-mp-step="-1" aria-label="Previous station" title="Previous station"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5.5v13L9.5 12z"/></svg></button>
@@ -537,6 +543,7 @@ function bindMusicPanel(dd) {
   }
   dd.querySelectorAll('[data-station-idx]').forEach(el => el.addEventListener('click', () => { musicQueue = musicPanelTab; selectStation(Number(el.dataset.stationIdx)); }));
   dd.querySelector('[data-manage-stations]')?.addEventListener('click', () => showStationsModal());
+  dd.querySelector('[data-identify]')?.addEventListener('click', (e) => { e.stopPropagation(); if (typeof startIdentify === 'function') startIdentify(); });
   dd.querySelector('[data-mp-play]')?.addEventListener('click', () => {
     if (ambientPlayer.stationIndex == null) { musicQueue = musicPanelTab; const q = queueIndices(musicPanelTab); selectStation(q.length ? q[0] : 0); return; }
     toggleAmbientMusic();
@@ -896,7 +903,6 @@ function topbar() {
       </div>
       <div class="right">
         <button class="mobile-signout-btn" id="topbar-logout-btn" aria-label="Sign out">${signOutSvg}</button>
-        <button class="icon-btn identify-btn-top" id="identify-btn" title="Identify song" aria-label="Identify song"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
         <div class="music-wrap">
           <div class="music-pill${musicUiState() === 'idle' ? '' : ' active ' + musicUiState()}" id="music-pill">
             <button class="icon-btn music-btn${musicUiState() === 'idle' ? '' : ' ' + musicUiState()}" id="music-toggle" title="Play/pause ambient music" aria-label="Play/pause ambient music"><span id="music-note-icon" style="${musicUiState() === 'playing' ? 'display:none' : 'display:inline-flex'}">${musicNoteSvg}</span><span class="eq-bars" id="eq-bars" style="${musicUiState() === 'playing' ? 'display:inline-flex' : 'display:none'}"><span class="eq-bar b1"></span><span class="eq-bar b2"></span><span class="eq-bar b3"></span><span class="eq-bar b4"></span></span><span class="music-pause-icon" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1.2"/><rect x="14" y="4" width="5" height="16" rx="1.2"/></svg></span></button>
@@ -1584,7 +1590,8 @@ function focusStationListHtml() {
 function renderFocusOverlay() {
   const el = ensureFocusOverlay();
   const wasOpen = el.classList.contains('open');
-  el.className = 'focus-overlay theme-' + focusPrefs.theme + (wasOpen ? ' open' : '');
+  const bgPending = el.classList.contains('bg-pending');   // keep the scene hidden until its image is decoded
+  el.className = 'focus-overlay theme-' + focusPrefs.theme + (wasOpen ? ' open' : '') + (bgPending ? ' bg-pending' : '');
   const active = !!focusTimer;
   const running = !!(focusTimer && focusTimer.running);
   const remaining = active ? focusRemainingSeconds() : focusStagedMinutes * 60;
@@ -1630,8 +1637,15 @@ function renderFocusOverlay() {
         <button class="focus-icon-btn focus-corner-btn${focusOpenPanel === 'scene' ? ' sel' : ''}" id="focus-scene-toggle" aria-label="Background" title="Background">${ICON_IMAGE}</button>
       </div>
     </div>
-    <div class="focus-corner focus-corner-right">
+    <div class="focus-corner focus-corner-right${focusOpenPanel === 'apps' ? ' open' : ''}">
+      ${focusOpenPanel === 'apps' ? `<div class="focus-flyout focus-apps-flyout">
+        <button class="apps-tile is-active" data-focus-app="focus"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg></span><span class="apps-label">Focus</span></button>
+        <button class="apps-tile" data-focus-app="home"><span class="apps-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9v10h12V9"/><path d="M10 19v-5h4v5"/></svg></span><span class="apps-label">Headquarter</span></button>
+      </div>` : ''}
+      <div class="focus-corner-btn-row">
       <button class="focus-icon-btn focus-corner-btn" id="focus-fullscreen-btn" aria-label="Fullscreen" title="Fullscreen">${document.fullscreenElement ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN_ENTER}</button>
+      <button class="focus-icon-btn focus-corner-btn${focusOpenPanel === 'apps' ? ' sel' : ''}" id="focus-apps-toggle" aria-label="Switch mode" title="Switch mode"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg></button>
+      </div>
     </div>
     ${focusOpenPanel === 'scene' ? `<div class="focus-scene-backdrop">
       <div class="focus-scene-modal" role="dialog" aria-label="Set your focus scene">
@@ -1653,6 +1667,13 @@ function renderFocusOverlay() {
   attachFocusVideo(el);
   attachFocusSnow(el);
   el.querySelector('#focus-fullscreen-btn').addEventListener('click', toggleFocusFullscreen);
+  // 9-dot "switch mode" menu (2026-10-17) — the way back to the dashboard (the old + FAB is gone)
+  el.querySelector('#focus-apps-toggle').addEventListener('click', () => toggleFocusPanel('apps'));
+  el.querySelectorAll('[data-focus-app]').forEach(btn => btn.addEventListener('click', () => {
+    focusOpenPanel = null;
+    if (btn.dataset.focusApp === 'home') { closeFocusOverlay(); render(); }
+    else renderFocusOverlay();
+  }));
   el.querySelector('#focus-start-btn')?.addEventListener('click', () => startFocusTimer(focusStagedMinutes));
   el.querySelector('#focus-pause-btn')?.addEventListener('click', pauseFocusTimer);
   el.querySelector('#focus-resume-btn')?.addEventListener('click', resumeFocusTimer);
@@ -1692,10 +1713,25 @@ function openFocusOverlay() {
   focusTagPanelOpen = false;
   focusTagAdding = false;
   focusTaskAdding = false;
-  ensureFocusOverlay().classList.add('open');
+  const ov = ensureFocusOverlay();
+  // Fade the scene in only once its image is decoded, so it never pops in mid-fade (2026-10-17)
+  const sc = FOCUS_SCENES.find(x => x.theme === focusPrefs.theme);
+  if (sc?.img) {
+    ov.classList.add('bg-pending');
+    const img = new Image(); img.src = sc.img;
+    (img.decode ? img.decode() : Promise.resolve()).catch(() => {}).then(() => ov.classList.remove('bg-pending'));
+  }
+  ov.classList.add('open');
   renderFocusOverlay();   // after .open so the snow loop (theme-dark) starts
   ensureFocusTicker();
   document.body.style.overflow = 'hidden'; // fullscreen overlay — don't let the page behind it scroll/bounce
+}
+// Warm the browser cache with the current scene (and the others, lazily) so opening Focus is instant.
+function preloadFocusScenes() {
+  const cur = FOCUS_SCENES.find(x => x.theme === focusPrefs.theme);
+  const load = sc => { if (sc?.img) { const i = new Image(); i.decoding = 'async'; i.src = sc.img; } };
+  load(cur);
+  setTimeout(() => FOCUS_SCENES.filter(x => x !== cur).forEach(load), 4000);
 }
 function closeFocusOverlay() {
   focusOverlayEl?.classList.remove('open');
@@ -1768,7 +1804,6 @@ function bindSharedEvents() {
     if (el.dataset.appAction === 'focus') openFocusOverlay();
     else setActiveTab('life:home');
   }));
-  main.querySelector('#identify-btn')?.addEventListener('click', (e) => { e.stopPropagation(); startIdentify(); });
   const mt = main.querySelector('#music-toggle');
   if (mt) { mt.addEventListener('click', toggleAmbientMusic); updateMusicBtn(ambientPlayer.isPlaying); }
   const mc = main.querySelector('#music-caret-btn');

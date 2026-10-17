@@ -276,6 +276,7 @@ async function handleSession(session) {
   initGlobalBindings();
   loadDiscoveredSongs();   // js/identify.js — Discovered tab in the music panel
   maybeAutoIdentify();     // /?listen=1 (PWA shortcut "Identify song")
+  preloadFocusScenes();    // js/core.js — so Focus mode's background is ready before it opens
 
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
