@@ -3011,3 +3011,30 @@
   .ntm-item:disabled { color: var(--text-faint); cursor: default; }
   .ntm-item.danger { color: var(--danger); }
   .ntm-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+
+  /* ============ Music player — full-screen on mobile (option B, 2026-10-18) ============
+     On phones the topbar dropdown would overflow the screen; it becomes a Spotify-style
+     page: ⌄ to close, big cover, controls, tabs, and a list that scrolls on its own. */
+  .mp-close-mobile { display: none !important; }
+  @media (max-width: 768px) {
+    #music-dropdown.notes-dropdown.music-panel.open {
+      position: fixed; inset: 0; z-index: 2500; width: auto; max-width: none; height: 100dvh;
+      border: none; border-radius: 0; box-shadow: none; background: #161616;
+      display: flex; flex-direction: column;
+      padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+      animation: mpSheetUp 0.22s ease-out;
+    }
+    @keyframes mpSheetUp { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+    #music-dropdown .mp-head { padding: 14px 16px 4px; }
+    #music-dropdown .mp-head-label { flex: 1; text-align: center; font-size: 12px; letter-spacing: 0.04em; }
+    #music-dropdown .mp-close-mobile { display: inline-flex !important; width: 36px; height: 36px; align-items: center; justify-content: center; color: var(--text); border-radius: 50%; }
+    #music-dropdown .mp-now { flex-direction: column; align-items: center; text-align: center; gap: 14px; padding: 18px 24px 4px; }
+    #music-dropdown .mp-now > .mp-thumb { width: min(58vw, 260px) !important; height: min(58vw, 260px) !important; border-radius: 12px; }
+    #music-dropdown .mp-now > .mp-thumb svg { width: 30%; height: 30%; }
+    #music-dropdown .mp-now-main { width: 100%; }
+    #music-dropdown .mp-now-title { font-size: 18px; }
+    #music-dropdown .mp-ctl { gap: 34px; padding: 10px 0 6px; }
+    #music-dropdown .mp-ctl .mp-play { width: 52px !important; height: 52px !important; }
+    #music-dropdown .mp-tabs { padding: 10px 16px 6px; }
+    #music-dropdown .mp-list { flex: 1; max-height: none; min-height: 0; padding: 2px 10px 8px; }
+  }

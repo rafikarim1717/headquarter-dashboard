@@ -497,6 +497,7 @@ function musicDropdownHtml() {
     : '';
   // Identify song lives here (2026-10-17): it's a music action, so it sits in the player's header row.
   const headHtml = `<div class="mp-head">
+      <button class="mp-close-mobile" data-mp-close aria-label="Close player"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
       <span class="mp-head-label">${cur ? 'Now playing' : 'Pick a station below.'}</span>
       <button class="mp-identify" data-identify title="Identify a song playing around you"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg><span>Identify</span></button>
     </div>`;
@@ -543,6 +544,7 @@ function bindMusicPanel(dd) {
   }
   dd.querySelectorAll('[data-station-idx]').forEach(el => el.addEventListener('click', () => { musicQueue = musicPanelTab; selectStation(Number(el.dataset.stationIdx)); }));
   dd.querySelector('[data-manage-stations]')?.addEventListener('click', () => showStationsModal());
+  dd.querySelector('[data-mp-close]')?.addEventListener('click', (e) => { e.stopPropagation(); dd.classList.remove('open'); });
   dd.querySelector('[data-identify]')?.addEventListener('click', (e) => { e.stopPropagation(); if (typeof startIdentify === 'function') startIdentify(); });
   dd.querySelector('[data-mp-play]')?.addEventListener('click', () => {
     if (ambientPlayer.stationIndex == null) { musicQueue = musicPanelTab; const q = queueIndices(musicPanelTab); selectStation(q.length ? q[0] : 0); return; }
