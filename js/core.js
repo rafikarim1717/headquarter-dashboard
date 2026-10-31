@@ -265,6 +265,8 @@ function updateMusicBtn(playing) {
   const time = document.getElementById('music-time');
   if (time) time.textContent = active ? musicTimeText() : '';
   if (typeof refreshMusicPanel === 'function') refreshMusicPanel();
+  renderMusicMini();
+  syncMusicMini();
 }
 
 // Pauses in place — keeps the Audio object / yt video loaded so the icon can
@@ -474,6 +476,10 @@ function stationThumbHtml(st, size) {
   return `<span class="mp-thumb mp-thumb-radio" style="width:${size}px;height:${size}px"><svg width="${Math.round(size * 0.45)}" height="${Math.round(size * 0.45)}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/></svg></span>`;
 }
 
+function musicNowSub(cur) {
+  return musicQueue.startsWith('cat:') ? escapeHtml(musicQueue.slice(4)) : cur.kind === 'youtube' ? 'My stations' : 'Radio';
+}
+
 function musicDropdownHtml() {
   const all = getAllStations();
   const builtN = AMBIENT_STREAMS.length;
@@ -487,7 +493,7 @@ function musicDropdownHtml() {
       ${stationThumbHtml(cur, 64)}
       <div class="mp-now-main">
         <div class="mp-now-title" title="${escapeHtml(cur.name)}">${escapeHtml(cur.name)}</div>
-        <div class="mp-now-sub">${musicQueue.startsWith('cat:') ? escapeHtml(musicQueue.slice(4)) : cur.kind === 'youtube' ? 'My stations' : 'Radio'}${cur.kind === 'youtube' ? ' · YouTube' : ''}${ui === 'paused' ? ' · Paused' : ''}</div>
+        <div class="mp-now-sub">${musicNowSub(cur)}${cur.kind === 'youtube' ? ' · YouTube' : ''}${ui === 'paused' ? ' · Paused' : ''}</div>
         ${cur.kind === 'youtube'
           ? `<div class="mp-bar" data-mp-seek title="Seek"><i data-mp-fill style="width:${pct}%"></i></div>
              <div class="mp-times"><span data-mp-cur>${p ? fmtDur(p.cur) : '0:00'}</span><span data-mp-dur>${p ? fmtDur(p.dur) : (ytDurations[cur.videoId] ? fmtDur(ytDurations[cur.videoId]) : '—')}</span></div>`
@@ -596,6 +602,62 @@ function musicTick() {
   }
 }
 setInterval(musicTick, 1000);
+
+/* Mini player (2026-10-31): pinned to the bottom once the topbar pill scrolls out of
+   view, so the music can be controlled without scrolling back up. Its progress and
+   time reuse the data-mp-* hooks, so musicTick() updates them with the panel's. */
+function renderMusicMini() {
+  const bar = document.getElementById('music-mini');
+  if (!bar) return;
+  const ui = musicUiState();
+  const cur = ambientPlayer.stationIndex != null ? getAllStations()[ambientPlayer.stationIndex] : null;
+  if (ui === 'idle' || !cur) { bar.innerHTML = ''; return; }
+  const p = musicProgress();
+  const yt = cur.kind === 'youtube';
+  const playIcon = ui === 'playing'
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
+    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
+  const durText = p ? fmtDur(p.dur) : (ytDurations[cur.videoId] ? fmtDur(ytDurations[cur.videoId]) : '—');
+  bar.innerHTML = `
+    ${yt ? `<div class="mm-prog"><i data-mp-fill style="width:${p ? (p.cur / p.dur) * 100 : 0}%"></i></div>` : ''}
+    <button class="mm-info" data-mm-open title="Open player">
+      ${stationThumbHtml(cur, 42)}
+      <span class="mm-text">
+        <span class="mm-title">${escapeHtml(cur.name)}</span>
+        <span class="mm-sub">${musicNowSub(cur)}${ui === 'paused' ? ' · Paused' : ''}</span>
+      </span>
+    </button>
+    <div class="mm-ctl">
+      <button class="mm-btn" data-mm-step="-1" aria-label="Previous station" title="Previous station"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5.5v13L9.5 12z"/></svg></button>
+      <button class="mm-btn mm-play" data-mm-play aria-label="${ui === 'playing' ? 'Pause' : 'Play'}">${playIcon}</button>
+      <button class="mm-btn" data-mm-step="1" aria-label="Next station" title="Next station"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5.5v13L14.5 12z"/></svg></button>
+    </div>
+    <div class="mm-time">${yt ? `<span data-mp-cur>${p ? fmtDur(p.cur) : '0:00'}</span> / <span data-mp-dur>${durText}</span>` : '<span class="mp-live">LIVE</span>'}</div>`;
+}
+
+function syncMusicMini() {
+  const bar = document.getElementById('music-mini');
+  if (!bar) return;
+  const pill = document.getElementById('music-pill');
+  const show = musicUiState() !== 'idle' && !!pill && pill.getBoundingClientRect().bottom < 0;
+  const wasShown = bar.classList.contains('show');
+  bar.classList.toggle('show', show);
+  document.body.classList.toggle('music-mini-on', show);
+  // Back at the top the desktop panel would jump to the topbar, so it closes instead.
+  if (wasShown && !show && window.innerWidth > 768) document.getElementById('music-dropdown')?.classList.remove('open');
+}
+window.addEventListener('scroll', syncMusicMini, { passive: true });
+window.addEventListener('resize', syncMusicMini);
+
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('#music-mini [data-mm-open], #music-mini [data-mm-play], #music-mini [data-mm-step]');
+  if (!el) return;
+  // the bar re-renders under the click, so the document-level dropdown closer must not see it
+  e.stopImmediatePropagation();
+  if ('mmOpen' in el.dataset) document.getElementById('music-dropdown')?.classList.toggle('open');
+  else if ('mmPlay' in el.dataset) toggleAmbientMusic();
+  else stepStation(Number(el.dataset.mmStep));
+});
 
 /* =========================================================
    LOADING — anything that waits on the network shows it.
@@ -827,8 +889,6 @@ const PREFS_KEY = 'hq.prefs';
 function saveUIPrefs() {
   localStorage.setItem(PREFS_KEY, JSON.stringify({
     activeTab: state.activeTab,
-    selectedDay: state.selectedDay,
-    viewMonth: state.viewMonth,
     scheduleView: state.scheduleView
   }));
 }
@@ -838,8 +898,6 @@ function restoreUIPrefs() {
     if (!raw) return;
     const p = JSON.parse(raw);
     if (p.activeTab) state.activeTab = p.activeTab;
-    if (p.selectedDay) state.selectedDay = p.selectedDay;
-    if (p.viewMonth) state.viewMonth = p.viewMonth;
     if (p.scheduleView) state.scheduleView = p.scheduleView;
   } catch (e) {}
 }
@@ -1819,6 +1877,7 @@ function bindSharedEvents() {
     main.querySelector('#music-dropdown')?.classList.toggle('open');
   });
   bindMusicPanel(main.querySelector('#music-dropdown'));  // (the panel's volume row is bound inside bindMusicPanel)
+  syncMusicMini();
 
   // navigation pills
   main.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => setActiveTab(el.dataset.go)));
@@ -1863,7 +1922,7 @@ document.addEventListener('click', (e) => {
     }
   });
   document.querySelectorAll('.notes-dropdown.open').forEach(dd => {
-    if (!dd.contains(e.target) && !e.target.closest('#notes-sort-btn, #notes-filter-btn, [data-dd-toggle], #music-caret-btn, #music-toggle')) {
+    if (!dd.contains(e.target) && !e.target.closest('#notes-sort-btn, #notes-filter-btn, [data-dd-toggle], #music-caret-btn, #music-toggle, #music-mini')) {
       dd.classList.remove('open');
     }
   });
