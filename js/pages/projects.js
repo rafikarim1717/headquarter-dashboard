@@ -90,7 +90,10 @@ function renderProjectCard(p, i) {
 function renderProjects() {
   const filter = state.projectsFilter || 'all';
   const allProjects = state.projects || [];
-  const filtered = filter === 'all' ? allProjects : allProjects.filter(p => p.status === filter);
+  const statusOrder = { active: 0, on_hold: 1, done: 2 };
+  const filtered = filter === 'all'
+    ? [...allProjects].sort((a, b) => (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3))
+    : allProjects.filter(p => p.status === filter);
   const filterLabels = { all: 'All', active: 'Active', on_hold: 'On Hold', done: 'Done' };
 
   return `
