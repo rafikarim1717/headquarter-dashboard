@@ -180,7 +180,6 @@ function finishGoalTimer(id, auto) {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification('HQ — ' + g.text, { body: 'Timer done — target reached', icon: '/icon-192.png' });
     }
-    playAlarmBeep();
     showToast(`${g.text} — done`);
   }
 }
