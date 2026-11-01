@@ -1949,25 +1949,40 @@
   #modal-container textarea:focus { border-color: var(--accent); }
   #modal-container textarea { resize: none; line-height: 1.45; }
 
-  /* ============ MODAL — time spinner (24h) ============ */
-  #modal-container .time-picker {
-    display: flex; align-items: center; justify-content: center; gap: 12px;
-    border: 1px solid var(--border); border-radius: 8px;
-    background: #121212; padding: 8px 12px; box-sizing: border-box;
+  /* ============ MODAL — time picker (2026-11-01): HH:MM input + 15-min slot grid ============ */
+  #modal-container .tr-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #modal-container .tp input.tp-input {
+    width: 92px; text-align: center; font-size: 18px; padding: 8px 10px;
+    font-variant-numeric: tabular-nums; letter-spacing: 0.02em; cursor: pointer;
   }
-  #modal-container .time-picker:focus-within { border-color: var(--accent); }
-  #modal-container .time-spin { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  #modal-container .time-spin-btn {
-    width: 26px; height: 18px; border: 1px solid var(--border); border-radius: 5px;
-    background: #181818; color: var(--text-dim); font-size: 8px; line-height: 1;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  #modal-container .tp input.tp-input::selection { background: #3a3a3a; color: var(--text); }
+  #modal-container .tp.open input.tp-input { border-color: var(--text-dim); cursor: text; }
+  #modal-container .tr-arrow { color: var(--text-faint); font-size: 15px; }
+  #modal-container .tr-dur { font-size: 12px; color: var(--text-dim); }
+  #modal-container .tp-list {
+    position: relative; max-height: 196px; overflow-y: auto; margin-top: 8px; padding: 4px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
+    border: 1px solid var(--border); border-radius: 8px; background: #121212;
   }
-  #modal-container .time-spin-btn:hover { color: var(--text); border-color: var(--border-strong); }
-  #modal-container .time-spin-input {
-    width: 34px; text-align: center; border: none; background: none; color: var(--text);
-    font-size: 18px; font-variant-numeric: tabular-nums; outline: none; padding: 2px 0;
+  #modal-container .tp-list[hidden] { display: none; }
+  #modal-container .tp-slot {
+    display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 4px;
+    border: none; border-radius: 6px; background: none; color: var(--text-dim);
+    font-size: 13px; font-family: inherit; font-variant-numeric: tabular-nums; cursor: pointer;
   }
-  #modal-container .time-spin-sep { font-size: 18px; color: var(--text-faint); font-weight: 600; }
+  #modal-container .tp-slot.hr { color: var(--text); }
+  #modal-container .tp-slot:hover { background: #1f1f1f; color: var(--text); }
+  #modal-container .tp-slot.on { background: var(--text); color: #0f0f0f; }
+  #modal-container .tp-hint { font-size: 10px; color: var(--text-faint); }
+  #modal-container .tp-slot.on .tp-hint { color: #3a3a3a; }
+  #modal-container .tr-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  #modal-container .date-chips { margin-top: 2px; }
+  #modal-container .tr-chip {
+    font-size: 12px; padding: 5px 12px; border-radius: var(--r-pill); font-family: inherit;
+    border: 1px solid var(--border-strong); background: none; color: var(--text-dim); cursor: pointer;
+  }
+  #modal-container .tr-chip:hover { color: var(--text); }
+  #modal-container .tr-chip.on { background: var(--text); border-color: var(--text); color: #0f0f0f; }
   #modal-container .modal-footer {
     margin-top: 20px; padding-top: 16px; border-top: 1px solid #2a2a2a;
     display: flex; justify-content: flex-end; gap: 8px;

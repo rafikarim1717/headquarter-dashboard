@@ -72,7 +72,7 @@ function renderProjectCard(p, i) {
                       ${t.description ? `<div class="task-desc-text">${escapeHtml(t.description.length>80?t.description.slice(0,80)+'...':t.description)}</div>` : ''}
                     </div>
                     <div class="focus-task-acts">
-                      <button class="fin-assign-btn" data-assign-proj-task="${p.id}|${t.id}" title="Assign to today's schedule">&#x1F4C5;</button>
+                      ${t.checked ? '' : `<button class="fin-assign-btn" data-assign-proj-task="${p.id}|${t.id}" title="Add to schedule">&#x1F4C5;</button>`}
                       <button class="fin-edit-btn" data-edit-proj-task="${p.id}|${t.id}">&#x270E;</button>
                       <button class="fin-del-btn" data-del-proj-task="${p.id}|${t.id}" title="Delete">${ICON_TRASH}</button>
                     </div>
@@ -182,34 +182,38 @@ function bindProjectsEvents() {
   }));
 
 
-  // project task assign to today's schedule
+  // project task → schedule (done tasks can't be assigned; the button isn't rendered for them)
   main.querySelectorAll('[data-assign-proj-task]').forEach(el => el.addEventListener('click', (e) => {
     e.stopPropagation();
     const [projId, taskId] = el.dataset.assignProjTask.split('|');
     const proj = state.projects.find(p => p.id === projId);
     if (!proj) return;
     const task = proj.tasks.find(t => t.id === taskId);
-    if (!task) return;
-    const day = todayISO();
+    if (!task || task.checked) return;
+    const start = tpNextSlot(30);
     showModal({
-      title: 'Assign to Today\'s Schedule',
+      title: 'Add to Schedule',
       fields: [
-        { id: 'time',       label: 'Time',       type: 'time',     value: '09:00' },
-        { id: 'title',      label: 'Title',      type: 'text',     value: task.text },
-        { id: 'note',       label: 'Note',       type: 'text',     value: task.description || '', placeholder: 'optional' },
-        { id: 'alarm',      label: 'Set alarm',  type: 'toggle',   value: false, controls: 'alarm_time' },
-        { id: 'alarm_time', label: 'Alarm time', type: 'time',     value: '09:00' }
+        { id: 'date',       label: 'Date',       type: 'date',      value: todayISO(), quick: true },
+        { id: 'when',       label: 'Time',       type: 'timerange', startId: 'time', endId: 'end_time', start, end: tpFromMin(tpToMin(start) + 60) },
+        { id: 'title',      label: 'Title',      type: 'text',      value: task.text },
+        { id: 'note',       label: 'Note',       type: 'text',      value: task.description || '', placeholder: 'optional' },
+        { id: 'reminder',   label: 'Remind me',  type: 'select',    value: 'off', options: REMINDER_OPTIONS, controls: 'alarm_time', controlsWhen: 'custom' },
+        { id: 'alarm_time', label: 'Custom alarm time', type: 'time', value: start }
       ],
-      saveLabel: 'Assign',
-      onSave: async ({ time, title, note, alarm, alarm_time }) => {
+      saveLabel: 'Add',
+      onSave: async ({ date, time, end_time, title, note, reminder, alarm_time }) => {
         if (!title.trim()) return;
-        const alarm_time_val = alarm ? (alarm_time || time) : null;
-        const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, title: title.trim(), note: note.trim(), alarm_time: alarm_time_val }).select().single());
+        const day = date || todayISO();
+        const endVal = cleanEndTime(time, end_time);
+        const alarmVal = computeAlarmTime(reminder, time, alarm_time);
+        const { data } = await dbCall(() => sb.from('schedule_events').insert({ user_id: currentUser.id, date: day, time, end_time: endVal, title: title.trim(), note: note.trim(), alarm_time: alarmVal }).select().single());
         if (data) {
           if (!state.schedule[day]) state.schedule[day] = [];
-          state.schedule[day].push({ id: data.id, time, title: title.trim(), sub: note.trim(), alarm_time: alarm_time_val, completed_at: null });
+          state.schedule[day].push({ id: data.id, time, end_time: endVal, title: title.trim(), sub: note.trim(), alarm_time: alarmVal, completed_at: null, repeat: 'none', series_id: null });
           state.schedule[day].sort((a, b) => a.time.localeCompare(b.time));
-          showToast('Assigned to today\'s schedule');
+          const when = day === todayISO() ? 'today' : new Date(day + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+          showToast(`Added to schedule · ${when} ${time}`);
           render();
         }
       }

@@ -1046,6 +1046,116 @@ function animateNumbers() {
 /* =========================================================
    MODAL SYSTEM
 ========================================================= */
+/* ---- Modal time picker (2026-11-01): typeable HH:MM + 15-min slot grid ----
+   Replaced the ▲/▼ hour/minute spinners. Field types: 'time' (one time) and
+   'timerange' (start → end + duration chips, writes values[startId]/[endId]). */
+const TP_STEP = 15;
+const tpPad = n => String(n).padStart(2, '0');
+const tpToMin = t => { const [h, m] = String(t || '00:00').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+const tpFromMin = n => { n = Math.max(0, Math.min(1439, Math.round(n))); return tpPad(Math.floor(n / 60)) + ':' + tpPad(n % 60); };
+// "9" "930" "0930" "9:30" "9.30" → "09:30"; null if not a valid time
+function tpParse(raw) {
+  const str = String(raw || '').trim().replace(/[.\s]/g, ':');
+  let h, m;
+  if (str.includes(':')) { [h, m] = str.split(':'); }
+  else {
+    const d = str.replace(/\D/g, '');
+    if (!d) return null;
+    if (d.length <= 2) { h = d; m = '0'; } else { h = d.slice(0, d.length - 2); m = d.slice(-2); }
+  }
+  h = parseInt(h, 10); m = parseInt(m || '0', 10);
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return tpPad(h) + ':' + tpPad(m);
+}
+function tpDurLabel(min) {
+  if (min < 60) return min + 'm';
+  if (min % 60 === 0) return (min / 60) + 'h';
+  if (min % 30 === 0) return (min / 60).toFixed(1) + 'h';
+  return Math.floor(min / 60) + 'h ' + (min % 60) + 'm';
+}
+// Next round slot from now ("16:00" at 15:47), for default start times
+function tpNextSlot(step = 30) { const d = new Date(); const n = Math.ceil((d.getHours() * 60 + d.getMinutes() + 1) / step) * step; return tpFromMin(Math.min(n, 1440 - step)); }
+function tpFieldHtml(id, value) {
+  const v = tpParse(value) || '00:00';
+  return `<div class="tp" id="modal-f-${id}" data-value="${v}"><input type="text" class="tp-input" inputmode="numeric" maxlength="5" value="${v}" aria-label="Time" autocomplete="off"></div>`;
+}
+// Wires one .tp to a (possibly shared) .tp-list. slots() → [{ min, hint }].
+function tpSetup(tp, list, { slots, onCommit }) {
+  const inp = tp.querySelector('.tp-input');
+  const api = {
+    get: () => tp.dataset.value,
+    set: v => { tp.dataset.value = v; inp.value = v; },
+    open() {
+      const cur = tpToMin(tp.dataset.value);
+      list.innerHTML = slots().map(sl => `<button type="button" tabindex="-1" class="tp-slot${sl.min === cur ? ' on' : ''}${sl.min % 60 === 0 ? ' hr' : ''}" data-min="${sl.min}"><span>${tpFromMin(sl.min)}</span>${sl.hint ? `<span class="tp-hint">${sl.hint}</span>` : ''}</button>`).join('');
+      list.hidden = false; list._owner = api;
+      list.parentElement.querySelectorAll('.tp.open').forEach(o => o.classList.remove('open'));
+      tp.classList.add('open');
+      const target = list.querySelector('.tp-slot.on') || [...list.children].find(b => +b.dataset.min >= cur) || list.lastElementChild;
+      if (target) list.scrollTop = Math.max(0, target.offsetTop - 44);
+    },
+    close() { if (list._owner === api) { list.hidden = true; list._owner = null; } tp.classList.remove('open'); },
+    pick(min) { api.set(tpFromMin(min)); onCommit && onCommit(api.get()); inp.blur(); }
+  };
+  if (!list._bound) {
+    list._bound = true;
+    list.addEventListener('pointerdown', e => e.preventDefault());   // keep input focus so blur doesn't eat the click
+    list.addEventListener('click', e => { const b = e.target.closest('.tp-slot'); if (b && list._owner) list._owner.pick(+b.dataset.min); });
+  }
+  inp.addEventListener('focus', () => { inp.select(); api.open(); });
+  inp.addEventListener('click', () => { if (tp.classList.contains('open')) return; api.open(); });
+  inp.addEventListener('input', () => { inp.value = inp.value.replace(/[^\d:.]/g, '').slice(0, 5); });
+  inp.addEventListener('blur', () => {
+    const v = tpParse(inp.value);
+    if (v && v !== tp.dataset.value) { api.set(v); onCommit && onCommit(v); } else api.set(tp.dataset.value);
+    api.close();
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (e.key === 'Escape') inp.value = tp.dataset.value; inp.blur(); }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const base = tpParse(inp.value) || tp.dataset.value;
+      const n = tpToMin(base) + (e.key === 'ArrowUp' ? TP_STEP : -TP_STEP);
+      api.set(tpFromMin(((n % 1440) + 1440) % 1440)); onCommit && onCommit(api.get()); api.open(); inp.select();
+    }
+  });
+  return api;
+}
+const TR_CHIPS = [30, 60, 90, 120];
+function trFieldHtml(f) {
+  return `<div class="tr" id="modal-f-${f.id}">
+    <div class="tr-row">${tpFieldHtml(f.startId, f.start)}<span class="tr-arrow">&#8594;</span>${tpFieldHtml(f.endId, f.end)}<span class="tr-dur"></span></div>
+    <div class="tp-list" hidden></div>
+    <div class="tr-chips">${TR_CHIPS.map(d => `<button type="button" class="tr-chip" data-dur="${d}">${tpDurLabel(d)}</button>`).join('')}</div>
+  </div>`;
+}
+function bindTimeRange(f) {
+  const wrap = document.getElementById('modal-f-' + f.id);
+  if (!wrap) return;
+  const list = wrap.querySelector('.tp-list');
+  const durEl = wrap.querySelector('.tr-dur');
+  let startApi, endApi;
+  const startMin = () => tpToMin(startApi.get());
+  let dur = tpToMin(f.end) - tpToMin(f.start); if (!(dur > 0)) dur = 60;
+  const setEnd = m => endApi.set(tpFromMin(Math.min(m, 1439)));
+  const refresh = () => {
+    const d = tpToMin(endApi.get()) - startMin();
+    durEl.textContent = d > 0 ? tpDurLabel(d) : '';
+    wrap.querySelectorAll('.tr-chip').forEach(c => c.classList.toggle('on', +c.dataset.dur === d));
+  };
+  startApi = tpSetup(document.getElementById('modal-f-' + f.startId), list, {
+    slots: () => Array.from({ length: 1440 / TP_STEP }, (_, i) => ({ min: i * TP_STEP })),
+    onCommit: () => { setEnd(startMin() + dur); refresh(); }
+  });
+  endApi = tpSetup(document.getElementById('modal-f-' + f.endId), list, {
+    slots: () => { const s0 = startMin(), out = []; for (let m = s0 + TP_STEP; m <= Math.min(s0 + 720, 1439); m += TP_STEP) out.push({ min: m, hint: tpDurLabel(m - s0) }); return out; },
+    onCommit: v => { const d = tpToMin(v) - startMin(); if (d > 0) dur = d; else setEnd(startMin() + dur); refresh(); }
+  });
+  if (!(tpToMin(f.end) > tpToMin(f.start))) setEnd(startMin() + dur);
+  wrap.querySelectorAll('.tr-chip').forEach(c => c.addEventListener('click', () => { dur = +c.dataset.dur; setEnd(startMin() + dur); refresh(); }));
+  refresh();
+}
+
 function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
   let container = document.getElementById('modal-container');
   if (!container) {
@@ -1073,20 +1183,16 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
       const pfxInitial = fmtInitial ? (window.__HQ_TWEAKS?.currencyPrefix || 'Rp ') + fmtInitial : '';
       input = `<input type="text" inputmode="numeric" id="modal-f-${f.id}" value="${fmtInitial}" placeholder="${escapeHtml(f.placeholder||'0')}"/><div class="amount-preview" id="preview-${f.id}">${pfxInitial}</div>`;
     } else if (f.type === 'time') {
-      const [hh, mm] = String(f.value || '00:00').split(':');
-      input = `<div class="time-picker" id="modal-f-${f.id}" data-value="${escapeHtml(String(f.value || '00:00'))}">
-        <div class="time-spin">
-          <button type="button" class="time-spin-btn" data-spin-unit="hour" data-spin-dir="1" aria-label="Hour up">&#x25B2;</button>
-          <input type="text" class="time-spin-input" data-unit="hour" inputmode="numeric" maxlength="2" value="${escapeHtml(hh || '00')}">
-          <button type="button" class="time-spin-btn" data-spin-unit="hour" data-spin-dir="-1" aria-label="Hour down">&#x25BC;</button>
-        </div>
-        <span class="time-spin-sep">:</span>
-        <div class="time-spin">
-          <button type="button" class="time-spin-btn" data-spin-unit="minute" data-spin-dir="1" aria-label="Minute up">&#x25B2;</button>
-          <input type="text" class="time-spin-input" data-unit="minute" inputmode="numeric" maxlength="2" value="${escapeHtml(mm || '00')}">
-          <button type="button" class="time-spin-btn" data-spin-unit="minute" data-spin-dir="-1" aria-label="Minute down">&#x25BC;</button>
-        </div>
-      </div>`;
+      input = `${tpFieldHtml(f.id, f.value)}<div class="tp-list" hidden></div>`;
+    } else if (f.type === 'timerange') {
+      input = trFieldHtml(f);
+    } else if (f.type === 'date' && f.quick) {
+      const t = todayISO(), tm = isoLocal(new Date(Date.now() + 864e5));
+      input = `<input type="date" id="modal-f-${f.id}" value="${escapeHtml(String(f.value ?? ''))}"/>
+        <div class="tr-chips date-chips" data-date-chips="${f.id}">
+          <button type="button" class="tr-chip" data-date="${t}">Today</button>
+          <button type="button" class="tr-chip" data-date="${tm}">Tomorrow</button>
+        </div>`;
     } else {
       input = `<input type="${f.type||'text'}" id="modal-f-${f.id}" value="${escapeHtml(String(f.value??''))}" placeholder="${escapeHtml(f.placeholder||'')}"/>`;
     }
@@ -1153,32 +1259,25 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
     });
   });
 
-  // Wire up time fields — 24h hour/minute spinners with wraparound
+  // Wire up time fields — typeable HH:MM + 15-min slot grid (see tpSetup)
   fields.forEach(f => {
+    if (f.type === 'timerange') { bindTimeRange(f); return; }
     if (f.type !== 'time') return;
-    const wrap = document.getElementById('modal-f-' + f.id);
-    if (!wrap) return;
-    const hourInput = wrap.querySelector('[data-unit="hour"]');
-    const minInput  = wrap.querySelector('[data-unit="minute"]');
-    const wrapUnit = (n, max) => ((n % (max + 1)) + (max + 1)) % (max + 1);
-    const sync = () => {
-      const hh = String(wrapUnit(parseInt(hourInput.value, 10) || 0, 23)).padStart(2, '0');
-      const mm = String(wrapUnit(parseInt(minInput.value, 10) || 0, 59)).padStart(2, '0');
-      hourInput.value = hh; minInput.value = mm;
-      wrap.dataset.value = `${hh}:${mm}`;
-    };
-    wrap.querySelectorAll('.time-spin-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const input = btn.dataset.spinUnit === 'hour' ? hourInput : minInput;
-        const max = btn.dataset.spinUnit === 'hour' ? 23 : 59;
-        input.value = wrapUnit((parseInt(input.value, 10) || 0) + Number(btn.dataset.spinDir), max);
-        sync();
-      });
+    const tp = document.getElementById('modal-f-' + f.id);
+    if (tp) tpSetup(tp, tp.parentElement.querySelector('.tp-list'), {
+      slots: () => Array.from({ length: 1440 / TP_STEP }, (_, i) => ({ min: i * TP_STEP }))
     });
-    [hourInput, minInput].forEach(inp => {
-      inp.addEventListener('input', () => { inp.value = inp.value.replace(/\D/g, '').slice(0, 2); });
-      inp.addEventListener('blur', sync);
-    });
+  });
+
+  // Wire up quick date chips (Today / Tomorrow) under a date field
+  fields.forEach(f => {
+    if (f.type !== 'date' || !f.quick) return;
+    const inp = document.getElementById('modal-f-' + f.id);
+    const chips = container.querySelectorAll(`[data-date-chips="${f.id}"] .tr-chip`);
+    const sync = () => chips.forEach(c => c.classList.toggle('on', c.dataset.date === inp.value));
+    chips.forEach(c => c.addEventListener('click', () => { inp.value = c.dataset.date; sync(); }));
+    inp.addEventListener('change', sync);
+    sync();
   });
 
   // True while an async onSave (an insert waiting on Supabase) is in flight —
@@ -1221,6 +1320,10 @@ function showModal({ title, fields, saveLabel = 'Save', onSave, onClose }) {
       else if (f.type === 'number') values[f.id] = Number(el.value || 0);
       else if (f.type === 'amount') values[f.id] = parseInt((el.value || '').replace(/\./g, '')) || 0;
       else if (f.type === 'time') values[f.id] = el.dataset.value || '00:00';
+      else if (f.type === 'timerange') {
+        values[f.startId] = document.getElementById('modal-f-' + f.startId).dataset.value || '00:00';
+        values[f.endId]   = document.getElementById('modal-f-' + f.endId).dataset.value || '';
+      }
       else values[f.id] = el.value;
     });
     const result = onSave ? onSave(values) : null;

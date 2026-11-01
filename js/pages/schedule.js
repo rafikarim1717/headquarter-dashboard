@@ -391,8 +391,7 @@ function openEditSchedModal(id) {
     title: 'Edit Event',
     fields: [
       { id: 'date',       label: 'Date',       type: 'date',   value: day },
-      { id: 'time',       label: 'Start',      type: 'time',   value: s.time },
-      { id: 'end_time',   label: 'End',        type: 'time',   value: s.end_time || minToTime(schedEndMin(s)) },
+      { id: 'when',       label: 'Time',       type: 'timerange', startId: 'time', endId: 'end_time', start: s.time, end: s.end_time || minToTime(schedEndMin(s)) },
       { id: 'title',      label: 'Title',      type: 'text',   value: s.title },
       { id: 'note',       label: 'Note',       type: 'text',   value: s.sub || '', placeholder: 'optional' },
       { id: 'reminder',   label: 'Remind me',  type: 'select', value: reminderValueFromAlarm(s.time, s.alarm_time), options: REMINDER_OPTIONS, controls: 'alarm_time', controlsWhen: 'custom' },
@@ -416,13 +415,14 @@ function openEditSchedModal(id) {
 }
 
 function openAddSchedModal(day, startTime) {
-  const start = startTime || '09:00';
+  const addDay = day || state.selectedDay || todayISO();
+  // Default start: the next half hour when adding to today, else 09:00
+  const start = startTime || (addDay === todayISO() ? tpNextSlot(30) : '09:00');
   showModal({
     title: 'Add Event',
     fields: [
-      { id: 'date',       label: 'Date',       type: 'date',   value: day || state.selectedDay || todayISO() },
-      { id: 'time',       label: 'Start',      type: 'time',   value: start },
-      { id: 'end_time',   label: 'End',        type: 'time',   value: minToTime(Math.min(timeToMin(start) + SCHED_DEFAULT_MINUTES, 1439)) },
+      { id: 'date',       label: 'Date',       type: 'date',   value: addDay, quick: true },
+      { id: 'when',       label: 'Time',       type: 'timerange', startId: 'time', endId: 'end_time', start, end: minToTime(Math.min(timeToMin(start) + SCHED_DEFAULT_MINUTES, 1439)) },
       { id: 'title',      label: 'Title',      type: 'text',   value: '', placeholder: 'e.g. Deep work' },
       { id: 'note',       label: 'Note',       type: 'text',   value: '', placeholder: 'optional' },
       { id: 'reminder',   label: 'Remind me',  type: 'select', value: 'off', options: REMINDER_OPTIONS, controls: 'alarm_time', controlsWhen: 'custom' },
