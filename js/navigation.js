@@ -21,7 +21,8 @@ const ROUTES = {
   'finance:overview': renderFinanceOverview,
   'finance:income': renderIncome,
   'finance:spending': renderSpending,
-  'finance:debts': renderDebts
+  'finance:debts': renderDebts,
+  'career:jobs': renderJobPipeline
 };
 
 function render() {
@@ -45,7 +46,7 @@ function initGlobalBindings() {
   });
   document.querySelectorAll('.bottom-nav .main-tab-btn').forEach(el => {
     el.addEventListener('click', () => {
-      const firstTab = el.dataset.mainTab === 'finance' ? 'finance:overview' : 'life:home';
+      const firstTab = { finance: 'finance:overview', career: 'career:jobs' }[el.dataset.mainTab] || 'life:home';
       setActiveTab(firstTab);
     });
   });

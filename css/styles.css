@@ -3105,6 +3105,14 @@
       border-radius: 0; border-top: 1px solid var(--border-strong); box-shadow: none;
     }
     body:has(.sidebar.collapsed) .music-mini { left: 60px; }
+    /* 2026-11-02: sidebar footer = same 64px box + same top border as the mini bar,
+       so the Sign out "roof" and the player's top edge form one straight line. */
+    .sidebar-inner { padding-bottom: 0; }
+    .sidebar-footer {
+      height: 64px; box-sizing: border-box; padding: 0 8px;
+      display: flex; align-items: center;
+      border-top-color: var(--border-strong);
+    }
     .mm-time { display: block; justify-self: end; }
     .mm-prog { left: 0; right: 0; top: -1px; bottom: auto; }
     body.music-mini-on main { padding-bottom: 96px; }
@@ -3112,3 +3120,40 @@
     body.music-mini-on #music-dropdown.notes-dropdown.music-panel.open { position: fixed; top: auto; right: 16px; bottom: 76px; }
   }
   @media (prefers-reduced-motion: reduce) { .music-mini { transition: none; } }
+
+  /* ============ Career → Job Pipeline (2026-11-01, js/pages/career.js) ============
+     4-column kanban; stacks vertically on phones. Stale (> 7 days, action/waiting) = beni left edge. */
+  .job-stale-note { margin: 10px 0 0; font-size: 12px; color: var(--danger); }
+  .job-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap); margin-top: 18px; align-items: start; }
+  .job-col { background: var(--card-2); border: 1px solid var(--border); border-radius: var(--r-card); padding: 12px; min-width: 0; }
+  .job-col-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .job-col-title { font-weight: 700; font-size: 13px; color: var(--text); }
+  .job-col-count { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .job-col-hint { width: 100%; font-size: 11px; color: var(--text-faint); }
+  .job-col-body { display: flex; flex-direction: column; gap: 8px; }
+  .job-empty { color: var(--text-faint); font-size: 12px; padding: 6px 2px; }
+  .job-col-closed .job-card { opacity: 0.6; }
+  .job-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: var(--r-sm); padding: 10px 10px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .job-card.stale { border-left-color: var(--danger); }
+  .job-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .job-company { font-weight: 700; color: var(--text); font-size: 13px; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+  .job-role { font-size: 12px; color: var(--text-dim); }
+  .job-stage { font-size: 12px; color: var(--text-dim); }
+  .job-next { font-size: 12px; color: var(--text); }
+  .job-track { flex-shrink: 0; font-size: 10.5px; padding: 2px 8px; border-radius: var(--r-pill); border: 1px solid; white-space: nowrap; }
+  .job-track-lokal    { color: var(--text-dim); border-color: var(--border-strong); }
+  .job-track-remote   { color: var(--good); border-color: rgba(154,171,102,0.45); background: rgba(154,171,102,0.08); }
+  .job-track-side_gig { color: var(--warn); border-color: rgba(199,145,58,0.45); background: rgba(199,145,58,0.08); }
+  .job-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .job-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--text-faint); }
+  .job-moved.stale { color: var(--danger); }
+  .job-deadline { padding: 1px 6px; border-radius: var(--r-sm); border: 1px solid var(--border-strong); color: var(--text-dim); }
+  .job-deadline.soon { color: var(--warn); border-color: rgba(199,145,58,0.5); }
+  .job-deadline.overdue { color: var(--danger); border-color: rgba(192,71,62,0.5); }
+  .job-actions { display: flex; gap: 2px; margin-left: auto; }
+  .job-btn { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--text-faint); border-radius: var(--r-sm); cursor: pointer; font-size: 15px; font-family: inherit; }
+  .job-btn:hover:not(:disabled) { color: var(--text); background: rgba(255,255,255,0.06); }
+  .job-btn.del:hover { color: var(--danger); }
+  .job-btn:disabled { opacity: 0.25; cursor: default; }
+  @media (max-width: 1100px) { .job-board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 767px)  { .job-board { grid-template-columns: 1fr; } }

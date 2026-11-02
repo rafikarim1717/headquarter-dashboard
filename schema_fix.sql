@@ -857,3 +857,38 @@ DO $$ BEGIN
   CREATE POLICY "discovered_songs_delete" ON discovered_songs FOR DELETE USING (auth.uid() = user_id);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS discovered_songs_user_id ON discovered_songs(user_id, found_at DESC);
+
+-- ============================================================
+-- 27. job_applications — Career → Job Pipeline (2026-11-01)
+--     Kanban of job applications. status = the column
+--     (action = ball in my court, waiting = ball in theirs, offer, closed).
+--     last_moved is bumped by the app on every save / column move;
+--     a card in action/waiting untouched > 7 days is flagged red.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS job_applications (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  company     text NOT NULL,
+  role        text NOT NULL,
+  track       text NOT NULL DEFAULT 'lokal' CHECK (track IN ('lokal', 'remote', 'side_gig')),
+  status      text NOT NULL DEFAULT 'action' CHECK (status IN ('action', 'waiting', 'offer', 'closed')),
+  stage       text NOT NULL DEFAULT '',
+  next_step   text NOT NULL DEFAULT '',
+  deadline    date,
+  last_moved  date NOT NULL DEFAULT current_date,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE job_applications ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "job_applications_select" ON job_applications FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "job_applications_insert" ON job_applications FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "job_applications_update" ON job_applications FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "job_applications_delete" ON job_applications FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE INDEX IF NOT EXISTS job_applications_user_id ON job_applications(user_id, status);

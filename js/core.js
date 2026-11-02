@@ -79,6 +79,7 @@ let state = {
   income: [],
   spending: [],
   debts: [],
+  jobs: [],       // [{id, company, role, track, status, stage, next_step, deadline, last_moved}] — Career → Job Pipeline
   selectedDay: todayISO(),
   activeTab: 'life:home',
   viewMonth: todayISO().slice(0, 7),
@@ -946,7 +947,10 @@ function topbar() {
     { tab: 'finance:spending', label: 'Spending' },
     { tab: 'finance:debts', label: 'Debts' }
   ];
-  const pills = section === 'finance' ? financePills : lifePills;
+  const careerPills = [
+    { tab: 'career:jobs', label: 'Job Pipeline' }
+  ];
+  const pills = section === 'finance' ? financePills : section === 'career' ? careerPills : lifePills;
   const pillsHtml = pills.map(p =>
     `<button class="mobile-pill${state.activeTab === p.tab ? ' active' : ''}" data-go="${p.tab}">${p.label}</button>`
   ).join('');
@@ -2003,6 +2007,7 @@ function bindMainEvents() {
   bindProjectsEvents();
   bindNotesEvents();
   bindFinanceEvents();
+  bindCareerEvents();
 }
 
 

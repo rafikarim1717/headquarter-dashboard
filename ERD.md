@@ -253,6 +253,20 @@ Debt obligations owed to creditors.
 
 ---
 
+### `job_applications`
+Career → Job Pipeline (`js/pages/career.js`, 2026-11-01). `schema_fix.sql` section 27 + `schema.sql`; initial data in `seed_jobs.sql` (one-off, run once).
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `user_id` | uuid FK | → `auth.users` |
+| `company` / `role` | text | Not null |
+| `track` | text | `'lokal'` \| `'remote'` \| `'side_gig'` (check) — shown as a coloured pill |
+| `status` | text | The kanban column: `'action'` (ball in my court) \| `'waiting'` (ball in theirs) \| `'offer'` \| `'closed'` (check) |
+| `stage` / `next_step` | text | Free text, default `''` |
+| `deadline` | date | Nullable. Deadline chip on the card (amber ≤ 2 days, red overdue); hidden on Closed |
+| `last_moved` | date | Default `current_date`. Set to today by the app on **every** save and every ‹ › column move. A card in action/waiting with `last_moved` > 7 days ago (`JOB_STALE_DAYS`) gets a red left edge |
+| `created_at` | timestamptz | Load order |
+
 ### `notes`
 
 Freeform rich-text notes.

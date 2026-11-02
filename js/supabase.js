@@ -63,7 +63,8 @@ async function loadFromSupabase(userId) {
   const [
     profileRes, eventsRes, goalsRes, goalLogsRes,
     projectsRes, projectTasksRes,
-    incomeRes, spendingRes, debtsRes, notesRes, todayFocusRes, customStationsRes
+    incomeRes, spendingRes, debtsRes, notesRes, todayFocusRes, customStationsRes,
+    jobsRes
   ] = await Promise.all([
     sb.from('profiles').select('*').eq('id', userId).maybeSingle(),
     sb.from('schedule_events').select('*').eq('user_id', userId),
@@ -76,7 +77,8 @@ async function loadFromSupabase(userId) {
     sb.from('debts').select('*').eq('user_id', userId).order('due_date'),
     sb.from('notes').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
     sb.from('today_focus_items').select('*').eq('user_id', userId).order('created_at'),
-    sb.from('custom_stations').select('*').eq('user_id', userId).order('created_at')
+    sb.from('custom_stations').select('*').eq('user_id', userId).order('created_at'),
+    sb.from('job_applications').select('*').eq('user_id', userId).order('created_at')
   ]);
 
   const isNewUser = !profileRes.data;
@@ -121,6 +123,9 @@ async function loadFromSupabase(userId) {
   state.income   = (incomeRes.data   || []).map(i => ({ id: i.id, date: i.date, source: i.source, amount: Number(i.amount) }));
   state.spending = (spendingRes.data  || []).map(s => ({ id: s.id, date: s.date, time: s.time, cat: s.category, note: s.note, amount: Number(s.amount) }));
   state.debts    = (debtsRes.data     || []).map(d => ({ id: d.id, creditor: d.creditor, amount: Number(d.amount), due: d.due_date, paid: d.paid }));
+
+  // Career → Job Pipeline (job_applications, schema_fix.sql section 27; loads empty until it's run)
+  state.jobs = (jobsRes.data || []).map(mapJobRow);
 
   // Notes
   state.notes = (notesRes.data || []).map(n => ({ id: n.id, title: n.title || '', content: n.content || '', created_at: n.created_at, updated_at: n.updated_at }));

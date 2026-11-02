@@ -26,6 +26,7 @@
 | `js/pages/projects.js` | `life:projects` — `renderProjectCard()`, `renderProjects()`, `bindProjectsEvents()`. |
 | `js/pages/notes.js` | `life:notes` — note list/editor/table helpers, rich-text toolbar reference data, `bindNotesEvents()`. |
 | `js/pages/finance.js` | `finance:overview` / `income` / `spending` / `debts` — all four render functions + finance helpers, `bindFinanceEvents()`. |
+| `js/pages/career.js` | `career:jobs` — Job Pipeline kanban (`renderJobPipeline()`, `jobFormFields()`/`parseJobForm()`, `mapJobRow()` (also used by `loadFromSupabase()`), `bindCareerEvents()`). |
 | `js/navigation.js` | `ROUTES` map, `setActiveTab()`, `render()`, `initGlobalBindings()` (sidebar toggle, nav clicks, tooltips). |
 | `js/supabase.js` | Supabase client init, `dbCall()`, `loadFromSupabase()`, `seedSampleData()`, all auth handlers (Google OAuth, email/password, forgot password), session management, visibility-change refresh. |
 | `schema.sql` | DB schema for a fresh project — run once in the Supabase SQL Editor. Has every table/column the app uses **except `projects` / `project_tasks`** (those are only in `schema_fix.sql`), and still contains the legacy `habits`/`habit_logs`/`focus_board`/`focus_tasks` tables. |
@@ -70,7 +71,8 @@ const ROUTES = {
   'finance:overview': renderFinanceOverview,
   'finance:income': renderIncome,
   'finance:spending': renderSpending,
-  'finance:debts': renderDebts
+  'finance:debts': renderDebts,
+  'career:jobs': renderJobPipeline
 };
 ```
 
@@ -97,6 +99,7 @@ let state = {
   income: [],          // [{id, date, source, amount}]
   spending: [],        // [{id, date, time, cat, note, amount}]
   debts: [],           // [{id, creditor, amount, due, paid}]
+  jobs: [],            // [{id, company, role, track, status, stage, next_step, deadline, last_moved}] — Career → Job Pipeline
   selectedDay: todayISO(),
   activeTab: 'life:home',
   viewMonth: todayISO().slice(0, 7),
@@ -272,6 +275,20 @@ Operations: `insert` (on `+ Add station`, a blank row — awaited so the row has
 | `due_date` | date | |
 | `paid` | boolean | Default false |
 | `created_at` | timestamptz | (schema.sql only) |
+
+### `job_applications`
+Career → Job Pipeline (`js/pages/career.js`, 2026-11-01). `schema_fix.sql` section 27 + `schema.sql`; initial data in `seed_jobs.sql` (one-off, run once).
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `user_id` | uuid FK | → `auth.users` |
+| `company` / `role` | text | Not null |
+| `track` | text | `'lokal'` \| `'remote'` \| `'side_gig'` (check) — shown as a coloured pill |
+| `status` | text | The kanban column: `'action'` (ball in my court) \| `'waiting'` (ball in theirs) \| `'offer'` \| `'closed'` (check) |
+| `stage` / `next_step` | text | Free text, default `''` |
+| `deadline` | date | Nullable. Deadline chip on the card (amber ≤ 2 days, red overdue); hidden on Closed |
+| `last_moved` | date | Default `current_date`. Set to today by the app on **every** save and every ‹ › column move. A card in action/waiting with `last_moved` > 7 days ago (`JOB_STALE_DAYS`) gets a red left edge |
+| `created_at` | timestamptz | Load order |
 
 ### `notes`
 In both schema files (`schema.sql`, `schema_fix.sql` section 14).
@@ -563,6 +580,14 @@ Shazam-style capture. Entry points: the **Identify** pill in the music panel's h
 
 **Notes — Docs-style tables (2026-10-17):** toolbar table button is an SVG icon + ▾ caret (opens the size picker). No inline table buttons anymore (Delete table / + Add row / + Add col / per-row trash were removed; `initTableInteractions()` strips any left in old notes). Editing is via right-click (long-press on mobile) on a cell → `showNoteTableMenu()`: insert row above/below, column left/right, delete row/column/table. Deleting: select across a whole table (or from its first to last cell) and press Delete/Backspace → `deleteSelectedTables()`. Tab in the last cell still adds a row.
 
+### Career Tab (2026-11-01)
+
+| Route | Page | Description |
+|---|---|---|
+| `career:jobs` | Job Pipeline | Sidebar section **Career** (kanji 就活), 3rd mobile bottom-nav tab **Career**. 4-column kanban — Action needed / Waiting / Offer / Closed (= `job_applications.status`); stacks to 2 columns ≤1100px and 1 column on phones. Card: company, track pill, role, stage, → next step, deadline chip, "Moved Nd ago". Cards sorted by nearest deadline, then stalest. ‹ › move a card one column (bumps `last_moved`); edit/delete via modal/confirm. No drag-and-drop on purpose (HTML5 DnD doesn't work on touch). Later (not built): test deadlines on Today, applications selectable as a Focus-mode project. |
+
+---
+
 ## Known Patterns
 
 ### Data Fetch
@@ -662,5 +687,6 @@ Tables/columns the code uses that older live databases may still lack. All of th
 13. **`custom_stations` table** — both schema files (`schema_fix.sql` section 22). Needed for the ambient music widget's custom YouTube stations; without it, custom stations load empty every login and `+ Add station` fails outright (they used to survive via `localStorage` alone — that fallback is gone now that they're per-user).
 14. **`schedule_events.end_time`** — both schema files (section 23). Until it exists, adding or editing any schedule event fails.
 15. **Storage bucket `note-images`** — `schema_fix.sql` section 24 (not in `schema.sql`). Needed for images in Notes.
+16. **`job_applications` table** — both schema files (`schema_fix.sql` section 27). Needed for Career → Job Pipeline; loads empty and adding fails until it exists. Initial data: run `seed_jobs.sql` once.
 
 The 2026-09-19 commitment work (Yes/No / Count / Duration types, timers, partial credit, ring colours) needed **no new schema** — it reuses `goals.target_count`/`unit` and `goal_logs.count`/`checked`.

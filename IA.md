@@ -239,6 +239,9 @@ Fullscreen Pomodoro-style overlay (`#focus-overlay`) opened from the FAB — not
 
 ---
 
+### Career: Job Pipeline (`career:jobs`)
+Sidebar: section **Career** → 就活 Job Pipeline (sits below Finance). Mobile: 3rd bottom-nav tab **Career** (one pill: Job Pipeline). Page: header + `+ Add application`, a red "N applications not moved in over 7 days" line when any are stale, then a 4-column kanban (Action needed / Waiting / Offer / Closed) of application cards — see `CLAUDE.md` → "Career Tab".
+
 ## Component Patterns
 
 ### Cards
