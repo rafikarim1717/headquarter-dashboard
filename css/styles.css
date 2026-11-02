@@ -282,7 +282,7 @@
   .sidebar.collapsed .nav-section-label { opacity: 0; }
   .nav-item {
     display: flex; align-items: center; gap: 12px;
-    width: 100%; padding: 10px 8px;
+    width: 100%; padding: 6px 8px;
     border-radius: var(--r-sm); font-size: 13px;
     color: var(--text-dim); font-weight: 400; letter-spacing: 0.02em;
     transition: background var(--t-fast) ease, color var(--t-fast) ease;
@@ -2579,7 +2579,7 @@
     .page-title { line-height: 34px; }
     .sidebar.collapsed .sidebar-brand { gap: 0; }
     .sidebar.collapsed .sidebar-brand .brand-label { display: none; }
-    .sidebar-nav .nav-section-label:first-child { padding-top: 6px; }
+    .sidebar-nav .nav-section-label:first-child { padding-top: 10px; }
   }
   .pill-count { opacity: 0.6; font-variant-numeric: tabular-nums; }
 
