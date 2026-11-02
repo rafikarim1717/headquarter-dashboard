@@ -1379,6 +1379,10 @@ let focusTags = loadFocusTags();     // string[] — persisted, grows as the use
 // by the user's projects so tasks finished in Focus are real project_tasks and count as Activity).
 let focusSelectedTag = focusTimer?.tag || (() => { try { return localStorage.getItem('hq.focusProject'); } catch (e) { return null; } })() || null;
 let focusTaskAdding = false;         // is the focus task panel showing its "new task" input
+// 2026-11-02: a picked project = "this session is work on project X". The centre shows one
+// "Now" task; the full list lives in the ☑ corner flyout; finishing a session asks what got done.
+let focusNowTaskId = (() => { try { return localStorage.getItem('hq.focusNowTask'); } catch (e) { return null; } })();
+let focusSessionDone = null;         // { minutes, projectId, picks:Set } → the "Session complete" card
 let focusTagPanelOpen = false;       // is the "select a tag" dropdown open
 let focusTagAdding = false;          // is the dropdown showing its "new tag" text input
 let focusStagedMinutes = FOCUS_DEFAULT_MINUTES; // duration to start with, adjustable via +1/+5/+10 before Start
@@ -1481,6 +1485,11 @@ function resetFocusTimer() {
   renderFocusOverlay();
 }
 function finishFocusTimer() {
+  const doneProj = focusProject();
+  if (doneProj) {
+    const now = focusNowTask();
+    focusSessionDone = { minutes: Math.round((focusTimer?.totalSeconds || 0) / 60), projectId: doneProj.id, picks: new Set(now ? [now.id] : []) };
+  }
   stopFocusTicker();
   focusTimer = null;
   focusStagedMinutes = FOCUS_DEFAULT_MINUTES;
@@ -1501,7 +1510,7 @@ function ensureFocusOverlay() {
   el.addEventListener('click', e => {
     if (e.target === el) { closeFocusOverlay(); return; }
     // clicking anywhere outside an open corner flyout (but still inside the overlay) closes it
-    if (focusOpenPanel && !e.target.closest('.focus-flyout') && !e.target.closest('.focus-corner-btn') && !e.target.closest('.focus-scene-modal')) {
+    if (focusOpenPanel && !e.target.closest('.focus-flyout') && !e.target.closest('.focus-corner-btn') && !e.target.closest('.focus-scene-modal') && !e.target.closest('.focus-now')) {
       focusOpenPanel = null;
       renderFocusOverlay();
     }
@@ -1708,24 +1717,80 @@ async function addFocusTask(raw) {
     setTimeout(() => focusOverlayEl?.querySelector('#focus-task-input')?.focus(), 30);
   }
 }
-// open tasks + the ones finished today (so a checked task doesn't vanish mid-session)
+function focusOpenTasks() {
+  return (focusProject()?.tasks || []).filter(t => !t.checked);
+}
+// The "Now" task: the saved one if it's still open in this project, else the first open task.
+function focusNowTask() {
+  const open = focusOpenTasks();
+  return open.find(t => t.id === focusNowTaskId) || open[0] || null;
+}
+function setFocusNow(taskId) {
+  focusNowTaskId = taskId;
+  try { localStorage.setItem('hq.focusNowTask', taskId); } catch (e) {}
+  renderFocusOverlay();
+}
+const ICON_FOCUS_CHECK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>';
+const ICON_TASKS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>';
+// ☑ flyout body: open tasks + the ones finished today (so a checked task doesn't vanish mid-session).
+// Box = mark done, name = make it the "Now" task.
 function focusTaskListHtml() {
   const proj = focusProject();
-  if (!proj) return '';
+  if (!proj) return `<div class="focus-tasks-head">Tasks</div><div class="focus-task-empty">Pick a project at the top first.</div>`;
   const today = isoLocal(new Date());
+  const nowId = focusNowTask()?.id;
   const tasks = proj.tasks.filter(t => !t.checked || (t.completed_at && isoLocal(new Date(t.completed_at)) === today));
   const rows = tasks.map(t => `
-    <button class="focus-task${t.checked ? ' done' : ''}" data-focus-task="${t.id}">
-      <span class="focus-task-box">${t.checked ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>' : ''}</span>
-      <span class="focus-task-text">${escapeHtml(t.text)}</span>
-    </button>`).join('');
+    <div class="focus-task${t.checked ? ' done' : ''}${t.id === nowId ? ' now' : ''}">
+      <button class="focus-task-box" data-focus-task="${t.id}" aria-label="${t.checked ? 'Mark not done' : 'Mark done'}">${t.checked ? ICON_FOCUS_CHECK : ''}</button>
+      <button class="focus-task-text" data-focus-now="${t.id}" ${t.checked ? 'disabled' : ''} title="${t.checked ? '' : 'Work on this now'}">${escapeHtml(t.text)}</button>
+      ${t.id === nowId ? '<span class="focus-now-tag">Now</span>' : ''}
+    </div>`).join('');
   const add = focusTaskAdding
     ? `<input type="text" id="focus-task-input" class="focus-task-input" placeholder="New task, Enter to add" maxlength="200">`
     : `<button class="focus-task-add" id="focus-task-add-btn">+ Add task</button>`;
-  return `<div class="focus-tasks">
-    ${rows ? `<div class="focus-task-list">${rows}</div>` : `<div class="focus-task-empty">No open tasks in ${escapeHtml(proj.name)}.</div>`}
-    ${add}
-  </div>`;
+  return `<div class="focus-tasks-head">Tasks · ${escapeHtml(proj.name)}</div>
+    ${rows ? `<div class="focus-task-list">${rows}</div>` : `<div class="focus-task-empty">No open tasks yet.</div>`}
+    ${add}`;
+}
+// One line under the clock: what this session is for. Opens the ☑ flyout.
+function focusNowLineHtml() {
+  if (!focusProject()) return '';
+  const now = focusNowTask();
+  return `<button class="focus-now" id="focus-now-btn">${now ? `<span class="focus-now-label">Now</span>${escapeHtml(now.text)}` : 'Pick a task for this session'}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>`;
+}
+// Shown when a session with a project finishes: tick what got done (the Now task is pre-ticked).
+function focusSessionCardHtml() {
+  const sd = focusSessionDone;
+  const proj = sd && (state.projects || []).find(p => p.id === sd.projectId);
+  if (!proj) return '';
+  const open = proj.tasks.filter(t => !t.checked);
+  const rows = open.map(t => `
+    <button class="focus-task${sd.picks.has(t.id) ? ' done picked' : ''}" data-focus-sess-pick="${t.id}">
+      <span class="focus-task-box">${sd.picks.has(t.id) ? ICON_FOCUS_CHECK : ''}</span><span class="focus-task-text">${escapeHtml(t.text)}</span>
+    </button>`).join('');
+  return `<div class="focus-scene-backdrop focus-session-backdrop"><div class="focus-session-card" role="dialog" aria-label="Session complete">
+    <div class="focus-session-title">Session complete</div>
+    <div class="focus-session-sub">${sd.minutes} min · ${escapeHtml(proj.name)}</div>
+    ${rows ? `<div class="focus-session-q">What did you finish?</div><div class="focus-task-list">${rows}</div>` : ''}
+    <button class="focus-session-save" id="focus-sess-save">${rows ? 'Save' : 'Done'}</button>
+    ${rows ? '<button class="focus-session-skip" id="focus-sess-skip">Skip</button>' : ''}
+  </div></div>`;
+}
+function saveFocusSession() {
+  const sd = focusSessionDone;
+  focusSessionDone = null;
+  const proj = sd && (state.projects || []).find(p => p.id === sd.projectId);
+  const tasks = proj ? proj.tasks.filter(t => !t.checked && sd.picks.has(t.id)) : [];
+  if (tasks.length) {
+    const at = new Date().toISOString();
+    tasks.forEach(t => { t.checked = true; t.completed_at = at; });
+    const ids = tasks.map(t => t.id);
+    dbCall(() => sb.from('project_tasks').update({ checked: true, completed_at: at }).in('id', ids));
+    showToast(tasks.length === 1 ? 'Task marked done' : tasks.length + ' tasks marked done', 'success');
+    render();
+  }
+  renderFocusOverlay();
 }
 function focusTagDropdownHtml() {
   const projs = focusPickableProjects();
@@ -1761,6 +1826,7 @@ function renderFocusOverlay() {
   const running = !!(focusTimer && focusTimer.running);
   const remaining = active ? focusRemainingSeconds() : focusStagedMinutes * 60;
   el.innerHTML = `
+    <div class="focus-loader" aria-hidden="true">${hqOrbitSvg()}<div class="loading-content"><div class="hanko lg">本部</div></div></div>
     <div class="focus-bg seigaiha"></div>
     <div class="focus-content">
       <div class="focus-top">
@@ -1777,6 +1843,7 @@ function renderFocusOverlay() {
           <button class="focus-adjust-btn" data-focus-add-min="5">+5</button>
           <button class="focus-adjust-btn" data-focus-add-min="10">+10</button>
         </div>
+        ${focusNowLineHtml()}
         <div class="focus-controls">
           ${!active
             ? `<button class="focus-start-btn" id="focus-start-btn">Start</button>`
@@ -1787,10 +1854,10 @@ function renderFocusOverlay() {
                  <button class="focus-reset-btn" id="focus-reset-btn" aria-label="Reset">${ICON_UNDO}</button>`
           }
         </div>
-        ${focusTaskListHtml()}
       </div>
     </div>
-    <div class="focus-corner focus-corner-left${focusOpenPanel === 'sound' || focusOpenPanel === 'noise' ? ' open' : ''}">
+    <div class="focus-corner focus-corner-left${focusOpenPanel === 'sound' || focusOpenPanel === 'noise' || focusOpenPanel === 'tasks' ? ' open' : ''}">
+      ${focusOpenPanel === 'tasks' ? `<div class="focus-flyout focus-tasks-flyout">${focusTaskListHtml()}</div>` : ''}
       ${focusOpenPanel === 'sound' ? `<div class="focus-flyout focus-sound-flyout focus-music-panel" id="focus-music-panel">${musicDropdownHtml()}</div>` : ''}
       ${focusOpenPanel === 'noise' ? `<div class="focus-flyout focus-noise-flyout">
         <div class="focus-noise-title">White noise</div>
@@ -1800,6 +1867,7 @@ function renderFocusOverlay() {
         <button class="focus-icon-btn focus-corner-btn${focusOpenPanel === 'noise' ? ' sel' : ''}" id="focus-noise-toggle" aria-label="White noise" title="White noise">${ICON_CLOUD_RAIN}</button>
         <button class="focus-icon-btn focus-corner-btn${focusOpenPanel === 'sound' ? ' sel' : ''}" id="focus-sound-toggle" aria-label="Music" title="Music">${ICON_MUSIC_NOTE}</button>
         <button class="focus-icon-btn focus-corner-btn${focusOpenPanel === 'scene' ? ' sel' : ''}" id="focus-scene-toggle" aria-label="Background" title="Background">${ICON_IMAGE}</button>
+        <button class="focus-icon-btn focus-corner-btn${focusOpenPanel === 'tasks' ? ' sel' : ''}" id="focus-tasks-toggle" aria-label="Tasks" title="Tasks">${ICON_TASKS}</button>
       </div>
     </div>
     <div class="focus-corner focus-corner-right${focusOpenPanel === 'apps' ? ' open' : ''}">
@@ -1829,6 +1897,7 @@ function renderFocusOverlay() {
       </div>
     </div>` : ''}
     </div>`;
+  if (focusSessionDone) el.insertAdjacentHTML('beforeend', focusSessionCardHtml());
   attachFocusVideo(el);
   attachFocusSnow(el);
   el.querySelector('#focus-fullscreen-btn').addEventListener('click', toggleFocusFullscreen);
@@ -1863,6 +1932,17 @@ function renderFocusOverlay() {
   el.querySelector('#focus-tag-toggle').addEventListener('click', toggleFocusTagPanel);
   el.querySelectorAll('[data-focus-tag-select]').forEach(btn => btn.addEventListener('click', () => selectFocusTag(btn.dataset.focusTagSelect || null)));
   el.querySelectorAll('[data-focus-task]').forEach(btn => btn.addEventListener('click', () => toggleFocusTask(btn.dataset.focusTask)));
+  el.querySelectorAll('[data-focus-now]').forEach(btn => btn.addEventListener('click', () => setFocusNow(btn.dataset.focusNow)));
+  el.querySelector('#focus-now-btn')?.addEventListener('click', () => toggleFocusPanel('tasks'));
+  el.querySelector('#focus-tasks-toggle').addEventListener('click', () => toggleFocusPanel('tasks'));
+  el.querySelectorAll('[data-focus-sess-pick]').forEach(btn => btn.addEventListener('click', () => {
+    const id = btn.dataset.focusSessPick, p = focusSessionDone?.picks;
+    if (!p) return;
+    p.has(id) ? p.delete(id) : p.add(id);
+    renderFocusOverlay();
+  }));
+  el.querySelector('#focus-sess-save')?.addEventListener('click', saveFocusSession);
+  el.querySelector('#focus-sess-skip')?.addEventListener('click', () => { focusSessionDone = null; renderFocusOverlay(); });
   el.querySelector('#focus-task-add-btn')?.addEventListener('click', () => {
     focusTaskAdding = true;
     renderFocusOverlay();
@@ -1873,6 +1953,18 @@ function renderFocusOverlay() {
     else if (e.key === 'Escape') { focusTaskAdding = false; renderFocusOverlay(); }
   });
 }
+const FOCUS_LOADER_MIN_MS = 350;
+let focusOpenSeq = 0;
+// The orbit rings from the login/loading screens (index.html .hq-orbit), reused by Focus's loader.
+function hqOrbitSvg() {
+  return `<svg class="hq-orbit" viewBox="-310 -310 620 620" aria-hidden="true" focusable="false">
+    <circle class="ho-ring ho-b3" r="300"/><circle class="ho-ring ho-b2" r="225"/>
+    <circle class="ho-ring ho-in" r="150" filter="url(#hq-brush)"/>
+    <g class="ho-spin ho-s3" filter="url(#hq-ink)"><circle cx="0" cy="-300" r="6"/><circle cx="259.8" cy="150" r="6"/><circle cx="-259.8" cy="150" r="6"/><path class="ho-arc" d="M0 -300 A300 300 0 0 1 103 -282"/></g>
+    <g class="ho-spin ho-s2" filter="url(#hq-ink)"><circle cx="0" cy="-225" r="5.5"/><circle cx="0" cy="225" r="5.5"/><path class="ho-arc" d="M0 225 A225 225 0 0 1 -96 203"/></g>
+    <g class="ho-spin ho-s1" filter="url(#hq-ink)"><circle cx="150" cy="0" r="5"/><path class="ho-arc ho-arc-in" d="M0 -150 A150 150 0 0 1 130 -75"/></g>
+  </svg>`;
+}
 function openFocusOverlay() {
   focusOpenPanel = null;
   focusTagPanelOpen = false;
@@ -1881,10 +1973,17 @@ function openFocusOverlay() {
   const ov = ensureFocusOverlay();
   // Fade the scene in only once its image is decoded, so it never pops in mid-fade (2026-10-17)
   const sc = FOCUS_SCENES.find(x => x.theme === focusPrefs.theme);
+  // 2026-11-02: while pending, the orbit loader covers the overlay and the clock/controls stay
+  // hidden too, so scene + content fade in together (min FOCUS_LOADER_MIN_MS, max 3s).
   if (sc?.img) {
     ov.classList.add('bg-pending');
+    const seq = ++focusOpenSeq, t0 = performance.now();
     const img = new Image(); img.src = sc.img;
-    (img.decode ? img.decode() : Promise.resolve()).catch(() => {}).then(() => ov.classList.remove('bg-pending'));
+    const decoded = (img.decode ? img.decode() : Promise.resolve()).catch(() => {});
+    Promise.race([decoded, new Promise(r => setTimeout(r, 3000))]).then(() => {
+      setTimeout(() => { if (seq === focusOpenSeq) ov.classList.remove('bg-pending'); },
+        Math.max(0, FOCUS_LOADER_MIN_MS - (performance.now() - t0)));
+    });
   }
   ov.classList.add('open');
   renderFocusOverlay();   // after .open so the snow loop (theme-dark) starts

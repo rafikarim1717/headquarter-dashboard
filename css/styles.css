@@ -1405,6 +1405,36 @@
   /* trying the moving rings as the only loader — dots hidden, not removed */
   #app-loading .loading-dots { display: none; }
 
+  /* ============ Orbit rings (2026-11-02) — login + loading ============
+     3 ink rings (r 150/225/300) with orbiting ink dots (1 · 2 · 3) and a short
+     brighter arc per ring. Loading: rings spin at different speeds/directions,
+     breathe, and the hanko pulses. Login (.ho-static): same picture, not moving.
+     Replaces the old .lc-ring divs (their CSS above is now unused). */
+  .hq-orbit {
+    position: absolute; top: 50%; left: 50%;
+    width: 620px; height: 620px; margin: -310px 0 0 -310px;
+    overflow: visible;
+  }
+  .ho-ring { fill: none; stroke: #ededed; stroke-width: 0.8; opacity: 0.2; }
+  .ho-ring.ho-in { stroke-width: 1.6; opacity: 0.35; }
+  .ho-spin { fill: #ededed; transform-origin: 0 0; }
+  .ho-arc { fill: none; stroke: #ededed; stroke-width: 1.6; opacity: 0.6; }
+  .ho-arc-in { stroke-width: 2.6; opacity: 0.85; }
+  .ho-static .ho-spin { opacity: 0.45; }
+  :is(#app-loading, .focus-loader) .ho-s1 { animation: lc-spin 9s linear infinite; }
+  :is(#app-loading, .focus-loader) .ho-s2 { animation: lc-spin 14s linear infinite reverse; }
+  :is(#app-loading, .focus-loader) .ho-s3 { animation: lc-spin 22s linear infinite; }
+  :is(#app-loading, .focus-loader) .ho-ring { animation: ho-breathe 3.2s ease-in-out infinite; }
+  :is(#app-loading, .focus-loader) .ho-b2 { animation-delay: -1s; }
+  :is(#app-loading, .focus-loader) .ho-b3 { animation-delay: -2s; }
+  @keyframes ho-breathe { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.45; } }
+  :is(#app-loading, .focus-loader) .loading-content { animation: ho-pulse 3.2s ease-in-out infinite; }
+  @keyframes ho-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+  @media (max-width: 560px) { .hq-orbit { transform: scale(0.72); } }
+  @media (prefers-reduced-motion: reduce) {
+    :is(#app-loading, .focus-loader) :is(.ho-spin, .ho-ring, .loading-content) { animation: none; }
+  }
+
   .loading-content {
     position: relative; z-index: 2;
     display: flex; flex-direction: column;
@@ -2735,6 +2765,9 @@
     background: #ffffff; border-color: #ffffff; color: #111; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
   }
   .focus-reset-btn { width: 56px; height: 56px; }
+  /* 2026-11-02: keep Start/Pause/Resume on the clock's centre axis when ↺ shows up —
+     an invisible spacer the same width as ↺ balances it on the left. */
+  .focus-controls:has(.focus-reset-btn)::before { content: ''; flex: none; width: 56px; height: 1px; }
   @media (max-width: 560px) {
     .focus-tag-wrap { margin-bottom: 28px; }
     .focus-start-btn { min-width: 220px; padding: 16px 32px; font-size: 20px; }
@@ -2864,6 +2897,49 @@
   .focus-overlay.theme-light .focus-task, .focus-overlay.theme-light .focus-task-input { color: #2a2520; }
   .focus-overlay.theme-light .focus-task-box { border-color: rgba(42,37,32,0.45); }
   @media (max-width: 560px) { .focus-tasks { margin-top: 22px; } }
+
+  /* ============ Focus — project session (2026-11-02) ============
+     Centre: one "Now" line under the clock. Full list: ☑ corner flyout.
+     End of a session with a project: "Session complete" card to tick what got done. */
+  .focus-now {
+    display: inline-flex; align-items: center; gap: 8px; max-width: min(420px, 90vw);
+    margin-top: 22px; padding: 6px 14px; border-radius: var(--r-pill);
+    background: rgba(10,10,10,0.4); border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.85); font: inherit; font-size: 13px; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  .focus-now:hover { background: rgba(10,10,10,0.6); color: #fff; }
+  .focus-now svg { flex: none; opacity: 0.7; }
+  .focus-now-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.5); }
+  .focus-now + .focus-controls { margin-top: 26px; }
+  .focus-tasks-flyout { width: 300px; padding: 10px 8px 8px; text-align: left; }
+  .focus-tasks-head { font-size: 11px; color: rgba(255,255,255,0.5); padding: 0 10px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .focus-tasks-flyout .focus-task-list { max-height: min(320px, 45vh); }
+  div.focus-task { cursor: default; }
+  .focus-task.now { background: rgba(255,255,255,0.07); }
+  button.focus-task-box { padding: 0; background: none; cursor: pointer; }
+  .focus-task.done button.focus-task-box { background: #ffffff; }
+  button.focus-task-text { flex: 1; min-width: 0; padding: 0; background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  button.focus-task-text:disabled { cursor: default; }
+  .focus-now-tag { flex: none; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--shu); }
+  .focus-session-backdrop { z-index: 6; }
+  .focus-session-card {
+    width: 340px; max-width: 100%; max-height: calc(100% - 40px); overflow-y: auto; box-sizing: border-box;
+    background: rgba(18,18,18,0.96); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px;
+    padding: 22px 18px 16px; color: #ededed; animation: modal-in 180ms ease forwards;
+  }
+  .focus-session-title { font-size: 18px; font-weight: 700; padding: 0 10px; }
+  .focus-session-sub { font-size: 13px; color: rgba(255,255,255,0.55); margin: 4px 0 16px; padding: 0 10px; }
+  .focus-session-q { font-size: 11px; color: rgba(255,255,255,0.5); padding: 0 10px 4px; }
+  .focus-session-card .focus-task-list { max-height: 240px; }
+  .focus-session-card .focus-task.done .focus-task-text { color: #ededed; text-decoration: none; }
+  .focus-session-save {
+    display: block; width: 100%; margin-top: 16px; padding: 11px; border: none; border-radius: var(--r-pill);
+    background: #fff; color: #111; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  .focus-session-skip { display: block; width: 100%; margin-top: 6px; padding: 8px; border: none; background: none; color: rgba(255,255,255,0.5); font: inherit; font-size: 13px; cursor: pointer; }
+  .focus-session-skip:hover { color: #fff; }
 
   /* ============ Music — category (playlist) tabs + station category chips (2026-10-17) ============ */
   .mp-tabs { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
@@ -2997,6 +3073,16 @@
   /* Focus mode — scene fades in once loaded, and a 9-dot "switch mode" menu bottom-right (2026-10-17) */
   .focus-bg { transition: opacity 0.45s ease, background var(--t-mid) ease; }
   .focus-overlay.bg-pending .focus-bg { opacity: 0; }
+  /* 2026-11-02: orbit loader while the scene decodes; clock/controls hidden until then,
+     then everything fades in together (openFocusOverlay()). */
+  .focus-loader {
+    position: absolute; inset: 0; z-index: 5; background: #0f0f0f;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+  }
+  .focus-overlay.bg-pending .focus-loader { opacity: 1; pointer-events: auto; }
+  .focus-overlay > :not(.focus-bg):not(.focus-loader) { transition: opacity 0.35s ease; }
+  .focus-overlay.bg-pending > :not(.focus-bg):not(.focus-loader) { opacity: 0; }
   .focus-corner-right .focus-corner-btn-row { gap: 10px; }
   .focus-apps-flyout { width: auto; display: grid; grid-template-columns: repeat(2, 96px); gap: 4px; padding: 12px; }
   .focus-apps-flyout .apps-tile { color: rgba(255,255,255,0.75); }
