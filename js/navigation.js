@@ -3,10 +3,11 @@
 ========================================================= */
 function setActiveTab(tab) {
   state.activeTab = tab;
-  // Schedule always opens on today (2026-10-31), not the last date viewed
+  // Schedule always opens on today's Day view, not the last date/view used
   if (tab === 'life:schedule') {
     state.selectedDay = todayISO();
     state.viewMonth = state.selectedDay.slice(0, 7);
+    state.scheduleView = 'day';
   }
   saveUIPrefs();
   render();

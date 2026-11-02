@@ -83,7 +83,7 @@ let state = {
   selectedDay: todayISO(),
   activeTab: 'life:home',
   viewMonth: todayISO().slice(0, 7),
-  scheduleView: 'week',   // Schedule page view: 'day' | 'week' | 'month'
+  scheduleView: 'day',    // Schedule page view: 'day' | 'week' | 'month'
   activeNoteId: null,
   notesSort: 'newest',
   notesFilter: 'all',
@@ -889,8 +889,7 @@ function defaultState() {
 const PREFS_KEY = 'hq.prefs';
 function saveUIPrefs() {
   localStorage.setItem(PREFS_KEY, JSON.stringify({
-    activeTab: state.activeTab,
-    scheduleView: state.scheduleView
+    activeTab: state.activeTab
   }));
 }
 function restoreUIPrefs() {
@@ -899,7 +898,6 @@ function restoreUIPrefs() {
     if (!raw) return;
     const p = JSON.parse(raw);
     if (p.activeTab) state.activeTab = p.activeTab;
-    if (p.scheduleView) state.scheduleView = p.scheduleView;
   } catch (e) {}
 }
 
