@@ -287,7 +287,7 @@ Career → Job Pipeline (`js/pages/career.js`, 2026-11-01). `schema_fix.sql` sec
 | `status` | text | The kanban column: `'action'` (ball in my court) \| `'waiting'` (ball in theirs) \| `'offer'` \| `'closed'` (check) |
 | `stage` / `next_step` | text | Free text, default `''` |
 | `deadline` | date | Nullable. Deadline chip on the card (amber ≤ 2 days, red overdue); hidden on Closed |
-| `last_moved` | date | Default `current_date`. Set to today by the app on **every** save and every ‹ › column move. A card in action/waiting with `last_moved` > 7 days ago (`JOB_STALE_DAYS`) gets a red left edge |
+| `last_moved` | date | Default `current_date`. Set to today by the app on **every** save and every column move (drag or ‹ ›). A card in action/waiting with `last_moved` > 7 days ago (`JOB_STALE_DAYS`) gets a red left edge |
 | `created_at` | timestamptz | Load order |
 
 ### `notes`
@@ -584,7 +584,7 @@ Shazam-style capture. Entry points: the **Identify** pill in the music panel's h
 
 | Route | Page | Description |
 |---|---|---|
-| `career:jobs` | Job Pipeline | Sidebar section **Career** (kanji 就活), 3rd mobile bottom-nav tab **Career**. 4-column kanban — Action needed / Waiting / Offer / Closed (= `job_applications.status`); stacks to 2 columns ≤1100px and 1 column on phones. Card: company, track pill, role, stage, → next step, deadline chip, "Moved Nd ago". Cards sorted by nearest deadline, then stalest. ‹ › move a card one column (bumps `last_moved`); edit/delete via modal/confirm. No drag-and-drop on purpose (HTML5 DnD doesn't work on touch). Later (not built): test deadlines on Today, applications selectable as a Focus-mode project. |
+| `career:jobs` | Job Pipeline | Sidebar section **Career** (kanji 就活), 3rd mobile bottom-nav tab **Career**. 4-column kanban — Action needed / Waiting / Offer / Closed (= `job_applications.status`); stacks to 2 columns ≤1100px and 1 column on phones. Card: company, track pill, role, stage, → next step, deadline chip, "Moved Nd ago". Cards sorted by nearest deadline, then stalest. Drag a card to another column, or use ‹ › to move it one column (both go through `moveJobTo()`, bump `last_moved`); edit/delete via modal/confirm. Drag (`bindJobDrag()`, 2026-11-02) uses pointer events, not HTML5 DnD, so it works on touch: on a phone hold a card 300ms first, so a swipe still scrolls; the page auto-scrolls near the screen edges. Dropping only changes the column — order inside a column stays automatic (`jobSort`). Later (not built): test deadlines on Today, applications selectable as a Focus-mode project. |
 
 ---
 
